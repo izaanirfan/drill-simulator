@@ -1,96 +1,118 @@
 import math
-from rheology import hb_fit
-from temperature import *
-from trajectory import build_trajectory
-from cuttings import *
-
-GPM_TO_FT3S = 0.002228
-IN2_TO_FT2 = 1 / 144
-
-def annular_area(hole_d, pipe_od):
-    return math.pi / 4 * (hole_d**2 - pipe_od**2) * IN2_TO_FT2
-
-def annular_velocity(q_gpm, hole_d, pipe_od):
-    q = q_gpm * GPM_TO_FT3S
-    area = annular_area(hole_d, pipe_od)
-    return q / area
-
-def hydraulic_diameter(hole_d, pipe_od):
-    return (hole_d - pipe_od) / 12
-
-def reynolds_hb(rho, v, Dh, K, n):
-    return (rho * v**(2-n) * Dh**n) / (K * 8**(n-1))
-
-def friction_factor(Re):
-    return 16/Re if Re < 2100 else 0.079/(Re**0.25)
-
-def segment_pressure_loss(f, L, Dh, rho, v):
-    return f * (L/Dh) * (rho * v**2 / 2) / 144
 
 def run_simulation(data):
 
-    fann = [
-        data.fluid.fann_600,
-        data.fluid.fann_300,
-        data.fluid.fann_200,
-        data.fluid.fann_100,
-        data.fluid.fann_6,
-        data.fluid.fann_3
-    ]
+    # -----------------------------
+    # BASIC INPUTS
+    # -----------------------------
+    Q = data.flowrate            # gpm
+    depth = data.depth           # ft
+    hole_d = data.hole_diameter  # inch
 
-    tau0, K, n = hb_fit(fann)
+    # -----------------------------
+    # FLUID PROPERTIES
+    # -----------------------------
+    mw = data.fluid.mw  # ppg
 
-    traj = build_trajectory(data.trajectory)
+    # Convert MW to density (ppg → lb/ft3)
+    rho_fluid = mw * 7.48
 
+    # Fann readings
+    f600 = data.fluid.fann_600
+    f300 = data.fluid.fann_300
+
+    # Simple PV/YP estimation (Bingham approx)
+    pv = f600 - f300
+    yp = f300 - pv
+
+    # -----------------------------
+    # GEOMETRY
+    # -----------------------------
+    hole_area = math.pi * (hole_d / 12)**2 / 4   # ft2
+
+    # Velocity (ft/s)
+    v = Q / (24.5 * hole_area)
+
+    # -----------------------------
+    # PRESSURE LOSS (VERY SIMPLIFIED)
+    # -----------------------------
+    friction_factor = 0.02  # placeholder
+
+    dp = friction_factor * depth * mw
+
+    # -----------------------------
+    # ECD CALCULATION
+    # -----------------------------
+    ecd = mw + (dp / (0.052 * depth))
+
+    # -----------------------------
+    # CUTTINGS TRANSPORT
+    # -----------------------------
+    cut = data.cuttings
+
+    rho_cuttings = cut.density * 62.4   # convert SG → lb/ft3
+    d_cut = cut.size / 12              # inch → ft
+    rpm = cut.rpm
+
+    g = 32.2
+
+    # SAFE SETTLING VELOCITY
+    value = (rho_cuttings - rho_fluid) * g * d_cut
+
+    # Prevent negative → no complex numbers
+    value = max(value, 0)
+
+    Vs = math.sqrt(value)
+
+    # Ensure real and safe
+    if isinstance(Vs, complex):
+        Vs = abs(Vs)
+
+    Vs = max(Vs, 0.01)
+
+    # Transport Ratio
+    TR = v / Vs
+
+    # Clamp TR for realism
+    TR = min(TR, 5)
+
+    # -----------------------------
+    # TEMPERATURE EFFECT (SIMPLIFIED)
+    # -----------------------------
+    temp = data.temperature
+
+    surface_temp = temp.surface_temp
+    bhct = temp.bhct
+
+    temp_factor = 1 - 0.0003 * (bhct - surface_temp)
+
+    ecd_temp_corrected = ecd * temp_factor
+
+    # -----------------------------
+    # OUTPUT PROFILE (SIMPLE)
+    # -----------------------------
+    depths = []
     ecd_profile = []
-    depth_profile = []
-    transport_ratio_profile = []
-    bed_height_profile = []
 
-    cumulative_annular = 0
+    step = depth / 20
 
-    for point in traj:
+    for i in range(21):
+        d = i * step
+        depths.append(d)
+        ecd_profile.append(ecd_temp_corrected)
 
-        md = point["md"]
-        tvd = point["tvd"]
-        inc = point["inc"]
-
-        T_trans = temp_transient(tvd, data.temperature.surface_temp, data.temperature.bhct, data.depth)
-        mw = density_corrected(data.fluid.mw, data.temperature.beta, T_trans)
-
-        rho = mw * 8.34
-
-        for comp in data.bha:
-            v = annular_velocity(data.flowrate, data.hole_diameter, comp.od)
-            Dh = hydraulic_diameter(data.hole_diameter, comp.od)
-
-            Re = reynolds_hb(rho, v, Dh, K, n)
-            f = friction_factor(Re)
-
-            dp = segment_pressure_loss(f, comp.length, Dh, rho, v)
-
-            correction = 1 + 0.4 * math.sin(math.radians(inc))
-            cumulative_annular += dp * correction
-
-        hydro = 0.052 * mw * tvd
-        bhp = hydro + cumulative_annular + data.sbp
-        ecd = bhp / (0.052 * tvd)
-
-        # Cuttings
-        rho_cut = data.cuttings.density * 8.34
-        Vs = slip_velocity(data.cuttings.size, rho_cut, rho)
-        TR = v / max(Vs, 0.01)
-        TR_eff = TR * (1 - 0.5 * math.sin(math.radians(inc)))
-        bed = bed_height(TR_eff, inc)
-
-        depth_profile.append(tvd)
-        ecd_profile.append(ecd)
-        transport_ratio_profile.append(TR_eff)
-        bed_height_profile.append(bed)
-
+    # -----------------------------
+    # RESULTS
+    # -----------------------------
     return {
-        "depth_profile": depth_profile,
-        "ecd_profile": ecd_profile,
-        "transport_ratio": transport_ratio_profile,
-        "bed_height": bed_height_profile
+        "ecd_surface": round(ecd, 2),
+        "ecd_temp_corrected": round(ecd_temp_corrected, 2),
+        "pressure_loss": round(dp, 2),
+        "transport_ratio": round(TR, 2),
+        "velocity": round(v, 2),
+        "settling_velocity": round(Vs, 2),
+        "profile": {
+            "depth": depths,
+            "ecd": ecd_profile
+        }
     }
