@@ -9,10 +9,11 @@ from export_pdf import generate_pdf
 
 app = FastAPI()
 
-# Enable CORS (IMPORTANT for frontend)
+from fastapi.middleware.cors import CORSMiddleware
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # allow all
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
