@@ -1,74 +1,73 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Drilling Simulator</title>
+  <title>Drilling Hydraulics Simulator</title>
 </head>
-<body>
 
-<h2>Drilling Hydraulics Simulator</h2>
+<body style="font-family: Arial; padding: 20px;">
 
-<label>Flowrate (gpm):</label>
-<input id="flowrate" value="400"><br><br>
+<h1>Drilling Hydraulics Simulator</h1>
 
-<label>Depth (ft):</label>
-<input id="depth" value="10000"><br><br>
+<label>Flowrate:</label>
+<input id="flowrate" type="number" value="400"><br><br>
+
+<label>Depth:</label>
+<input id="depth" type="number" value="10000"><br><br>
 
 <button onclick="runSimulation()">Run Simulation</button>
 
-<h3>Result:</h3>
-<pre id="output"></pre>
+<pre id="result"></pre>
 
 <script>
 async function runSimulation() {
 
+  const flowrate = Number(document.getElementById("flowrate").value);
+  const depth = Number(document.getElementById("depth").value);
+
   const response = await fetch("https://drill-simulator.onrender.com/simulate", {
     method: "POST",
-    headers: {"Content-Type": "application/json"},
+    headers: {
+      "Content-Type": "application/json"
+    },
     body: JSON.stringify({
-      flowrate: parseFloat(document.getElementById("flowrate").value),
-      depth: parseFloat(document.getElementById("depth").value),
-      hole_diameter: 12.25,
+      flowrate: flowrate,
+      depth: depth,
+      hole_diameter: 8.5,
       sbp: 0,
       mpd_mode: "SBP",
-
+      bha: [],
       fluid: {
         mw: 12,
         fann_600: 50,
         fann_300: 30,
         fann_200: 20,
-        fann_100: 15,
+        fann_100: 10,
         fann_6: 5,
         fann_3: 3
       },
-
       temperature: {
         surface_temp: 80,
         bhct: 250,
         geothermal_grad: 0.02
       },
-
-      bha: [
-        {name:"DP", od:5, id:4, length:1000}
-      ],
-
-      trajectory: [
-        {md:0, inc:0, azi:0},
-        {md:10000, inc:0, azi:0}
-      ],
-
       gradient_mode: "SINGLE",
-
+      trajectory: [
+        { md: 0, inc: 0, azi: 0 },
+        { md: depth, inc: 0, azi: 0 }
+      ],
       cuttings: {
         rop: 50,
         size: 0.2,
-        density: 20,
+        density: 21,
         rpm: 120
       }
     })
   });
 
   const data = await response.json();
-  document.getElementById("output").textContent = JSON.stringify(data, null, 2);
+
+  document.getElementById("result").textContent =
+    JSON.stringify(data, null, 2);
 }
 </script>
 
