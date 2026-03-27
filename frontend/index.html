@@ -1,18 +1,17 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Drilling Hydraulics Simulator</title>
+    <title>Drilling Hydraulics Simulator</title>
 </head>
-
-<body style="font-family: Arial; padding: 20px;">
+<body>
 
 <h1>Drilling Hydraulics Simulator</h1>
 
 <label>Flowrate:</label>
-<input id="flowrate" type="number" value="400"><br><br>
+<input id="flowrate" value="400"><br><br>
 
 <label>Depth:</label>
-<input id="depth" type="number" value="10000"><br><br>
+<input id="depth" value="10000"><br><br>
 
 <button onclick="runSimulation()">Run Simulation</button>
 
@@ -41,12 +40,11 @@ async function runSimulation() {
 
         const data = await response.json();
 
-        console.log("Response:", data);
-
+        console.log(data);
         document.getElementById("result").innerText = JSON.stringify(data, null, 2);
 
     } catch (error) {
-        console.error("Error:", error);
+        console.error(error);
     }
 }
 </script>
