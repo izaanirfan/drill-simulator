@@ -15,6 +15,7 @@
 
 <button onclick="runSimulation()">Run Simulation</button>
 
+<h3>Result:</h3>
 <pre id="result"></pre>
 
 <script>
@@ -26,7 +27,33 @@ async function runSimulation() {
 
     const payload = {
         flowrate: flowrate,
-        depth: depth
+        depth: depth,
+
+        mpd_mode: "SBP",   // or "CBHP"
+
+        hole_diameter: 8.5,
+
+        bha: [
+            {
+                od: 5,
+                id: 4,
+                length: 1000
+            }
+        ],
+
+        fluid: {
+            mud_weight: 10,
+            rheology: {
+                model: "HB",
+                pv: 20,
+                yp: 10
+            }
+        },
+
+        temperature: {
+            surface_temp: 80,
+            geothermal_gradient: 1.5
+        }
     };
 
     try {
@@ -40,11 +67,13 @@ async function runSimulation() {
 
         const data = await response.json();
 
-        console.log(data);
+        console.log("Response:", data);
+
         document.getElementById("result").innerText = JSON.stringify(data, null, 2);
 
     } catch (error) {
-        console.error(error);
+        console.error("Error:", error);
+        document.getElementById("result").innerText = "Error: " + error;
     }
 }
 </script>
