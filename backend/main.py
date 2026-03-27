@@ -9,30 +9,33 @@ from export_pdf import generate_pdf
 
 app = FastAPI()
 
-# ✅ CORS CONFIG (FIXED)
+# ✅ CORS CONFIG (robust + guaranteed to work)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://drill-simulator.vercel.app"
-    ],
-    allow_credentials=True,
+    allow_origins=["*"],   # allow all origins
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ✅ SIMULATION ENDPOINT
+# ✅ Root check (optional but useful)
+@app.get("/")
+def root():
+    return {"message": "Drilling Simulator API is running"}
+
+# ✅ Simulation endpoint
 @app.post("/simulate")
 def simulate(data: SimulationInput):
     return run_simulation(data)
 
-# ✅ EXPORT EXCEL
+# ✅ Export Excel
 @app.post("/export/excel")
 def export_excel(data: SimulationInput):
     results = run_simulation(data)
     file_path = generate_excel(results)
     return FileResponse(file_path, filename="drilling_results.xlsx")
 
-# ✅ EXPORT PDF
+# ✅ Export PDF
 @app.post("/export/pdf")
 def export_pdf(data: SimulationInput):
     results = run_simulation(data)
