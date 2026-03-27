@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Drilling Hydraulics Simulator</title>
+</head>
+
+<body>
+    <h1>Drilling Hydraulics Simulator</h1>
+
+    <label>Flowrate:</label>
+    <input type="number" id="flowrate" value="400"><br><br>
+
+    <label>Depth:</label>
+    <input type="number" id="depth" value="10000"><br><br>
+
+    <button onclick="runSimulation()">Run Simulation</button>
+
+    <h2>Result:</h2>
+    <pre id="result"></pre>
+
+    <script>
+        async function runSimulation() {
+
+            document.getElementById("result").textContent = "Running...";
+
+            const flowrate = parseFloat(document.getElementById("flowrate").value);
+            const depth = parseFloat(document.getElementById("depth").value);
+
+            const payload = {
+                flowrate: flowrate,
+                depth: depth,
+
+                mpd_mode: "SBP",
+                gradient_mode: "static",
+
+                hole_diameter: 8.5,
+
+                bha: [
+                    { name: "Drill Pipe", od: 5, id: 4, length: 1000 }
+                ],
+
+                fluid: {
+                    mw: 10,
+                    fann_600: 60,
+                    fann_300: 40,
+                    fann_200: 30,
+                    fann_100: 20,
+                    fann_6: 10,
+                    fann_3: 5
+                },
+
+                temperature: {
+                    surface_temp: 80,
+                    bhct: 150,
+                    geothermal_grad: 1.5
+                },
+
+                trajectory: [
+                    { md: 0, inc: 0, azi: 0, tvd: 0 },
+                    { md: depth, inc: 0, azi: 0, tvd: depth }
+                ],
+
+                cuttings: {
+                    rop: 50,
+                    concentration: 0.05,
+                    size: 0.2,
+                    density: 2.65,
+                    rpm: 120
+                }
+            };
+
+            try {
+                const response = await fetch("/simulate", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                // 🔥 SHOW STATUS
+                console.log("Status:", response.status);
+
+                const text = await response.text();  // 🔥 raw response
+                console.log("Raw response:", text);
+
+                document.getElementById("result").textContent =
+                    "STATUS: " + response.status + "\n\n" + text;
+
+            } catch (error) {
+                console.error("ERROR:", error);
+
+                document.getElementById("result").textContent =
+                    "ERROR:\n" + error;
+            }
+        }
+    </script>
+</body>
+</html>

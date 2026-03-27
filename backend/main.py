@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
 from models import SimulationInput
@@ -13,42 +13,24 @@ from export_pdf import generate_pdf
 app = FastAPI()
 
 # ---------------------------------------------------
-# CORS CONFIG (VERY IMPORTANT)
+# SERVE FRONTEND (STATIC FILES)
+# This removes ALL CORS issues
 # ---------------------------------------------------
-origins = [
-    "https://drill-simulator.vercel.app",  # your frontend
-    "http://localhost:3000",               # optional (local testing)
-    "*"                                   # fallback (safe for now)
-]
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+app.mount("/", StaticFiles(directory="static", html=True), name="static")
 
 # ---------------------------------------------------
-# PREFLIGHT HANDLER (FIXES FAILED FETCH)
+# HEALTH CHECK (optional but useful)
 # ---------------------------------------------------
-@app.options("/{full_path:path}")
-async def preflight_handler(full_path: str):
-    return {"message": "OK"}
-
-# ---------------------------------------------------
-# ROOT HEALTH CHECK
-# ---------------------------------------------------
-@app.get("/")
-def read_root():
-    return {"message": "Drilling Simulator API is running"}
+@app.get("/health")
+def health_check():
+    return {"status": "ok"}
 
 # ---------------------------------------------------
 # SIMULATION ENDPOINT
 # ---------------------------------------------------
 @app.post("/simulate")
 def simulate(data: SimulationInput):
-    print("Simulation started")  # debug log
+    print("Simulation started")
     result = run_simulation(data)
     print("Simulation completed")
     return result
@@ -57,7 +39,7 @@ def simulate(data: SimulationInput):
 # EXPORT EXCEL
 # ---------------------------------------------------
 @app.post("/export/excel")
-def export_excel(data: SimulationInput):
+def export_excel_endpoint(data: SimulationInput):
     results = run_simulation(data)
     file_path = generate_excel(results)
     return FileResponse(file_path, filename="drilling_results.xlsx")
@@ -66,7 +48,7 @@ def export_excel(data: SimulationInput):
 # EXPORT PDF
 # ---------------------------------------------------
 @app.post("/export/pdf")
-def export_pdf(data: SimulationInput):
+def export_pdf_endpoint(data: SimulationInput):
     results = run_simulation(data)
     file_path = generate_pdf(results)
     return FileResponse(file_path, filename="drilling_report.pdf")
