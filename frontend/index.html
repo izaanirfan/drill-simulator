@@ -20,7 +20,7 @@
 
     <script>
         async function runSimulation() {
-            console.log("Button clicked");
+            document.getElementById("result").textContent = "Running... (first request may take 30s)";
 
             const flowrate = parseFloat(document.getElementById("flowrate").value);
             const depth = parseFloat(document.getElementById("depth").value);
@@ -28,19 +28,12 @@
             const payload = {
                 flowrate: flowrate,
                 depth: depth,
-
                 mpd_mode: "SBP",
                 gradient_mode: "static",
-
                 hole_diameter: 8.5,
 
                 bha: [
-                    {
-                        name: "Drill Pipe",
-                        od: 5,
-                        id: 4,
-                        length: 1000
-                    }
+                    { name: "Drill Pipe", od: 5, id: 4, length: 1000 }
                 ],
 
                 fluid: {
@@ -60,18 +53,8 @@
                 },
 
                 trajectory: [
-                    {
-                        md: 0,
-                        inc: 0,
-                        azi: 0,
-                        tvd: 0
-                    },
-                    {
-                        md: depth,
-                        inc: 0,
-                        azi: 0,
-                        tvd: depth
-                    }
+                    { md: 0, inc: 0, azi: 0, tvd: 0 },
+                    { md: depth, inc: 0, azi: 0, tvd: depth }
                 ],
 
                 cuttings: {
@@ -87,7 +70,7 @@
                 const response = await fetch("https://drill-simulator.onrender.com/simulate", {
                     method: "POST",
                     headers: {
-                        "Content-Type": "application/json"
+                        "Content-Type": "text/plain"   // 🔥 KEY FIX (avoid preflight)
                     },
                     body: JSON.stringify(payload)
                 });
@@ -98,8 +81,9 @@
                     JSON.stringify(data, null, 2);
 
             } catch (error) {
-                console.error("Error:", error);
-                document.getElementById("result").textContent = "Error connecting to backend.";
+                console.error(error);
+                document.getElementById("result").textContent =
+                    "Backend waking up... please click again in 20–30 seconds.";
             }
         }
     </script>
