@@ -144,12 +144,12 @@ async function runSimulation() {
 
         console.log("API Response:", data);
 
-        // SHOW RESULTS
+        // DISPLAY RESULTS
         document.getElementById("result").innerText =
             "ECD Bottom: " + data.summary.ecd_bottom + "\n" +
             "ESD Bottom: " + data.summary.esd_bottom;
 
-        // AUTO PLOT
+        // PLOT
         plotChart(data.profile.depth, data.profile.ecd, data.profile.esd);
 
     } catch (err) {
@@ -167,7 +167,7 @@ function plotChart(depth, ecd, esd) {
         window.chart.destroy();
     }
 
-    // Convert to (x,y) pairs
+    // Convert to (x,y)
     const ecdData = depth.map((d, i) => ({ x: ecd[i], y: d }));
     const esdData = depth.map((d, i) => ({ x: esd[i], y: d }));
 
@@ -199,7 +199,7 @@ function plotChart(depth, ecd, esd) {
                     }
                 },
                 y: {
-                    reverse: true,  // 🔥 THIS MAKES DEPTH GO DOWNWARD
+                    reverse: true,  // 🔥 Depth increases downward
                     title: {
                         display: true,
                         text: "Depth"
