@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from typing import List
 import uvicorn
 
-from hydraulic import run_hydraulics  # make sure this matches your file
+from hydraulics import run_simulation  # make sure this matches your file
 
 app = FastAPI()
 
@@ -83,7 +83,7 @@ class SimulationInput(BaseModel):
 def simulate(data: SimulationInput):
 
     try:
-        result = run_hydraulics(data)
+        result = run_simulation(data)
         return result
 
     except Exception as e:
