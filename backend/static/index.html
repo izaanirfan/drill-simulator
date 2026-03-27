@@ -167,19 +167,24 @@ function plotChart(depth, ecd, esd) {
         window.chart.destroy();
     }
 
+    // Convert to (x,y) pairs
+    const ecdData = depth.map((d, i) => ({ x: ecd[i], y: d }));
+    const esdData = depth.map((d, i) => ({ x: esd[i], y: d }));
+
     window.chart = new Chart(ctx, {
-        type: 'line',
+        type: 'scatter',
         data: {
-            labels: depth,
             datasets: [
                 {
                     label: 'ECD',
-                    data: ecd,
+                    data: ecdData,
+                    showLine: true,
                     borderWidth: 2
                 },
                 {
                     label: 'ESD',
-                    data: esd,
+                    data: esdData,
+                    showLine: true,
                     borderWidth: 2
                 }
             ]
@@ -188,10 +193,17 @@ function plotChart(depth, ecd, esd) {
             responsive: true,
             scales: {
                 x: {
-                    title: { display: true, text: "Depth" }
+                    title: {
+                        display: true,
+                        text: "Density (ppg)"
+                    }
                 },
                 y: {
-                    title: { display: true, text: "ppg" }
+                    reverse: true,  // 🔥 THIS MAKES DEPTH GO DOWNWARD
+                    title: {
+                        display: true,
+                        text: "Depth"
+                    }
                 }
             }
         }
