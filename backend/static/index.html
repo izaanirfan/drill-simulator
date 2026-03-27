@@ -2,52 +2,111 @@
 <html>
 <head>
     <title>Drilling Hydraulics Simulator</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 
 <body>
 
 <h1>Drilling Hydraulics Simulator</h1>
 
-<label>Flowrate:</label>
-<input id="flowrate" value="400"><br><br>
+<!-- TABS -->
+<button onclick="showTab('run')">Run</button>
+<button onclick="showTab('advanced')">Advanced</button>
 
-<label>Depth:</label>
-<input id="depth" value="10000"><br><br>
+<hr>
 
-<button onclick="runSimulation()">Run Simulation</button>
+<!-- RUN TAB -->
+<div id="run" class="tab">
+    <h3>Quick Run</h3>
 
-<h2>Result:</h2>
+    Flowrate: <input id="flowrate" value="400"><br><br>
+    Depth: <input id="depth" value="10000"><br><br>
+
+    <button onclick="runSimulation()">Run Simulation</button>
+</div>
+
+<!-- ADVANCED TAB -->
+<div id="advanced" class="tab" style="display:none">
+
+<h3>Advanced Inputs</h3>
+
+Trajectory:
+<textarea id="trajectory">
+[
+  {"md":0,"inc":0,"azi":0,"tvd":0},
+  {"md":10000,"inc":0,"azi":0,"tvd":10000}
+]
+</textarea>
+
+<br><br>
+
+Well Sections:
+<textarea id="well">
+[
+  {"end_md":5000,"hole_d":12.25,"pipe_od":5},
+  {"end_md":10000,"hole_d":8.5,"pipe_od":5}
+]
+</textarea>
+
+<br><br>
+
+BHA:
+<textarea id="bha">
+[
+  {"name":"Drill Pipe","od":5,"id":4,"length":10000}
+]
+</textarea>
+
+<br><br>
+
+Fluid MW: <input id="mw" value="10"><br>
+
+Fann:
+<input id="f600" value="60">
+<input id="f300" value="40">
+<input id="f200" value="30">
+<input id="f100" value="20">
+<input id="f6" value="10">
+<input id="f3" value="5">
+
+</div>
+
+<hr>
+
+<h2>Results</h2>
 <pre id="result">Waiting...</pre>
 
+<canvas id="chart"></canvas>
+
 <script>
+
+function showTab(tab) {
+    document.querySelectorAll('.tab').forEach(t => t.style.display = 'none');
+    document.getElementById(tab).style.display = 'block';
+}
+
 async function runSimulation() {
 
     document.getElementById("result").innerText = "Running...";
 
     const payload = {
-        flowrate: 400,
-        depth: 10000,
+        flowrate: Number(document.getElementById("flowrate").value),
+        depth: Number(document.getElementById("depth").value),
         mpd_mode: "SBP",
         gradient_mode: "static",
-        hole_diameter: 8.5,
 
-        bha: [
-            {
-                name: "Drill Pipe",
-                od: 5,
-                id: 4,
-                length: 1000
-            }
-        ],
+        trajectory: JSON.parse(document.getElementById("trajectory").value),
+        well_sections: JSON.parse(document.getElementById("well").value),
+        bha: JSON.parse(document.getElementById("bha").value),
 
         fluid: {
-            mw: 10,
-            fann_600: 60,
-            fann_300: 40,
-            fann_200: 30,
-            fann_100: 20,
-            fann_6: 10,
-            fann_3: 5
+            mw: Number(document.getElementById("mw").value),
+            fann_600: Number(document.getElementById("f600").value),
+            fann_300: Number(document.getElementById("f300").value),
+            fann_200: Number(document.getElementById("f200").value),
+            fann_100: Number(document.getElementById("f100").value),
+            fann_6: Number(document.getElementById("f6").value),
+            fann_3: Number(document.getElementById("f3").value)
         },
 
         temperature: {
@@ -55,11 +114,6 @@ async function runSimulation() {
             bhct: 150,
             geothermal_grad: 1.5
         },
-
-        trajectory: [
-            { md: 0, inc: 0, azi: 0, tvd: 0 },
-            { md: 10000, inc: 0, azi: 0, tvd: 10000 }
-        ],
 
         cuttings: {
             rop: 50,
@@ -71,24 +125,50 @@ async function runSimulation() {
     };
 
     try {
-        const response = await fetch("/simulate", {
-            method: "POST",   // ✅ THIS FIXES YOUR ERROR
-            headers: {
-                "Content-Type": "application/json"
-            },
+        const res = await fetch("/simulate", {   // 🔥 IMPORTANT FIX
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
             body: JSON.stringify(payload)
         });
 
-        const text = await response.text();
+        if (!res.ok) {
+            const text = await res.text();
+            document.getElementById("result").innerText =
+                "STATUS: " + res.status + "\n" + text;
+            return;
+        }
+
+        const data = await res.json();
 
         document.getElementById("result").innerText =
-            "STATUS: " + response.status + "\n\n" + text;
+            "ECD Bottom: " + data.summary.ecd_bottom + "\n" +
+            "ESD Bottom: " + data.summary.esd_bottom;
+
+        plotChart(data.profile.depth, data.profile.ecd, data.profile.esd);
 
     } catch (err) {
-        document.getElementById("result").innerText =
-            "ERROR:\n" + err;
+        document.getElementById("result").innerText = "ERROR: " + err;
     }
 }
+
+function plotChart(depth, ecd, esd) {
+
+    const ctx = document.getElementById('chart').getContext('2d');
+
+    if (window.chart) window.chart.destroy();
+
+    window.chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: depth,
+            datasets: [
+                { label: 'ECD', data: ecd },
+                { label: 'ESD', data: esd }
+            ]
+        }
+    });
+}
+
 </script>
 
 </body>
