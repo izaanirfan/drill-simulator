@@ -20,54 +20,34 @@
 
 <script>
 async function runSimulation() {
+    console.log("Button clicked");
 
-  const flowrate = Number(document.getElementById("flowrate").value);
-  const depth = Number(document.getElementById("depth").value);
+    const flowrate = parseFloat(document.getElementById("flowrate").value);
+    const depth = parseFloat(document.getElementById("depth").value);
 
-  const response = await fetch("https://drill-simulator.onrender.com/simulate", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      flowrate: flowrate,
-      depth: depth,
-      hole_diameter: 8.5,
-      sbp: 0,
-      mpd_mode: "SBP",
-      bha: [],
-      fluid: {
-        mw: 12,
-        fann_600: 50,
-        fann_300: 30,
-        fann_200: 20,
-        fann_100: 10,
-        fann_6: 5,
-        fann_3: 3
-      },
-      temperature: {
-        surface_temp: 80,
-        bhct: 250,
-        geothermal_grad: 0.02
-      },
-      gradient_mode: "SINGLE",
-      trajectory: [
-        { md: 0, inc: 0, azi: 0 },
-        { md: depth, inc: 0, azi: 0 }
-      ],
-      cuttings: {
-        rop: 50,
-        size: 0.2,
-        density: 21,
-        rpm: 120
-      }
-    })
-  });
+    const payload = {
+        flowrate: flowrate,
+        depth: depth
+    };
 
-  const data = await response.json();
+    try {
+        const response = await fetch("https://drill-simulator.onrender.com/simulate", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify(payload)
+        });
 
-  document.getElementById("result").textContent =
-    JSON.stringify(data, null, 2);
+        const data = await response.json();
+
+        console.log("Response:", data);
+
+        document.getElementById("result").innerText = JSON.stringify(data, null, 2);
+
+    } catch (error) {
+        console.error("Error:", error);
+    }
 }
 </script>
 
