@@ -54,6 +54,7 @@
                 },
 
                 temperature: {
+                    surface_temp: 80,
                     bhct: 150,
                     geothermal_grad: 1.5
                 },
@@ -62,18 +63,23 @@
                     {
                         md: 0,
                         inc: 0,
+                        azi: 0,
                         tvd: 0
                     },
                     {
                         md: depth,
                         inc: 0,
+                        azi: 0,
                         tvd: depth
                     }
                 ],
 
                 cuttings: {
-                    rate_of_penetration: 50,
-                    concentration: 0.05
+                    rop: 50,
+                    concentration: 0.05,
+                    size: 0.2,
+                    density: 2.65,
+                    rpm: 120
                 }
             };
 
