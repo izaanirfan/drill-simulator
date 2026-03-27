@@ -20,7 +20,9 @@
 
     <script>
         async function runSimulation() {
-            document.getElementById("result").textContent = "Running... (first request may take 30s)";
+
+            document.getElementById("result").textContent =
+                "Running... (if first time, wait 30s and click again)";
 
             const flowrate = parseFloat(document.getElementById("flowrate").value);
             const depth = parseFloat(document.getElementById("depth").value);
@@ -28,8 +30,10 @@
             const payload = {
                 flowrate: flowrate,
                 depth: depth,
+
                 mpd_mode: "SBP",
                 gradient_mode: "static",
+
                 hole_diameter: 8.5,
 
                 bha: [
@@ -70,7 +74,7 @@
                 const response = await fetch("https://drill-simulator.onrender.com/simulate", {
                     method: "POST",
                     headers: {
-                        "Content-Type": "text/plain"   // 🔥 KEY FIX (avoid preflight)
+                        "Content-Type": "application/json"   // ✅ correct again
                     },
                     body: JSON.stringify(payload)
                 });
@@ -83,7 +87,7 @@
             } catch (error) {
                 console.error(error);
                 document.getElementById("result").textContent =
-                    "Backend waking up... please click again in 20–30 seconds.";
+                    "Backend waking up. Wait 30 seconds and try again.";
             }
         }
     </script>
