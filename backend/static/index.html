@@ -9,10 +9,12 @@
         .tab { display: none; margin-top: 20px; }
         .active { display: block; }
         input:disabled { background-color: #ddd; }
-        table { border-collapse: collapse; margin-top: 10px; width: 100%; max-width: 600px; }
+        table { border-collapse: collapse; margin-top: 10px; width: 100%; max-width: 700px; }
         th, td { padding: 8px; text-align: left; }
         button { margin-top: 10px; padding: 5px 10px; cursor: pointer; }
         .nav-btn { padding: 10px 15px; font-weight: bold; }
+        .unit-settings { display: grid; grid-template-columns: 150px 100px; gap: 10px; margin-bottom: 20px; }
+        .unit-label { font-weight: bold; color: #555; }
     </style>
 </head>
 
@@ -26,12 +28,57 @@
 <button class="nav-btn" onclick="showTab('bha')">BHA</button>
 <button class="nav-btn" onclick="showTab('mud')">Mud</button>
 <button class="nav-btn" onclick="showTab('temp')">Temperature</button>
+<button class="nav-btn" onclick="showTab('units')" style="background-color: #e0e0e0;">Units ⚙️</button>
+
+<div id="units" class="tab">
+    <h3>Global Unit Preferences</h3>
+    <div class="unit-settings">
+        <label>Depth & Length:</label>
+        <select id="u_length" onchange="updateLabels()">
+            <option value="ft">ft</option>
+            <option value="m">m</option>
+        </select>
+
+        <label>Diameter:</label>
+        <select id="u_diam" onchange="updateLabels()">
+            <option value="in">in</option>
+            <option value="mm">mm</option>
+        </select>
+
+        <label>Fluid Density:</label>
+        <select id="u_density" onchange="updateLabels()">
+            <option value="ppg">ppg</option>
+            <option value="sg">sg</option>
+            <option value="kg/m3">kg/m³</option>
+        </select>
+
+        <label>Pressure:</label>
+        <select id="u_press" onchange="updateLabels()">
+            <option value="psi">psi</option>
+            <option value="bar">bar</option>
+            <option value="kPa">kPa</option>
+        </select>
+
+        <label>Flowrate:</label>
+        <select id="u_flow" onchange="updateLabels()">
+            <option value="gpm">gpm</option>
+            <option value="lpm">lpm</option>
+        </select>
+
+        <label>Temperature:</label>
+        <select id="u_temp" onchange="updateLabels()">
+            <option value="F">°F</option>
+            <option value="C">°C</option>
+        </select>
+    </div>
+    <p style="color: gray; font-size: 0.9em;"><i>Changes here will automatically update labels and values across the app.</i></p>
+</div>
 
 <div id="simulation" class="tab active">
     <h3>Simulation Parameters</h3>
-    Flowrate (gpm): <input id="flowrate" value="400"><br><br>
-    Depth (ft): <input id="depth" value="10000"><br><br>
-    Surface Backpressure (psi): <input id="sbp" value="0"><br><br>
+    Flowrate (<span class="lbl-flow">gpm</span>): <input id="flowrate" value="400"><br><br>
+    Depth (<span class="lbl-length">ft</span>): <input id="depth" value="10000"><br><br>
+    Surface Backpressure (<span class="lbl-press">psi</span>): <input id="sbp" value="0"><br><br>
 
     <button onclick="runSimulation()" style="background-color: #4CAF50; color: white; padding: 10px 20px; border: none; font-size: 16px;">Run Simulation</button>
 
@@ -47,10 +94,10 @@
         <tr>
             <th>Type</th>
             <th>Name</th>
-            <th>Top MD</th>
-            <th>Bottom MD</th>
-            <th>OD</th>
-            <th>ID</th>
+            <th>Top MD (<span class="lbl-length">ft</span>)</th>
+            <th>Bottom MD (<span class="lbl-length">ft</span>)</th>
+            <th>OD (<span class="lbl-diam">in</span>)</th>
+            <th>ID (<span class="lbl-diam">in</span>)</th>
         </tr>
         <tr>
             <td>
@@ -102,7 +149,7 @@
     <h3>Wellbore Trajectory</h3>
     <table id="trajectoryTable" border="1">
         <tr>
-            <th>MD (ft)</th>
+            <th>MD (<span class="lbl-length">ft</span>)</th>
             <th>Inclination (deg)</th>
             <th>Azimuth (deg)</th>
         </tr>
@@ -123,7 +170,12 @@
 <div id="bha" class="tab">
     <h3>Bottom Hole Assembly</h3>
     <table id="bhaTable" border="1">
-        <tr><th>Name</th><th>OD</th><th>ID</th><th>Length</th></tr>
+        <tr>
+            <th>Name</th>
+            <th>OD (<span class="lbl-diam">in</span>)</th>
+            <th>ID (<span class="lbl-diam">in</span>)</th>
+            <th>Length (<span class="lbl-length">ft</span>)</th>
+        </tr>
         <tr>
             <td>Drill Pipe</td>
             <td><input value="5"></td>
@@ -141,7 +193,8 @@
 
 <div id="mud" class="tab">
     <h3>Fluid Properties</h3>
-    MW (ppg): <input id="mw" value="10"><br><br>
+    MW (<span class="lbl-density">ppg</span>): <input id="mw" value="10"><br><br>
+    <i>Fann Viscometer Readings:</i><br>
     600: <input id="f600" value="60"> | 
     300: <input id="f300" value="40"> | 
     200: <input id="f200" value="30"><br><br>
@@ -152,14 +205,15 @@
 
 <div id="temp" class="tab">
     <h3>Temperature Gradient</h3>
-    Surface Temp (°F): <input id="surface_temp" value="80"><br><br>
-    BHCT (°F): <input id="bhct" value="150">
+    Surface Temp (<span class="lbl-temp">°F</span>): <input id="surface_temp" value="80"><br><br>
+    BHCT (<span class="lbl-temp">°F</span>): <input id="bhct" value="150">
 </div>
 
 <script>
 
 let chartInstance = null;
 
+// ================= UI NAVIGATION =================
 function showTab(tab) {
     document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
     document.getElementById(tab).classList.add("active");
@@ -205,6 +259,45 @@ function addTrajectoryRow(){
     `;
 }
 
+// ================= UNIT MANAGEMENT =================
+// Updates the text inside <span> tags dynamically when units change
+function updateLabels() {
+    document.querySelectorAll(".lbl-length").forEach(el => el.innerText = document.getElementById("u_length").value);
+    document.querySelectorAll(".lbl-diam").forEach(el => el.innerText = document.getElementById("u_diam").value);
+    document.querySelectorAll(".lbl-density").forEach(el => el.innerText = document.getElementById("u_density").value);
+    document.querySelectorAll(".lbl-press").forEach(el => el.innerText = document.getElementById("u_press").value);
+    document.querySelectorAll(".lbl-flow").forEach(el => el.innerText = document.getElementById("u_flow").value);
+    
+    let tempUnit = document.getElementById("u_temp").value;
+    document.querySelectorAll(".lbl-temp").forEach(el => el.innerText = "°" + tempUnit);
+}
+
+// Convert TO Base (For Backend)
+function toBaseLength(v) { return document.getElementById("u_length").value === "m" ? v * 3.28084 : v; }
+function toBaseDiam(v)   { return document.getElementById("u_diam").value === "mm" ? v / 25.4 : v; }
+function toBaseFlow(v)   { return document.getElementById("u_flow").value === "lpm" ? v * 0.264172 : v; }
+function toBasePress(v)  { 
+    let u = document.getElementById("u_press").value;
+    return u === "bar" ? v * 14.5038 : (u === "kPa" ? v * 0.145038 : v); 
+}
+function toBaseDens(v)   { 
+    let u = document.getElementById("u_density").value;
+    return u === "sg" ? v * 8.33 : (u === "kg/m3" ? v / 119.826 : v); 
+}
+function toBaseTemp(v)   { return document.getElementById("u_temp").value === "C" ? (v * 9/5) + 32 : v; }
+
+// Convert FROM Base (For Charting Results)
+function fromBaseLength(v) { return document.getElementById("u_length").value === "m" ? v / 3.28084 : v; }
+function fromBaseDens(v)   { 
+    let u = document.getElementById("u_density").value;
+    return u === "sg" ? v / 8.33 : (u === "kg/m3" ? v * 119.826 : v); 
+}
+function fromBasePress(v)  { 
+    let u = document.getElementById("u_press").value;
+    return u === "bar" ? v / 14.5038 : (u === "kPa" ? v / 0.145038 : v); 
+}
+
+// ================= BUILD & RUN =================
 function buildPayload(){
     let well_sections = [];
     let rows = document.getElementById("wellTable").rows;
@@ -213,10 +306,10 @@ function buildPayload(){
         let type = c[0].children[0].value;
         well_sections.push({
             type: type,
-            top_md: Number(c[2].innerText),
-            end_md: Number(c[3].innerText),
-            casing_id: Number(c[5].querySelector("input").value),
-            hole_d: type === "open hole" ? Number(c[5].querySelector("input").value) : Number(c[4].querySelector("input").value)
+            top_md: toBaseLength(Number(c[2].innerText)),
+            end_md: toBaseLength(Number(c[3].innerText)),
+            casing_id: toBaseDiam(Number(c[5].querySelector("input").value)),
+            hole_d: type === "open hole" ? toBaseDiam(Number(c[5].querySelector("input").value)) : toBaseDiam(Number(c[4].querySelector("input").value))
         });
     }
 
@@ -225,7 +318,7 @@ function buildPayload(){
     for (let i = 1; i < trajRows.length; i++) {
         let c = trajRows[i].cells;
         trajectory.push({
-            md: Number(c[0].innerText),
+            md: toBaseLength(Number(c[0].innerText)),
             inc: Number(c[1].innerText),
             azi: Number(c[2].innerText)
         });
@@ -237,23 +330,24 @@ function buildPayload(){
         let c = bhaRows[i].cells;
         bha.push({
             name: c[0].innerText,
-            od: Number(c[1].children[0].value),
-            id: Number(c[2].children[0].value),
-            length: Number(c[3].children[0].value)
+            od: toBaseDiam(Number(c[1].children[0].value)),
+            id: toBaseDiam(Number(c[2].children[0].value)),
+            length: toBaseLength(Number(c[3].children[0].value))
         });
     }
 
     return {
-        flowrate: Number(document.getElementById("flowrate").value),
-        depth: Number(document.getElementById("depth").value),
-        sbp: Number(document.getElementById("sbp").value),
-        hole_diameter: 8.5,
+        // Wrap all raw inputs in the TO BASE conversion functions
+        flowrate: toBaseFlow(Number(document.getElementById("flowrate").value)),
+        depth: toBaseLength(Number(document.getElementById("depth").value)),
+        sbp: toBasePress(Number(document.getElementById("sbp").value)),
+        hole_diameter: 8.5, // Fallback
 
         mpd_mode: "SBP",
         gradient_mode: "static",
 
         fluid: {
-            mw: Number(document.getElementById("mw").value),
+            mw: toBaseDens(Number(document.getElementById("mw").value)),
             fann_600: Number(document.getElementById("f600").value),
             fann_300: Number(document.getElementById("f300").value),
             fann_200: Number(document.getElementById("f200").value),
@@ -263,8 +357,8 @@ function buildPayload(){
         },
 
         temperature: {
-            surface_temp: Number(document.getElementById("surface_temp").value),
-            bhct: Number(document.getElementById("bhct").value),
+            surface_temp: toBaseTemp(Number(document.getElementById("surface_temp").value)),
+            bhct: toBaseTemp(Number(document.getElementById("bhct").value)),
             geothermal_grad: 1.5,
             beta: 0.0003
         },
@@ -274,9 +368,9 @@ function buildPayload(){
         bha: bha,
 
         cuttings: {
-            rop: 50,
-            size: 0.2,
-            density: 2.65,
+            rop: toBaseLength(50), 
+            size: toBaseDiam(0.2),
+            density: toBaseDens(22.1), // 2.65 SG converted to base ppg approximation
             rpm: 120
         }
     };
@@ -304,8 +398,15 @@ async function runSimulation(){
             return;
         }
 
+        // Convert backend results back to user's selected units for display
+        let displayEcd = fromBaseDens(result.summary.ecd_bottom).toFixed(3);
+        let displayLoss = fromBasePress(result.summary.total_annular_loss_psi).toFixed(1);
+        
+        let u_dens = document.getElementById("u_density").value;
+        let u_press = document.getElementById("u_press").value;
+
         document.getElementById("result").innerText =
-            "ECD Bottom: " + result.summary.ecd_bottom + " ppg | Annular Loss: " + result.summary.total_annular_loss_psi + " psi";
+            `ECD Bottom: ${displayEcd} ${u_dens} | Annular Loss: ${displayLoss} ${u_press}`;
 
         plotChart(result.profile);
     } catch (error) {
@@ -318,25 +419,32 @@ function plotChart(profile){
     const ctx = document.getElementById("chart");
     if(chartInstance) chartInstance.destroy();
 
-    const ecdData = profile.depth.map((d,i)=>({x:profile.ecd[i], y:d}));
-    const esdData = profile.depth.map((d,i)=>({x:profile.esd[i], y:d}));
+    let u_dens = document.getElementById("u_density").value;
+    let u_length = document.getElementById("u_length").value;
+
+    // Convert arrays back to user preferred units
+    const ecdData = profile.depth.map((d,i) => ({x: fromBaseDens(profile.ecd[i]), y: fromBaseLength(d)}));
+    const esdData = profile.depth.map((d,i) => ({x: fromBaseDens(profile.esd[i]), y: fromBaseLength(d)}));
 
     chartInstance = new Chart(ctx,{
         type:"scatter",
         data:{
             datasets:[
-                {label:"ECD (ppg)", data:ecdData, showLine:true, borderColor: "red", backgroundColor: "red"},
-                {label:"ESD (ppg)", data:esdData, showLine:true, borderColor: "blue", backgroundColor: "blue"}
+                {label:`ECD (${u_dens})`, data:ecdData, showLine:true, borderColor: "red", backgroundColor: "red"},
+                {label:`ESD (${u_dens})`, data:esdData, showLine:true, borderColor: "blue", backgroundColor: "blue"}
             ]
         },
         options:{
             scales:{
-                x:{title:{display:true,text:"Density (ppg)"}},
-                y:{reverse:true,title:{display:true,text:"Measured Depth (ft)"}}
+                x:{title:{display:true,text:`Density (${u_dens})`}},
+                y:{reverse:true,title:{display:true,text:`Measured Depth (${u_length})`}}
             }
         }
     });
 }
+
+// Initialize labels on first load
+window.onload = updateLabels;
 
 </script>
 </body>
