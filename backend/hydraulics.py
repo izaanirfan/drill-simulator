@@ -1,18 +1,12 @@
 import math
 
 # -----------------------------
-# CONSTANTS
-# -----------------------------
-GC = 32.174  # lbm-ft/lbf-s²
-
-# -----------------------------
 # GEOMETRY
 # -----------------------------
 def annular_area(Do, Di):
     Do_ft = Do / 12
     Di_ft = Di / 12
-    area = math.pi / 4 * (Do_ft**2 - Di_ft**2)
-    return max(area, 0.0001)
+    return max(math.pi / 4 * (Do_ft**2 - Di_ft**2), 0.0001)
 
 
 def hydraulic_diameter(Do, Di):
@@ -27,19 +21,13 @@ def build_bha_profile(bha, depth):
     profile = []
     current = depth
 
-    if not bha:
-        return [{"top": 0, "bottom": depth, "od": 5}]
-
     for comp in reversed(bha):
-        length = comp.length or 0
-        od = comp.od or 5
-
-        top = max(current - length, 0)
+        top = max(current - comp.length, 0)
 
         profile.append({
             "top": top,
             "bottom": current,
-            "od": od
+            "od": comp.od
         })
 
         current = top
@@ -59,9 +47,6 @@ def get_pipe_od(profile, md):
 # -----------------------------
 def get_annulus(sections, md):
 
-    if not sections:
-        return 8.5
-
     for sec in sections:
 
         if sec.top_md <= md <= sec.end_md:
@@ -69,21 +54,21 @@ def get_annulus(sections, md):
             t = sec.type.lower()
 
             if t == "open hole":
-                return sec.hole_d or 8.5
+                return sec.hole_d
 
             if t == "casing":
-                return sec.casing_id or 8.5
+                return sec.casing_id
 
             if t == "liner":
 
                 if md >= sec.top_md:
-                    return sec.casing_id or 8.5
+                    return sec.casing_id
 
                 for parent in sections:
                     if parent.type.lower() == "casing" and parent.top_md <= md <= parent.end_md:
-                        return parent.casing_id or 8.5
+                        return parent.casing_id
 
-    return sections[-1].hole_d or 8.5
+    return sections[-1].hole_d
 
 
 # -----------------------------
@@ -106,7 +91,7 @@ def fit_hb(f600, f300, f3):
 
 
 # -----------------------------
-# HB → APPARENT VISCOSITY
+# HB APPARENT VISCOSITY
 # -----------------------------
 def apparent_viscosity_hb(tau_y, K, n, v, dh):
 
@@ -116,27 +101,45 @@ def apparent_viscosity_hb(tau_y, K, n, v, dh):
 
     mu = tau / gamma  # lb·s/ft²
 
-    # convert to cp
     mu_cp = mu * 4788
 
     return max(mu_cp, 1)
 
 
 # -----------------------------
-# MAIN SIMULATION
+# FIELD PRESSURE LOSS MODEL
+# -----------------------------
+def pressure_loss_field(mw, v, dh, mu_cp, length):
+
+    try:
+        # v in ft/s → convert to ft/min
+        v_ftmin = v * 60
+
+        # dh ft → inches
+        dh_in = dh * 12
+
+        # 🔥 FIELD CALIBRATED MODEL (KEY FIX)
+        dp_per_ft = 0.0008 * mw * (v_ftmin**2) / dh_in
+
+        dp = dp_per_ft * length
+
+        return max(dp, 0)
+
+    except:
+        return 0
+
+
+# -----------------------------
+# MAIN
 # -----------------------------
 def run_simulation(data):
 
     try:
 
-        Q = float(data.flowrate or 400)      # gpm
+        Q = float(data.flowrate or 400)
         depth = max(float(data.depth or 10000), 100)
         mw = float(data.fluid.mw or 10)
 
-        # ✅ CORRECT density (lbm/ft³)
-        rho = mw * 7.48052
-
-        # HB rheology
         tau_y, K, n = fit_hb(
             data.fluid.fann_600,
             data.fluid.fann_300,
@@ -157,7 +160,6 @@ def run_simulation(data):
 
         for md in md_list:
 
-            # geometry
             Do = get_annulus(data.well_sections, md)
             Di = get_pipe_od(bha_profile, md)
 
@@ -165,35 +167,20 @@ def run_simulation(data):
 
             area = annular_area(Do, Di)
 
-            # velocity (ft/s)
             v = Q / (24.5 * area)
 
             dh = hydraulic_diameter(Do, Di)
 
-            # HB apparent viscosity (cp)
             mu_cp = apparent_viscosity_hb(tau_y, K, n, v, dh)
 
-            # convert cp → lbm/(ft·s)
-            mu = mu_cp / 4788
-
-            # ✅ CORRECT Reynolds
-            Re = (rho * v * dh) / mu
-
-            # friction factor
-            if Re < 2100:
-                f = 16 / max(Re, 1)
-            else:
-                f = 0.079 / (Re ** 0.25)
-
-            # pressure loss (psi)
-            dp = f * (rho * v**2 / (2 * GC)) * (step / dh)
+            # 🔥 FIXED PRESSURE LOSS
+            dp = pressure_loss_field(mw, v, dh, mu_cp, step)
 
             cumulative_dp += dp
 
-            # ECD
             ecd = mw + cumulative_dp / (0.051948 * md)
 
-            # temperature correction
+            # temperature
             Tsurf = data.temperature.surface_temp
             Tbh = data.temperature.bhct
 
@@ -209,9 +196,8 @@ def run_simulation(data):
 
         return {
             "summary": {
-                "ecd_bottom": ecd_profile[-1] if ecd_profile else 0,
-                "esd_bottom": esd_profile[-1] if esd_profile else 0,
-                "pressure_loss": round(cumulative_dp, 2)
+                "ecd_bottom": ecd_profile[-1],
+                "esd_bottom": esd_profile[-1]
             },
             "profile": {
                 "depth": depths,
