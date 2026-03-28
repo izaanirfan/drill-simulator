@@ -14,6 +14,7 @@
 
 <h1>Drilling Hydraulics Simulator</h1>
 
+<!-- TABS -->
 <button onclick="showTab('simulation')">Simulation</button>
 <button onclick="showTab('well')">Well Design</button>
 <button onclick="showTab('bha')">BHA</button>
@@ -33,10 +34,10 @@ Depth: <input id="depth" value="10000"><br><br>
 
 </div>
 
-<!-- ================= WELL ================= -->
+<!-- ================= WELL DESIGN ================= -->
 <div id="well" class="tab">
 
-<h3>Well Design</h3>
+<h3>Well Design (Top → Bottom)</h3>
 
 <table id="wellTable" border="1">
 <tr>
@@ -64,7 +65,7 @@ Depth: <input id="depth" value="10000"><br><br>
 <!-- ================= BHA ================= -->
 <div id="bha" class="tab">
 
-<h3>BHA</h3>
+<h3>BHA (Top → Bottom)</h3>
 
 <table id="bhaTable" border="1">
 <tr><th>Name</th><th>OD</th><th>ID</th><th>Length</th></tr>
@@ -132,10 +133,7 @@ function buildPayload() {
             top_md: Number(c[1].children[0].value),
             end_md: Number(c[2].children[0].value),
             casing_id: Number(c[3].children[0].value),
-            hole_d: Number(c[4].children[0].value),
-
-            // 🔥 REQUIRED FIX
-            pipe_od: 5
+            hole_d: Number(c[4].children[0].value)
         });
     }
 
@@ -157,7 +155,7 @@ function buildPayload() {
         flowrate: Number(document.getElementById("flowrate").value),
         depth: Number(document.getElementById("depth").value),
 
-        // 🔥 REQUIRED
+        // REQUIRED FIELDS
         mpd_mode: "SBP",
         gradient_mode: "static",
 
@@ -185,7 +183,7 @@ function buildPayload() {
         well_sections: well_sections,
         bha: bha,
 
-        // 🔥 REQUIRED CUTTINGS BLOCK
+        // REQUIRED
         cuttings: {
             rop: 50,
             concentration: 0.05,
