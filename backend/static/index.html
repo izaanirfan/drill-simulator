@@ -209,11 +209,22 @@ async function runSimulation() {
             body: JSON.stringify(payload)
         });
 
-        const result = await response.json();
+        const text = await response.text();  // 🔥 get raw text first
+
+        let result;
+
+        try {
+            result = JSON.parse(text);  // try parse
+        } catch (e) {
+            document.getElementById("result").innerText =
+                "❌ Backend Error (Not JSON):\n\n" + text;
+            return;
+        }
 
         if (!response.ok) {
             document.getElementById("result").innerText =
-                "ERROR " + response.status + ":\n" + JSON.stringify(result, null, 2);
+                "❌ ERROR " + response.status + ":\n" +
+                JSON.stringify(result, null, 2);
             return;
         }
 
@@ -224,7 +235,8 @@ async function runSimulation() {
         plotChart(result.profile);
 
     } catch (err) {
-        document.getElementById("result").innerText = "ERROR: " + err.message;
+        document.getElementById("result").innerText =
+            "❌ NETWORK ERROR:\n" + err.message;
     }
 }
 
