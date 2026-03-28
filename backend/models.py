@@ -32,11 +32,19 @@ class SurveyPoint(BaseModel):
     inc: float
     azi: float
 
+class WellSection(BaseModel):
+    type: str
+    top_md: float
+    end_md: float
+    casing_id: float
+    hole_d: float
+
 class Cuttings(BaseModel):
     rop: float
     size: float
     density: float
     rpm: float
+    concentration: Optional[float] = None
 
 class SimulationInput(BaseModel):
     flowrate: float
@@ -55,4 +63,5 @@ class SimulationInput(BaseModel):
     fluid_sections: List[FluidSection] = []
 
     trajectory: List[SurveyPoint]
+    well_sections: List[WellSection]
     cuttings: Cuttings

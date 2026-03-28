@@ -1,14 +1,17 @@
 import math
 
+# Import your custom modules
+from trajectory import build_trajectory
+from rheology import hb_fit
+from temperature import temp_transient
+
 # -----------------------------
 # GEOMETRY
 # -----------------------------
 def annular_area(Do_in, Di_in):
-    """Returns area in square inches."""
     return max((math.pi / 4) * (Do_in**2 - Di_in**2), 0.1)
 
 def hydraulic_diameter(Do_in, Di_in):
-    """Returns hydraulic diameter (dh) in inches."""
     return max(Do_in - Di_in, 0.1)
 
 # -----------------------------
@@ -27,7 +30,7 @@ def get_pipe_od(profile, md):
     for p in profile:
         if p["top"] <= md <= p["bottom"]:
             return p["od"]
-    return 5.0  # Fallback to standard Drill Pipe OD
+    return 5.0  
 
 def get_annulus_id(sections, md):
     for sec in sections:
@@ -37,45 +40,39 @@ def get_annulus_id(sections, md):
     return sections[-1].hole_d
 
 # -----------------------------
-# RHEOLOGY (Herschel-Bulkley)
+# TVD INTERPOLATION
 # -----------------------------
-def fit_hb(f600, f300, f3):
-    tau_y = f3 
-    # n = log(tau1/tau2) / log(gamma1/gamma2)
-    n = math.log10((f600 - tau_y) / (f300 - tau_y)) / math.log10(600 / 300)
-    K = (f300 - tau_y) / (511**n)
-    return tau_y, K, n
+def get_tvd(trajectory_profile, md):
+    if not trajectory_profile:
+        return md
+    
+    # Interpolate TVD between survey points
+    for i in range(len(trajectory_profile) - 1):
+        p1 = trajectory_profile[i]
+        p2 = trajectory_profile[i+1]
+        if p1["md"] <= md <= p2["md"]:
+            if p2["md"] == p1["md"]:
+                return p1["tvd"]
+            ratio = (md - p1["md"]) / (p2["md"] - p1["md"])
+            return p1["tvd"] + ratio * (p2["tvd"] - p1["tvd"])
+            
+    # Fallback if MD is past the last survey point
+    return trajectory_profile[-1]["tvd"] if md >= trajectory_profile[-1]["md"] else md
 
 # -----------------------------
 # REFINED PRESSURE LOSS MODEL
 # -----------------------------
 def calculate_annular_pressure_loss(mw, flowrate, Do, Di, mu_cp, length):
-    """
-    Calculates annular pressure loss in psi.
-    mw: ppg, flowrate: gpm, Do/Di: inches, length: feet
-    """
     dh = Do - Di
-    # Annular Velocity in ft/min
     v = (24.48 * flowrate) / (Do**2 - Di**2)
-    
-    # Reynolds Number (Generalised for non-Newtonian fluids)
     reynolds = (15.47 * mw * v * dh) / mu_cp
     
-    # Friction Factor (f)
     if reynolds < 2100:
-        f = 64 / reynolds # Laminar
+        f = 64 / reynolds 
     else:
-        f = 0.3164 / (reynolds**0.25) # Turbulent (Blasius)
+        f = 0.3164 / (reynolds**0.25) 
     
-    # Pressure loss (psi) using dP = (f * L * rho * v^2) / (25.6 * dh)
-    # Note: v converted from ft/min to ft/sec for the standard Darcy-Weisbach form
-    v_sec = v / 60
-    dp = (f * length * mw * (v_sec**2)) / (25.6 * (dh / 12)) 
-    
-    # Convert result to psi based on standard field units
-    # Simplified field version of the above:
     dp_field = (f * length * mw * v**2) / (92000 * dh)
-    
     return max(dp_field, 0)
 
 # -----------------------------
@@ -86,15 +83,23 @@ def run_simulation(data):
         Q = float(data.flowrate or 400)
         total_depth = max(float(data.depth or 10000), 100)
         mw = float(data.fluid.mw or 10)
+        sbp = float(data.sbp or 0.0) 
         precision_const = 0.051948
 
-        tau_y, K, n = fit_hb(data.fluid.fann_600, data.fluid.fann_300, data.fluid.fann_3)
+        # 1. Use external rheology.py for HB Fit
+        fann_readings = [
+            data.fluid.fann_600, data.fluid.fann_300, data.fluid.fann_200, 
+            data.fluid.fann_100, data.fluid.fann_6, data.fluid.fann_3
+        ]
+        tau_y, K, n = hb_fit(fann_readings)
+        
+        # 2. Build trajectory using trajectory.py
+        traj_profile = build_trajectory(data.trajectory)
         bha_profile = build_bha_profile(data.bha, total_depth)
 
         depths, ecd_profile, esd_profile = [], [], []
         cumulative_annular_loss = 0
         
-        # Determine calculation resolution
         step = max(int(total_depth / 100), 50)
         md_points = list(range(step, int(total_depth) + step, step))
 
@@ -105,27 +110,31 @@ def run_simulation(data):
             Di = get_pipe_od(bha_profile, md)
             dh = hydraulic_diameter(Do, Di)
             
-            # 1. Calculate Shear Rate (gamma) and Apparent Viscosity (mu_cp)
             v_ftmin = (24.48 * Q) / (Do**2 - Di**2)
             gamma = (1.6 * v_ftmin) / dh 
             mu_cp = ((tau_y + K * (gamma**n)) / gamma) * 478.8 if gamma > 0.1 else 100
             
-            # 2. Calculate dP for this specific segment length
             dp = calculate_annular_pressure_loss(mw, Q, Do, Di, mu_cp, step)
             cumulative_annular_loss += dp
 
-            # 3. ECD = MW + (Sum of dP / (Constant * TVD))
-            ecd_base = mw + (cumulative_annular_loss / (precision_const * md))
+            # 3. Interpolate EXACT TVD for this step
+            tvd = get_tvd(traj_profile, md)
+            if tvd <= 0.1: 
+                tvd = 0.1 # Prevent Division by Zero at surface
 
-            # 4. Temperature Correction (ESD and ECD)
+            # 4. ECD/ESD = MW + ((Sum of dP + SBP) / (Constant * TVD))
+            ecd_base = mw + ((cumulative_annular_loss + sbp) / (precision_const * tvd))
+            esd_base = mw + (sbp / (precision_const * tvd))
+
+            # 5. Use temperature.py for transient temp correction
             Tsurf = data.temperature.surface_temp
             Tbh = data.temperature.bhct
-            T_current = Tsurf + (Tbh - Tsurf) * (md / total_depth)
-            temp_factor = 1 - 0.0003 * (T_current - Tsurf)
+            T_current = temp_transient(md, Tsurf, Tbh, total_depth)
+            temp_factor = 1 - data.temperature.beta * (T_current - Tsurf)
 
             depths.append(md)
             ecd_profile.append(round(ecd_base * temp_factor, 3))
-            esd_profile.append(round(mw * temp_factor, 3))
+            esd_profile.append(round(esd_base * temp_factor, 3))
 
         return {
             "summary": {
