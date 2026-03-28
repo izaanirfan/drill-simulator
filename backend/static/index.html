@@ -7,6 +7,7 @@
     <style>
         .tab { display: none; }
         .active { display: block; }
+        input:disabled { background-color: #ddd; }
     </style>
 </head>
 
@@ -14,7 +15,6 @@
 
 <h1>Drilling Hydraulics Simulator</h1>
 
-<!-- TABS -->
 <button onclick="showTab('simulation')">Simulation</button>
 <button onclick="showTab('well')">Well Design</button>
 <button onclick="showTab('bha')">BHA</button>
@@ -41,31 +41,71 @@ Depth: <input id="depth" value="10000"><br><br>
 
 <table id="wellTable" border="1">
 <tr>
-<th>Type</th><th>Top MD</th><th>End MD</th><th>Casing ID</th><th>Hole Size</th>
+<th>Type</th>
+<th>Name</th>
+<th>Top MD</th>
+<th>Bottom MD</th>
+<th>OD</th>
+<th>ID</th>
 </tr>
 
+<!-- ROW 1 -->
 <tr>
 <td>
-<select>
-<option>casing</option>
-<option>liner</option>
-<option selected>open hole</option>
+<select onchange="toggleOD(this)">
+<option value="casing">Casing</option>
+<option value="liner">Liner</option>
+<option value="open hole">Open Hole</option>
 </select>
 </td>
-<td><input value="0"></td>
-<td><input value="10000"></td>
-<td><input value="0"></td>
+<td contenteditable>13-3/8" Casing</td>
+<td contenteditable>0</td>
+<td contenteditable>3000</td>
+<td><input value="17.5"></td>
+<td><input value="12.347"></td>
+</tr>
+
+<!-- ROW 2 -->
+<tr>
+<td>
+<select onchange="toggleOD(this)">
+<option value="casing">Casing</option>
+<option value="liner" selected>Liner</option>
+<option value="open hole">Open Hole</option>
+</select>
+</td>
+<td contenteditable>9-5/8" Liner</td>
+<td contenteditable>2700</td>
+<td contenteditable>7000</td>
+<td><input value="12.25"></td>
+<td><input value="8.535"></td>
+</tr>
+
+<!-- ROW 3 -->
+<tr>
+<td>
+<select onchange="toggleOD(this)">
+<option value="casing">Casing</option>
+<option value="liner">Liner</option>
+<option value="open hole" selected>Open Hole</option>
+</select>
+</td>
+<td contenteditable>8-1/2" OH</td>
+<td contenteditable>7000</td>
+<td contenteditable>10000</td>
+<td><input disabled></td>
 <td><input value="8.5"></td>
 </tr>
 
 </table>
 
+<br>
+<button onclick="addWellRow()">Add Row</button>
+
 </div>
 
 <!-- ================= BHA ================= -->
 <div id="bha" class="tab">
-
-<h3>BHA (Top → Bottom)</h3>
 
 <table id="bhaTable" border="1">
 <tr><th>Name</th><th>OD</th><th>ID</th><th>Length</th></tr>
@@ -91,7 +131,7 @@ Depth: <input id="depth" value="10000"><br><br>
 <!-- ================= MUD ================= -->
 <div id="mud" class="tab">
 
-MW: <input id="mw" value="10"><br><br>
+MW <input id="mw" value="10"><br><br>
 
 600 <input id="f600" value="60">
 300 <input id="f300" value="40">
@@ -105,8 +145,8 @@ MW: <input id="mw" value="10"><br><br>
 <!-- ================= TEMP ================= -->
 <div id="temp" class="tab">
 
-Surface Temp: <input id="surface_temp" value="80"><br><br>
-BHCT: <input id="bhct" value="150"><br><br>
+Surface Temp <input id="surface_temp" value="80"><br><br>
+BHCT <input id="bhct" value="150">
 
 </div>
 
@@ -119,8 +159,51 @@ function showTab(tab) {
     document.getElementById(tab).classList.add("active");
 }
 
-// ================= BUILD PAYLOAD =================
-function buildPayload() {
+// -----------------------------
+// ENABLE/DISABLE OD
+// -----------------------------
+function toggleOD(select){
+
+    const row = select.parentElement.parentElement;
+    const odInput = row.cells[4].querySelector("input");
+
+    if(select.value === "open hole"){
+        odInput.disabled = true;
+        odInput.value = "";
+    } else {
+        odInput.disabled = false;
+    }
+}
+
+// -----------------------------
+// ADD ROW
+// -----------------------------
+function addWellRow(){
+
+    const table = document.getElementById("wellTable");
+
+    const row = table.insertRow();
+
+    row.innerHTML = `
+<td>
+<select onchange="toggleOD(this)">
+<option value="casing">Casing</option>
+<option value="liner">Liner</option>
+<option value="open hole">Open Hole</option>
+</select>
+</td>
+<td contenteditable>New Section</td>
+<td contenteditable></td>
+<td contenteditable></td>
+<td><input></td>
+<td><input></td>
+`;
+}
+
+// -----------------------------
+// BUILD PAYLOAD
+// -----------------------------
+function buildPayload(){
 
     let well_sections = [];
     let rows = document.getElementById("wellTable").rows;
@@ -128,12 +211,15 @@ function buildPayload() {
     for (let i = 1; i < rows.length; i++) {
         let c = rows[i].cells;
 
+        let type = c[0].children[0].value;
+
         well_sections.push({
-            type: c[0].children[0].value,
-            top_md: Number(c[1].children[0].value),
-            end_md: Number(c[2].children[0].value),
-            casing_id: Number(c[3].children[0].value),
-            hole_d: Number(c[4].children[0].value)
+            type: type,
+            top_md: Number(c[2].innerText),
+            end_md: Number(c[3].innerText),
+
+            casing_id: Number(c[5].querySelector("input").value),
+            hole_d: type === "open hole" ? Number(c[5].querySelector("input").value) : Number(c[4].querySelector("input").value)
         });
     }
 
@@ -155,7 +241,6 @@ function buildPayload() {
         flowrate: Number(document.getElementById("flowrate").value),
         depth: Number(document.getElementById("depth").value),
 
-        // REQUIRED FIELDS
         mpd_mode: "SBP",
         gradient_mode: "static",
 
@@ -183,7 +268,6 @@ function buildPayload() {
         well_sections: well_sections,
         bha: bha,
 
-        // REQUIRED
         cuttings: {
             rop: 50,
             concentration: 0.05,
@@ -194,108 +278,53 @@ function buildPayload() {
     };
 }
 
-// ================= RUN =================
-async function runSimulation() {
+// -----------------------------
+// RUN
+// -----------------------------
+async function runSimulation(){
 
     document.getElementById("result").innerText = "Running...";
 
     const payload = buildPayload();
 
-    try {
+    const response = await fetch("/simulate", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(payload)
+    });
 
-        const response = await fetch("/simulate", {
-            method: "POST",
-            headers: {"Content-Type": "application/json"},
-            body: JSON.stringify(payload)
-        });
+    const result = await response.json();
 
-        const text = await response.text();  // 🔥 get raw text first
+    document.getElementById("result").innerText =
+        "ECD Bottom: " + result.summary.ecd_bottom;
 
-        let result;
-
-        try {
-            result = JSON.parse(text);  // try parse
-        } catch (e) {
-            document.getElementById("result").innerText =
-                "❌ Backend Error (Not JSON):\n\n" + text;
-            return;
-        }
-
-        if (!response.ok) {
-            document.getElementById("result").innerText =
-                "❌ ERROR " + response.status + ":\n" +
-                JSON.stringify(result, null, 2);
-            return;
-        }
-
-        document.getElementById("result").innerText =
-            "ECD Bottom: " + result.summary.ecd_bottom + "\n" +
-            "ESD Bottom: " + result.summary.esd_bottom;
-
-        plotChart(result.profile);
-
-    } catch (err) {
-        document.getElementById("result").innerText =
-            "❌ NETWORK ERROR:\n" + err.message;
-    }
+    plotChart(result.profile);
 }
 
-// ================= CHART =================
-function plotChart(profile) {
+// -----------------------------
+// CHART
+// -----------------------------
+function plotChart(profile){
 
     const ctx = document.getElementById("chart");
 
-    if (chartInstance && typeof chartInstance.destroy === "function") {
-        chartInstance.destroy();
-    }
+    if(chartInstance) chartInstance.destroy();
 
-    // 🔥 Convert to (x,y) pairs
-    const ecdData = profile.depth.map((d, i) => ({
-        x: profile.ecd[i],
-        y: d
-    }));
+    const ecdData = profile.depth.map((d,i)=>({x:profile.ecd[i], y:d}));
+    const esdData = profile.depth.map((d,i)=>({x:profile.esd[i], y:d}));
 
-    const esdData = profile.depth.map((d, i) => ({
-        x: profile.esd[i],
-        y: d
-    }));
-
-    chartInstance = new Chart(ctx, {
-        type: "scatter",
-        data: {
-            datasets: [
-                {
-                    label: "ECD (ppg)",
-                    data: ecdData,
-                    showLine: true
-                },
-                {
-                    label: "ESD (ppg)",
-                    data: esdData,
-                    showLine: true
-                }
+    chartInstance = new Chart(ctx,{
+        type:"scatter",
+        data:{
+            datasets:[
+                {label:"ECD (ppg)", data:ecdData, showLine:true},
+                {label:"ESD (ppg)", data:esdData, showLine:true}
             ]
         },
-        options: {
-            responsive: true,
-            scales: {
-
-                // 🔥 X AXIS = DENSITY
-                x: {
-                    title: {
-                        display: true,
-                        text: "Density (ppg)"
-                    }
-                },
-
-                // 🔥 Y AXIS = DEPTH (REVERSED)
-                y: {
-                    reverse: true,
-                    title: {
-                        display: true,
-                        text: "Depth (ft)"
-                    }
-                }
+        options:{
+            scales:{
+                x:{title:{display:true,text:"Density (ppg)"}},
+                y:{reverse:true,title:{display:true,text:"Depth (ft)"}}
             }
         }
     });
