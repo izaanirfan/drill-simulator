@@ -3,33 +3,52 @@
 <head>
     <title>Drilling Hydraulics Simulator</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        .tab { display: none; }
+        .active { display: block; }
+        button { margin: 5px; }
+    </style>
 </head>
 
 <body>
 
 <h1>Drilling Hydraulics Simulator</h1>
 
-<button onclick="showTab('quick')">Quick</button>
-<button onclick="showTab('advanced')">Advanced</button>
+<!-- ================= TAB BUTTONS ================= -->
+<button onclick="showTab('simulation')">Simulation</button>
+<button onclick="showTab('well')">Well Design</button>
+<button onclick="showTab('bha')">BHA</button>
+<button onclick="showTab('mud')">Mud</button>
+<button onclick="showTab('temp')">Temperature</button>
 
-<!-- ================= QUICK TAB ================= -->
-<div id="quickTab">
-    <h3>Quick Run</h3>
+<!-- ================= SIMULATION TAB ================= -->
+<div id="simulation" class="tab active">
 
-    Flowrate: <input id="flowrate" value="400"><br><br>
-    Depth: <input id="depth" value="10000"><br><br>
+<h3>Simulation</h3>
 
-    <button onclick="runSimulation()">Run Simulation</button>
+Flowrate: <input id="flowrate" value="400"><br><br>
+Depth: <input id="depth" value="10000"><br><br>
+
+<button onclick="runSimulation()">Run Simulation</button>
+
+<h3>Results</h3>
+<pre id="result">Waiting...</pre>
+
+<canvas id="chart"></canvas>
+
 </div>
 
-<!-- ================= ADVANCED TAB ================= -->
-<div id="advancedTab" style="display:none">
+<!-- ================= WELL DESIGN ================= -->
+<div id="well" class="tab">
 
-<h3>Well Design</h3>
+<h3>Well Design (Top → Bottom)</h3>
+
 <table id="wellTable" border="1">
 <tr>
 <th>Type</th><th>Top MD</th><th>End MD</th><th>Casing ID</th><th>Hole Size</th>
 </tr>
+
 <tr>
 <td>
 <select>
@@ -43,83 +62,105 @@
 <td><input value="0"></td>
 <td><input value="8.5"></td>
 </tr>
+
 </table>
 
-<h3>BHA</h3>
+</div>
+
+<!-- ================= BHA ================= -->
+<div id="bha" class="tab">
+
+<h3>BHA (Top → Bottom)</h3>
+
 <table id="bhaTable" border="1">
 <tr><th>Name</th><th>OD</th><th>ID</th><th>Length</th></tr>
+
 <tr>
 <td>Drill Pipe</td>
 <td><input value="5"></td>
 <td><input value="4"></td>
 <td><input value="8000"></td>
 </tr>
+
 <tr>
 <td>Drill Collar</td>
 <td><input value="6.5"></td>
 <td><input value="2.5"></td>
 <td><input value="2000"></td>
 </tr>
+
 </table>
-
-<h3>Mud</h3>
-MW: <input id="mw" value="10"><br>
-600: <input id="f600" value="60">
-300: <input id="f300" value="40">
-3: <input id="f3" value="5"><br><br>
-
-<h3>Temperature</h3>
-Surface: <input id="surface_temp" value="80">
-BHCT: <input id="bhct" value="150"><br><br>
 
 </div>
 
-<!-- ================= RESULT ================= -->
-<h3>Results</h3>
-<pre id="result">Waiting...</pre>
+<!-- ================= MUD ================= -->
+<div id="mud" class="tab">
 
-<canvas id="chart"></canvas>
+<h3>Mud Properties</h3>
+
+MW: <input id="mw" value="10"><br><br>
+
+Fann:
+600 <input id="f600" value="60">
+300 <input id="f300" value="40">
+200 <input id="f200" value="30">
+100 <input id="f100" value="20">
+6 <input id="f6" value="10">
+3 <input id="f3" value="5">
+
+</div>
+
+<!-- ================= TEMP ================= -->
+<div id="temp" class="tab">
+
+<h3>Temperature</h3>
+
+Surface Temp: <input id="surface_temp" value="80"><br><br>
+BHCT: <input id="bhct" value="150"><br><br>
+Gradient: <input id="grad" value="1.5">
+
+</div>
 
 <script>
 
 let chartInstance = null;
 
 function showTab(tab) {
-    document.getElementById("quickTab").style.display = tab === "quick" ? "block" : "none";
-    document.getElementById("advancedTab").style.display = tab === "advanced" ? "block" : "none";
+    document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+    document.getElementById(tab).classList.add("active");
 }
 
 // ================= BUILD PAYLOAD =================
 function buildPayload() {
 
-    // WELL SECTIONS
-    const wellRows = document.getElementById("wellTable").rows;
+    // WELL
     let well_sections = [];
+    let rows = document.getElementById("wellTable").rows;
 
-    for (let i = 1; i < wellRows.length; i++) {
-        let cells = wellRows[i].cells;
+    for (let i = 1; i < rows.length; i++) {
+        let c = rows[i].cells;
 
         well_sections.push({
-            type: cells[0].children[0].value,
-            top_md: Number(cells[1].children[0].value),
-            end_md: Number(cells[2].children[0].value),
-            casing_id: Number(cells[3].children[0].value),
-            hole_d: Number(cells[4].children[0].value)
+            type: c[0].children[0].value,
+            top_md: Number(c[1].children[0].value),
+            end_md: Number(c[2].children[0].value),
+            casing_id: Number(c[3].children[0].value),
+            hole_d: Number(c[4].children[0].value)
         });
     }
 
     // BHA
-    const bhaRows = document.getElementById("bhaTable").rows;
     let bha = [];
+    let bhaRows = document.getElementById("bhaTable").rows;
 
     for (let i = 1; i < bhaRows.length; i++) {
-        let cells = bhaRows[i].cells;
+        let c = bhaRows[i].cells;
 
         bha.push({
-            name: cells[0].innerText,
-            od: Number(cells[1].children[0].value),
-            id: Number(cells[2].children[0].value),
-            length: Number(cells[3].children[0].value)
+            name: c[0].innerText,
+            od: Number(c[1].children[0].value),
+            id: Number(c[2].children[0].value),
+            length: Number(c[3].children[0].value)
         });
     }
 
@@ -131,16 +172,16 @@ function buildPayload() {
             mw: Number(document.getElementById("mw").value),
             fann_600: Number(document.getElementById("f600").value),
             fann_300: Number(document.getElementById("f300").value),
-            fann_200: 30,
-            fann_100: 20,
-            fann_6: 10,
+            fann_200: Number(document.getElementById("f200").value),
+            fann_100: Number(document.getElementById("f100").value),
+            fann_6: Number(document.getElementById("f6").value),
             fann_3: Number(document.getElementById("f3").value)
         },
 
         temperature: {
             surface_temp: Number(document.getElementById("surface_temp").value),
             bhct: Number(document.getElementById("bhct").value),
-            geothermal_grad: 1.5
+            geothermal_grad: Number(document.getElementById("grad").value)
         },
 
         trajectory: [
@@ -178,7 +219,8 @@ async function runSimulation() {
 
         document.getElementById("result").innerText =
             "ECD Bottom: " + result.summary.ecd_bottom + "\n" +
-            "ESD Bottom: " + result.summary.esd_bottom;
+            "ESD Bottom: " + result.summary.esd_bottom + "\n" +
+            "Pressure Loss: " + result.summary.total_pressure_loss;
 
         plotChart(result.profile);
 
@@ -207,7 +249,7 @@ function plotChart(profile) {
         },
         options: {
             scales: {
-                y: {reverse: true}
+                y: { reverse: true }
             }
         }
     });
