@@ -11,65 +11,86 @@
 
 <!-- TABS -->
 <button onclick="showTab('run')">Run</button>
-<button onclick="showTab('advanced')">Advanced</button>
+<button onclick="showTab('mud')">Mud</button>
+<button onclick="showTab('well')">Well Design</button>
+<button onclick="showTab('bha')">BHA</button>
 
 <hr>
 
-<!-- RUN TAB -->
+<!-- RUN -->
 <div id="run" class="tab">
-    <h3>Quick Run</h3>
-
     Flowrate: <input id="flowrate" value="400"><br><br>
     Depth: <input id="depth" value="10000"><br><br>
-
     <button onclick="runSimulation()">Run Simulation</button>
 </div>
 
-<!-- ADVANCED TAB -->
-<div id="advanced" class="tab" style="display:none">
+<!-- MUD -->
+<div id="mud" class="tab" style="display:none">
+    <h3>Mud Properties</h3>
 
-<h3>Advanced Inputs</h3>
+    MW: <input id="mw" value="10"><br><br>
 
-Trajectory:
+    600: <input id="f600" value="60"><br>
+    300: <input id="f300" value="40"><br>
+    200: <input id="f200" value="30"><br>
+    100: <input id="f100" value="20"><br>
+    6: <input id="f6" value="10"><br>
+    3: <input id="f3" value="5"><br>
+</div>
+
+<!-- WELL DESIGN TABLE -->
+<div id="well" class="tab" style="display:none">
+
+<h3>Well Design</h3>
+
+<table border="1" id="wellTable">
+<tr>
+<th>Type</th>
+<th>Top MD</th>
+<th>Bottom MD</th>
+<th>Hole Size (in)</th>
+<th>Pipe OD (in)</th>
+</tr>
+
+<tr>
+<td>Open Hole</td>
+<td>0</td>
+<td>10000</td>
+<td>8.5</td>
+<td>5</td>
+</tr>
+
+</table>
+
 <br>
-<textarea id="trajectory" rows="5" cols="60">
-[
-  {"md":0,"inc":0,"azi":0,"tvd":0},
-  {"md":10000,"inc":0,"azi":0,"tvd":10000}
-]
-</textarea>
+<button onclick="addWellRow()">Add Row</button>
 
-<br><br>
+</div>
 
-Well Sections:
+<!-- BHA TABLE -->
+<div id="bha" class="tab" style="display:none">
+
+<h3>BHA</h3>
+
+<table border="1" id="bhaTable">
+<tr>
+<th>Name</th>
+<th>OD</th>
+<th>ID</th>
+<th>Length</th>
+</tr>
+
+<tr>
+<td>Drill Pipe</td>
+<td>5</td>
+<td>4</td>
+<td>10000</td>
+</tr>
+
+</table>
+
 <br>
-<textarea id="well" rows="5" cols="60">
-[
-  {"end_md":5000,"hole_d":12.25,"pipe_od":5},
-  {"end_md":10000,"hole_d":8.5,"pipe_od":5}
-]
-</textarea>
-
-<br><br>
-
-BHA:
-<br>
-<textarea id="bha" rows="5" cols="60">
-[
-  {"name":"Drill Pipe","od":5,"id":4,"length":10000}
-]
-</textarea>
-
-<br><br>
-
-Fluid MW: <input id="mw" value="10"><br><br>
-
-Fann 600: <input id="f600" value="60"><br>
-Fann 300: <input id="f300" value="40"><br>
-Fann 200: <input id="f200" value="30"><br>
-Fann 100: <input id="f100" value="20"><br>
-Fann 6: <input id="f6" value="10"><br>
-Fann 3: <input id="f3" value="5"><br>
+<button onclick="addBHARow()">Add Row</button>
 
 </div>
 
@@ -78,7 +99,7 @@ Fann 3: <input id="f3" value="5"><br>
 <h2>Results</h2>
 <pre id="result">Waiting...</pre>
 
-<canvas id="chart" width="600" height="400"></canvas>
+<canvas id="chart"></canvas>
 
 <script>
 
@@ -87,6 +108,68 @@ function showTab(tab) {
     document.getElementById(tab).style.display = 'block';
 }
 
+// -----------------------------
+// ADD ROW FUNCTIONS
+// -----------------------------
+function addWellRow() {
+    let table = document.getElementById("wellTable");
+    let row = table.insertRow();
+
+    for (let i = 0; i < 5; i++) {
+        row.insertCell().contentEditable = true;
+    }
+}
+
+function addBHARow() {
+    let table = document.getElementById("bhaTable");
+    let row = table.insertRow();
+
+    for (let i = 0; i < 4; i++) {
+        row.insertCell().contentEditable = true;
+    }
+}
+
+// -----------------------------
+// EXTRACT TABLE DATA
+// -----------------------------
+function getWellData() {
+    let table = document.getElementById("wellTable");
+    let data = [];
+
+    for (let i = 1; i < table.rows.length; i++) {
+        let row = table.rows[i];
+
+        data.push({
+            end_md: Number(row.cells[2].innerText),
+            hole_d: Number(row.cells[3].innerText),
+            pipe_od: Number(row.cells[4].innerText)
+        });
+    }
+
+    return data;
+}
+
+function getBHAData() {
+    let table = document.getElementById("bhaTable");
+    let data = [];
+
+    for (let i = 1; i < table.rows.length; i++) {
+        let row = table.rows[i];
+
+        data.push({
+            name: row.cells[0].innerText,
+            od: Number(row.cells[1].innerText),
+            id: Number(row.cells[2].innerText),
+            length: Number(row.cells[3].innerText)
+        });
+    }
+
+    return data;
+}
+
+// -----------------------------
+// RUN SIMULATION
+// -----------------------------
 async function runSimulation() {
 
     document.getElementById("result").innerText = "Running...";
@@ -97,9 +180,13 @@ async function runSimulation() {
         mpd_mode: "SBP",
         gradient_mode: "static",
 
-        trajectory: JSON.parse(document.getElementById("trajectory").value),
-        well_sections: JSON.parse(document.getElementById("well").value),
-        bha: JSON.parse(document.getElementById("bha").value),
+        trajectory: [
+            {md:0, inc:0, azi:0, tvd:0},
+            {md:Number(document.getElementById("depth").value), inc:0, azi:0, tvd:Number(document.getElementById("depth").value)}
+        ],
+
+        well_sections: getWellData(),
+        bha: getBHAData(),
 
         fluid: {
             mw: Number(document.getElementById("mw").value),
@@ -133,23 +220,12 @@ async function runSimulation() {
             body: JSON.stringify(payload)
         });
 
-        if (!res.ok) {
-            const text = await res.text();
-            document.getElementById("result").innerText =
-                "STATUS: " + res.status + "\n" + text;
-            return;
-        }
-
         const data = await res.json();
 
-        console.log("API Response:", data);
-
-        // DISPLAY RESULTS
         document.getElementById("result").innerText =
             "ECD Bottom: " + data.summary.ecd_bottom + "\n" +
             "ESD Bottom: " + data.summary.esd_bottom;
 
-        // PLOT
         plotChart(data.profile.depth, data.profile.ecd, data.profile.esd);
 
     } catch (err) {
@@ -157,17 +233,17 @@ async function runSimulation() {
     }
 }
 
+// -----------------------------
+// PLOT
+// -----------------------------
 function plotChart(depth, ecd, esd) {
 
-    const canvas = document.getElementById('chart');
-    const ctx = canvas.getContext('2d');
+    const ctx = document.getElementById('chart').getContext('2d');
 
-    // SAFE DESTROY
     if (window.chart && typeof window.chart.destroy === "function") {
         window.chart.destroy();
     }
 
-    // Convert to (x,y)
     const ecdData = depth.map((d, i) => ({ x: ecd[i], y: d }));
     const esdData = depth.map((d, i) => ({ x: esd[i], y: d }));
 
@@ -175,36 +251,14 @@ function plotChart(depth, ecd, esd) {
         type: 'scatter',
         data: {
             datasets: [
-                {
-                    label: 'ECD',
-                    data: ecdData,
-                    showLine: true,
-                    borderWidth: 2
-                },
-                {
-                    label: 'ESD',
-                    data: esdData,
-                    showLine: true,
-                    borderWidth: 2
-                }
+                { label: 'ECD', data: ecdData, showLine: true },
+                { label: 'ESD', data: esdData, showLine: true }
             ]
         },
         options: {
-            responsive: true,
             scales: {
-                x: {
-                    title: {
-                        display: true,
-                        text: "Density (ppg)"
-                    }
-                },
-                y: {
-                    reverse: true,  // 🔥 Depth increases downward
-                    title: {
-                        display: true,
-                        text: "Depth"
-                    }
-                }
+                x: { title: { display: true, text: "Density (ppg)" }},
+                y: { reverse: true, title: { display: true, text: "Depth" }}
             }
         }
     });
