@@ -7,7 +7,6 @@
     <style>
         .tab { display: none; }
         .active { display: block; }
-        button { margin: 5px; }
     </style>
 </head>
 
@@ -15,34 +14,29 @@
 
 <h1>Drilling Hydraulics Simulator</h1>
 
-<!-- ================= TAB BUTTONS ================= -->
 <button onclick="showTab('simulation')">Simulation</button>
 <button onclick="showTab('well')">Well Design</button>
 <button onclick="showTab('bha')">BHA</button>
 <button onclick="showTab('mud')">Mud</button>
 <button onclick="showTab('temp')">Temperature</button>
 
-<!-- ================= SIMULATION TAB ================= -->
+<!-- ================= SIMULATION ================= -->
 <div id="simulation" class="tab active">
-
-<h3>Simulation</h3>
 
 Flowrate: <input id="flowrate" value="400"><br><br>
 Depth: <input id="depth" value="10000"><br><br>
 
 <button onclick="runSimulation()">Run Simulation</button>
 
-<h3>Results</h3>
 <pre id="result">Waiting...</pre>
-
 <canvas id="chart"></canvas>
 
 </div>
 
-<!-- ================= WELL DESIGN ================= -->
+<!-- ================= WELL ================= -->
 <div id="well" class="tab">
 
-<h3>Well Design (Top → Bottom)</h3>
+<h3>Well Design</h3>
 
 <table id="wellTable" border="1">
 <tr>
@@ -70,7 +64,7 @@ Depth: <input id="depth" value="10000"><br><br>
 <!-- ================= BHA ================= -->
 <div id="bha" class="tab">
 
-<h3>BHA (Top → Bottom)</h3>
+<h3>BHA</h3>
 
 <table id="bhaTable" border="1">
 <tr><th>Name</th><th>OD</th><th>ID</th><th>Length</th></tr>
@@ -96,11 +90,8 @@ Depth: <input id="depth" value="10000"><br><br>
 <!-- ================= MUD ================= -->
 <div id="mud" class="tab">
 
-<h3>Mud Properties</h3>
-
 MW: <input id="mw" value="10"><br><br>
 
-Fann:
 600 <input id="f600" value="60">
 300 <input id="f300" value="40">
 200 <input id="f200" value="30">
@@ -113,11 +104,8 @@ Fann:
 <!-- ================= TEMP ================= -->
 <div id="temp" class="tab">
 
-<h3>Temperature</h3>
-
 Surface Temp: <input id="surface_temp" value="80"><br><br>
 BHCT: <input id="bhct" value="150"><br><br>
-Gradient: <input id="grad" value="1.5">
 
 </div>
 
@@ -133,7 +121,6 @@ function showTab(tab) {
 // ================= BUILD PAYLOAD =================
 function buildPayload() {
 
-    // WELL
     let well_sections = [];
     let rows = document.getElementById("wellTable").rows;
 
@@ -145,11 +132,13 @@ function buildPayload() {
             top_md: Number(c[1].children[0].value),
             end_md: Number(c[2].children[0].value),
             casing_id: Number(c[3].children[0].value),
-            hole_d: Number(c[4].children[0].value)
+            hole_d: Number(c[4].children[0].value),
+
+            // 🔥 REQUIRED FIX
+            pipe_od: 5
         });
     }
 
-    // BHA
     let bha = [];
     let bhaRows = document.getElementById("bhaTable").rows;
 
@@ -168,6 +157,10 @@ function buildPayload() {
         flowrate: Number(document.getElementById("flowrate").value),
         depth: Number(document.getElementById("depth").value),
 
+        // 🔥 REQUIRED
+        mpd_mode: "SBP",
+        gradient_mode: "static",
+
         fluid: {
             mw: Number(document.getElementById("mw").value),
             fann_600: Number(document.getElementById("f600").value),
@@ -181,7 +174,7 @@ function buildPayload() {
         temperature: {
             surface_temp: Number(document.getElementById("surface_temp").value),
             bhct: Number(document.getElementById("bhct").value),
-            geothermal_grad: Number(document.getElementById("grad").value)
+            geothermal_grad: 1.5
         },
 
         trajectory: [
@@ -190,7 +183,16 @@ function buildPayload() {
         ],
 
         well_sections: well_sections,
-        bha: bha
+        bha: bha,
+
+        // 🔥 REQUIRED CUTTINGS BLOCK
+        cuttings: {
+            rop: 50,
+            concentration: 0.05,
+            size: 0.2,
+            density: 2.65,
+            rpm: 120
+        }
     };
 }
 
@@ -219,8 +221,7 @@ async function runSimulation() {
 
         document.getElementById("result").innerText =
             "ECD Bottom: " + result.summary.ecd_bottom + "\n" +
-            "ESD Bottom: " + result.summary.esd_bottom + "\n" +
-            "Pressure Loss: " + result.summary.total_pressure_loss;
+            "ESD Bottom: " + result.summary.esd_bottom;
 
         plotChart(result.profile);
 
