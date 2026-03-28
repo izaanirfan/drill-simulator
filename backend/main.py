@@ -1,34 +1,13 @@
 from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import List
-import uvicorn
-
-from hydraulics import run_simulation  # make sure this matches your file
+from hydraulics import run_simulation
 
 app = FastAPI()
 
-# -------------------------------
-# SERVE FRONTEND (STATIC FILES)
-# -------------------------------
-app.mount("/static", StaticFiles(directory="static"), name="static")
-
-@app.get("/")
-def serve_ui():
-    return FileResponse("static/index.html")
-
-
-# -------------------------------
-# DATA MODELS
-# -------------------------------
-
-class BHAComponent(BaseModel):
-    name: str
-    od: float
-    id: float
-    length: float
-
+# -----------------------------
+# MODELS
+# -----------------------------
 class Fluid(BaseModel):
     mw: float
     fann_600: float
@@ -43,16 +22,24 @@ class Temperature(BaseModel):
     bhct: float
     geothermal_grad: float
 
-class TrajectoryPoint(BaseModel):
+class Trajectory(BaseModel):
     md: float
     inc: float
     azi: float
     tvd: float
 
 class WellSection(BaseModel):
+    type: str
+    top_md: float
     end_md: float
+    casing_id: float
     hole_d: float
-    pipe_od: float
+
+class BHAComponent(BaseModel):
+    name: str
+    od: float
+    id: float
+    length: float
 
 class Cuttings(BaseModel):
     rop: float
@@ -67,41 +54,16 @@ class SimulationInput(BaseModel):
     mpd_mode: str
     gradient_mode: str
 
-    trajectory: List[TrajectoryPoint]
-    well_sections: List[WellSection]
-    bha: List[BHAComponent]
     fluid: Fluid
     temperature: Temperature
+    trajectory: List[Trajectory]
+    well_sections: List[WellSection]
+    bha: List[BHAComponent]
     cuttings: Cuttings
 
-
-# -------------------------------
-# API ENDPOINT
-# -------------------------------
-
+# -----------------------------
+# ROUTE
+# -----------------------------
 @app.post("/simulate")
 def simulate(data: SimulationInput):
-
-    try:
-        result = run_simulation(data)
-        return result
-
-    except Exception as e:
-        return {
-            "error": str(e)
-        }
-
-
-# -------------------------------
-# HEALTH CHECK
-# -------------------------------
-@app.get("/health")
-def health():
-    return {"status": "ok"}
-
-
-# -------------------------------
-# LOCAL RUN (OPTIONAL)
-# -------------------------------
-if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=10000)
+    return run_simulation(data)
