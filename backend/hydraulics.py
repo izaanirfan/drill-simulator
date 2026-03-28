@@ -3,27 +3,25 @@ import math
 # -----------------------------
 # ANNULAR AREA
 # -----------------------------
-def annular_area(hole_d, pipe_od):
-    return math.pi / 4 * ((hole_d / 12)**2 - (pipe_od / 12)**2)
+def annular_area(outer_d, inner_d):
+    return math.pi / 4 * ((outer_d / 12)**2 - (inner_d / 12)**2)
 
 # -----------------------------
 # HYDRAULIC DIAMETER
 # -----------------------------
-def hydraulic_diameter(hole_d, pipe_od):
-    return (hole_d - pipe_od) / 12
+def hydraulic_diameter(outer_d, inner_d):
+    return (outer_d - inner_d) / 12
 
 # -----------------------------
-# BUILD BHA PROFILE (TOP → BOTTOM)
+# BUILD BHA PROFILE
 # -----------------------------
 def build_bha_profile(bha, total_depth):
 
     profile = []
     current_depth = total_depth
 
-    # Build from bottom up
     for comp in reversed(bha):
-        length = comp.length
-        top = current_depth - length
+        top = current_depth - comp.length
 
         profile.append({
             "top": top,
@@ -36,26 +34,50 @@ def build_bha_profile(bha, total_depth):
     return profile
 
 # -----------------------------
-# GET PIPE OD AT DEPTH
+# GET PIPE OD
 # -----------------------------
 def get_pipe_od(bha_profile, md):
-
     for comp in bha_profile:
         if comp["top"] <= md <= comp["bottom"]:
             return comp["od"]
-
-    return bha_profile[0]["od"]  # fallback
+    return bha_profile[0]["od"]
 
 # -----------------------------
-# GET HOLE SIZE
+# GET ANNULUS DIAMETER (NEW LOGIC)
 # -----------------------------
-def get_hole_size(sections, md):
+def get_annulus_diameter(sections, md):
+
+    current_section = None
 
     for sec in sections:
         if sec.top_md <= md <= sec.end_md:
-            return sec.hole_d
+            current_section = sec
+            break
 
-    return sections[-1].hole_d
+    if current_section is None:
+        return sections[-1].hole_d or sections[-1].casing_id
+
+    # OPEN HOLE
+    if current_section.type.lower() == "open hole":
+        return current_section.hole_d
+
+    # CASING
+    if current_section.type.lower() == "casing":
+        return current_section.casing_id
+
+    # LINER
+    if current_section.type.lower() == "liner":
+
+        if md >= current_section.liner_top:
+            return current_section.casing_id
+        else:
+            # find parent casing
+            for sec in sections:
+                if sec.type.lower() == "casing" and sec.top_md <= md <= sec.end_md:
+                    return sec.casing_id
+
+    # fallback
+    return current_section.casing_id or current_section.hole_d
 
 # -----------------------------
 # HB FIT
@@ -110,17 +132,13 @@ def run_simulation(data):
     depth = data.depth
     mw = data.fluid.mw
 
-    f600 = data.fluid.fann_600
-    f300 = data.fluid.fann_300
-    f3 = data.fluid.fann_3
+    tau_y, K, n = fit_hb(
+        data.fluid.fann_600,
+        data.fluid.fann_300,
+        data.fluid.fann_3
+    )
 
-    tau_y, K, n = fit_hb(f600, f300, f3)
-
-    sections = data.well_sections
-    bha = data.bha
-    traj = data.trajectory
-
-    bha_profile = build_bha_profile(bha, depth)
+    bha_profile = build_bha_profile(data.bha, depth)
 
     depths = []
     ecd_profile = []
@@ -128,22 +146,22 @@ def run_simulation(data):
 
     cumulative_dp = 0
 
-    for i in range(1, len(traj)):
+    for i in range(1, len(data.trajectory)):
 
-        md1 = traj[i-1].md
-        md2 = traj[i].md
+        md1 = data.trajectory[i-1].md
+        md2 = data.trajectory[i].md
         length = md2 - md1
 
-        # 🔥 NEW LOGIC
-        hole_d = get_hole_size(sections, md2)
+        # 🔥 NEW CORE LOGIC
+        outer_d = get_annulus_diameter(data.well_sections, md2)
         pipe_od = get_pipe_od(bha_profile, md2)
 
-        area = annular_area(hole_d, pipe_od)
+        area = annular_area(outer_d, pipe_od)
         area = max(area, 0.01)
 
         v = Q / (24.5 * area)
 
-        dh = hydraulic_diameter(hole_d, pipe_od)
+        dh = hydraulic_diameter(outer_d, pipe_od)
         dh = max(dh, 0.01)
 
         dp = pressure_loss(mw, v, dh, tau_y, K, n, length)
@@ -153,11 +171,8 @@ def run_simulation(data):
         ecd = mw + cumulative_dp / (0.051948 * md2)
 
         temp = data.temperature
-        surface_temp = temp.surface_temp
-        bhct = temp.bhct
-
-        temp_local = surface_temp + (bhct - surface_temp) * (md2 / depth)
-        temp_factor = 1 - 0.0003 * (temp_local - surface_temp)
+        temp_local = temp.surface_temp + (temp.bhct - temp.surface_temp) * (md2 / depth)
+        temp_factor = 1 - 0.0003 * (temp_local - temp.surface_temp)
 
         ecd_temp = ecd * temp_factor
         esd = mw * temp_factor
