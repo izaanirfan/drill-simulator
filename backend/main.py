@@ -5,9 +5,6 @@ from hydraulics import run_simulation
 
 app = FastAPI()
 
-# -----------------------------
-# MODELS
-# -----------------------------
 class Fluid(BaseModel):
     mw: float
     fann_600: float
@@ -53,7 +50,6 @@ class SimulationInput(BaseModel):
     depth: float
     mpd_mode: str
     gradient_mode: str
-
     fluid: Fluid
     temperature: Temperature
     trajectory: List[Trajectory]
@@ -61,9 +57,10 @@ class SimulationInput(BaseModel):
     bha: List[BHAComponent]
     cuttings: Cuttings
 
-# -----------------------------
-# ROUTE
-# -----------------------------
+@app.get("/")
+def root():
+    return {"status": "API running"}
+
 @app.post("/simulate")
 def simulate(data: SimulationInput):
     return run_simulation(data)
