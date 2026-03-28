@@ -125,19 +125,16 @@ def apparent_viscosity(tau_y, K, n, gamma):
 def pressure_loss(mw, v, dh, tau_y, K, n, length):
 
     try:
+        # Apparent viscosity (cp)
         gamma = 8 * v / dh
         mu = apparent_viscosity(tau_y, K, n, gamma)
 
-        rho = mw * 7.48
-        Re = (rho * v * dh) / max(mu, 0.01)
-
-        if Re < 2100:
-            dp = (32 * mu * v / (dh**2)) * length * 0.01
-        else:
-            f = 0.079 / (Re ** 0.25)
-            dp = f * (rho * v**2 / (2 * dh)) * length * 0.01
+        # 🔥 FIELD CALIBRATED MODEL
+        # dp (psi) ≈ (0.0001 * MW * v^2 / dh) * length
+        dp = 0.0001 * mw * (v**2) / dh * length
 
         return max(dp, 0)
+
     except:
         return 0
 
@@ -167,7 +164,7 @@ def run_simulation(data):
 
         cumulative_dp = 0
 
-        step = max(int(depth / 50), 50)
+        step = max(int(depth / 100), 50)
 
         md_list = list(range(step, int(depth) + step, step))
 
