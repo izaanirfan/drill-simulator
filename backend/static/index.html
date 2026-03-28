@@ -26,10 +26,8 @@
 
 <!-- MUD -->
 <div id="mud" class="tab" style="display:none">
-    <h3>Mud Properties</h3>
-
+    <h3>Mud</h3>
     MW: <input id="mw" value="10"><br><br>
-
     600: <input id="f600" value="60"><br>
     300: <input id="f300" value="40"><br>
     200: <input id="f200" value="30"><br>
@@ -38,10 +36,10 @@
     3: <input id="f3" value="5"><br>
 </div>
 
-<!-- WELL DESIGN TABLE -->
+<!-- WELL DESIGN -->
 <div id="well" class="tab" style="display:none">
 
-<h3>Well Design</h3>
+<h3>Well Design (Top → Bottom)</h3>
 
 <table border="1" id="wellTable">
 <tr>
@@ -49,15 +47,27 @@
 <th>Top MD</th>
 <th>Bottom MD</th>
 <th>Hole Size (in)</th>
-<th>Pipe OD (in)</th>
 </tr>
 
 <tr>
-<td>Open Hole</td>
-<td>0</td>
-<td>10000</td>
-<td>8.5</td>
-<td>5</td>
+<td contenteditable="true">Casing</td>
+<td contenteditable="true">0</td>
+<td contenteditable="true">2000</td>
+<td contenteditable="true">30</td>
+</tr>
+
+<tr>
+<td contenteditable="true">Casing</td>
+<td contenteditable="true">2000</td>
+<td contenteditable="true">6000</td>
+<td contenteditable="true">20</td>
+</tr>
+
+<tr>
+<td contenteditable="true">Open Hole</td>
+<td contenteditable="true">6000</td>
+<td contenteditable="true">10000</td>
+<td contenteditable="true">8.5</td>
 </tr>
 
 </table>
@@ -67,10 +77,10 @@
 
 </div>
 
-<!-- BHA TABLE -->
+<!-- BHA -->
 <div id="bha" class="tab" style="display:none">
 
-<h3>BHA</h3>
+<h3>BHA (Top → Bottom)</h3>
 
 <table border="1" id="bhaTable">
 <tr>
@@ -81,10 +91,24 @@
 </tr>
 
 <tr>
-<td>Drill Pipe</td>
-<td>5</td>
-<td>4</td>
-<td>10000</td>
+<td contenteditable="true">Drill Pipe</td>
+<td contenteditable="true">5</td>
+<td contenteditable="true">4</td>
+<td contenteditable="true">8000</td>
+</tr>
+
+<tr>
+<td contenteditable="true">HWDP</td>
+<td contenteditable="true">6</td>
+<td contenteditable="true">3</td>
+<td contenteditable="true">1000</td>
+</tr>
+
+<tr>
+<td contenteditable="true">Drill Collar</td>
+<td contenteditable="true">8</td>
+<td contenteditable="true">2.5</td>
+<td contenteditable="true">1000</td>
 </tr>
 
 </table>
@@ -98,7 +122,6 @@
 
 <h2>Results</h2>
 <pre id="result">Waiting...</pre>
-
 <canvas id="chart"></canvas>
 
 <script>
@@ -108,41 +131,31 @@ function showTab(tab) {
     document.getElementById(tab).style.display = 'block';
 }
 
-// -----------------------------
-// ADD ROW FUNCTIONS
-// -----------------------------
 function addWellRow() {
-    let table = document.getElementById("wellTable");
-    let row = table.insertRow();
-
-    for (let i = 0; i < 5; i++) {
-        row.insertCell().contentEditable = true;
-    }
-}
-
-function addBHARow() {
-    let table = document.getElementById("bhaTable");
-    let row = table.insertRow();
-
+    let row = document.getElementById("wellTable").insertRow();
     for (let i = 0; i < 4; i++) {
         row.insertCell().contentEditable = true;
     }
 }
 
-// -----------------------------
-// EXTRACT TABLE DATA
-// -----------------------------
+function addBHARow() {
+    let row = document.getElementById("bhaTable").insertRow();
+    for (let i = 0; i < 4; i++) {
+        row.insertCell().contentEditable = true;
+    }
+}
+
 function getWellData() {
     let table = document.getElementById("wellTable");
     let data = [];
 
     for (let i = 1; i < table.rows.length; i++) {
-        let row = table.rows[i];
+        let r = table.rows[i];
 
         data.push({
-            end_md: Number(row.cells[2].innerText),
-            hole_d: Number(row.cells[3].innerText),
-            pipe_od: Number(row.cells[4].innerText)
+            top_md: Number(r.cells[1].innerText),
+            end_md: Number(r.cells[2].innerText),
+            hole_d: Number(r.cells[3].innerText)
         });
     }
 
@@ -154,35 +167,34 @@ function getBHAData() {
     let data = [];
 
     for (let i = 1; i < table.rows.length; i++) {
-        let row = table.rows[i];
+        let r = table.rows[i];
 
         data.push({
-            name: row.cells[0].innerText,
-            od: Number(row.cells[1].innerText),
-            id: Number(row.cells[2].innerText),
-            length: Number(row.cells[3].innerText)
+            name: r.cells[0].innerText,
+            od: Number(r.cells[1].innerText),
+            id: Number(r.cells[2].innerText),
+            length: Number(r.cells[3].innerText)
         });
     }
 
     return data;
 }
 
-// -----------------------------
-// RUN SIMULATION
-// -----------------------------
 async function runSimulation() {
 
     document.getElementById("result").innerText = "Running...";
 
+    const depth = Number(document.getElementById("depth").value);
+
     const payload = {
         flowrate: Number(document.getElementById("flowrate").value),
-        depth: Number(document.getElementById("depth").value),
+        depth: depth,
         mpd_mode: "SBP",
         gradient_mode: "static",
 
         trajectory: [
             {md:0, inc:0, azi:0, tvd:0},
-            {md:Number(document.getElementById("depth").value), inc:0, azi:0, tvd:Number(document.getElementById("depth").value)}
+            {md:depth, inc:0, azi:0, tvd:depth}
         ],
 
         well_sections: getWellData(),
@@ -223,42 +235,36 @@ async function runSimulation() {
         const data = await res.json();
 
         document.getElementById("result").innerText =
-            "ECD Bottom: " + data.summary.ecd_bottom + "\n" +
-            "ESD Bottom: " + data.summary.esd_bottom;
+            "ECD Bottom: " + data.summary.ecd_bottom;
 
         plotChart(data.profile.depth, data.profile.ecd, data.profile.esd);
 
     } catch (err) {
-        document.getElementById("result").innerText = "ERROR: " + err;
+        document.getElementById("result").innerText = err;
     }
 }
 
-// -----------------------------
-// PLOT
-// -----------------------------
 function plotChart(depth, ecd, esd) {
 
     const ctx = document.getElementById('chart').getContext('2d');
 
-    if (window.chart && typeof window.chart.destroy === "function") {
-        window.chart.destroy();
-    }
+    if (window.chart) window.chart.destroy();
 
-    const ecdData = depth.map((d, i) => ({ x: ecd[i], y: d }));
-    const esdData = depth.map((d, i) => ({ x: esd[i], y: d }));
+    const ecdData = depth.map((d,i)=>({x:ecd[i],y:d}));
+    const esdData = depth.map((d,i)=>({x:esd[i],y:d}));
 
-    window.chart = new Chart(ctx, {
-        type: 'scatter',
-        data: {
-            datasets: [
-                { label: 'ECD', data: ecdData, showLine: true },
-                { label: 'ESD', data: esdData, showLine: true }
+    window.chart = new Chart(ctx,{
+        type:'scatter',
+        data:{
+            datasets:[
+                {label:'ECD',data:ecdData,showLine:true},
+                {label:'ESD',data:esdData,showLine:true}
             ]
         },
-        options: {
-            scales: {
-                x: { title: { display: true, text: "Density (ppg)" }},
-                y: { reverse: true, title: { display: true, text: "Depth" }}
+        options:{
+            scales:{
+                x:{title:{display:true,text:'Density (ppg)'}},
+                y:{reverse:true,title:{display:true,text:'Depth'}}
             }
         }
     });
