@@ -1,10 +1,24 @@
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import List
 from hydraulics import run_simulation
 
 app = FastAPI()
 
+# -----------------------------
+# SERVE STATIC FILES
+# -----------------------------
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+@app.get("/")
+def home():
+    return FileResponse("static/index.html")
+
+# -----------------------------
+# MODELS
+# -----------------------------
 class Fluid(BaseModel):
     mw: float
     fann_600: float
@@ -57,10 +71,9 @@ class SimulationInput(BaseModel):
     bha: List[BHAComponent]
     cuttings: Cuttings
 
-@app.get("/")
-def root():
-    return {"status": "API running"}
-
+# -----------------------------
+# API
+# -----------------------------
 @app.post("/simulate")
 def simulate(data: SimulationInput):
     return run_simulation(data)
