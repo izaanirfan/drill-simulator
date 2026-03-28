@@ -249,18 +249,53 @@ function plotChart(profile) {
         chartInstance.destroy();
     }
 
+    // 🔥 Convert to (x,y) pairs
+    const ecdData = profile.depth.map((d, i) => ({
+        x: profile.ecd[i],
+        y: d
+    }));
+
+    const esdData = profile.depth.map((d, i) => ({
+        x: profile.esd[i],
+        y: d
+    }));
+
     chartInstance = new Chart(ctx, {
-        type: "line",
+        type: "scatter",
         data: {
-            labels: profile.depth,
             datasets: [
-                {label: "ECD", data: profile.ecd},
-                {label: "ESD", data: profile.esd}
+                {
+                    label: "ECD (ppg)",
+                    data: ecdData,
+                    showLine: true
+                },
+                {
+                    label: "ESD (ppg)",
+                    data: esdData,
+                    showLine: true
+                }
             ]
         },
         options: {
+            responsive: true,
             scales: {
-                y: { reverse: true }
+
+                // 🔥 X AXIS = DENSITY
+                x: {
+                    title: {
+                        display: true,
+                        text: "Density (ppg)"
+                    }
+                },
+
+                // 🔥 Y AXIS = DEPTH (REVERSED)
+                y: {
+                    reverse: true,
+                    title: {
+                        display: true,
+                        text: "Depth (ft)"
+                    }
+                }
             }
         }
     });
