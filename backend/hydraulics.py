@@ -1,94 +1,78 @@
 import math
 
 # -----------------------------
-# SAFE AREA
+# CONSTANTS
 # -----------------------------
-def annular_area(outer_d, inner_d):
-    try:
-        return max(math.pi / 4 * ((outer_d/12)**2 - (inner_d/12)**2), 0.01)
-    except:
-        return 0.01
+GC = 32.174  # lbm-ft/lbf-s²
 
+# -----------------------------
+# AREA
+# -----------------------------
+def annular_area(Do, Di):
+    return math.pi / 4 * ((Do/12)**2 - (Di/12)**2)
 
-def hydraulic_diameter(outer_d, inner_d):
-    try:
-        return max((outer_d - inner_d) / 12, 0.01)
-    except:
-        return 0.01
+# -----------------------------
+# HYD DIAMETER
+# -----------------------------
+def hydraulic_diameter(Do, Di):
+    return (Do - Di) / 12
 
 
 # -----------------------------
 # BHA PROFILE
 # -----------------------------
-def build_bha_profile(bha, total_depth):
+def build_bha_profile(bha, depth):
 
     profile = []
-    current_depth = total_depth
-
-    if not bha:
-        return [{"top": 0, "bottom": total_depth, "od": 5}]
+    current = depth
 
     for comp in reversed(bha):
-
-        length = comp.length if comp.length else 0
-        od = comp.od if comp.od else 5
-
-        top = max(current_depth - length, 0)
+        top = max(current - comp.length, 0)
 
         profile.append({
             "top": top,
-            "bottom": current_depth,
-            "od": od
+            "bottom": current,
+            "od": comp.od
         })
 
-        current_depth = top
+        current = top
 
     return profile
 
 
-def get_pipe_od(bha_profile, md):
-
-    for comp in bha_profile:
-        if comp["top"] <= md <= comp["bottom"]:
-            return comp["od"]
-
-    return bha_profile[-1]["od"] if bha_profile else 5
+def get_pipe_od(profile, md):
+    for p in profile:
+        if p["top"] <= md <= p["bottom"]:
+            return p["od"]
+    return profile[-1]["od"]
 
 
 # -----------------------------
 # ANNULUS
 # -----------------------------
-def get_annulus_diameter(sections, md):
-
-    if not sections:
-        return 8.5
+def get_annulus(sections, md):
 
     for sec in sections:
+        if sec.top_md <= md <= sec.end_md:
 
-        try:
-            if sec.top_md <= md <= sec.end_md:
+            t = sec.type.lower()
 
-                t = sec.type.lower()
+            if t == "open hole":
+                return sec.hole_d
 
-                if t == "open hole":
-                    return sec.hole_d or 8.5
+            if t == "casing":
+                return sec.casing_id
 
-                if t == "casing":
-                    return sec.casing_id or 8.5
+            if t == "liner":
 
-                if t == "liner":
+                if md >= sec.top_md:
+                    return sec.casing_id
 
-                    if md >= sec.top_md:
-                        return sec.casing_id or 8.5
+                for parent in sections:
+                    if parent.type.lower() == "casing" and parent.top_md <= md <= parent.end_md:
+                        return parent.casing_id
 
-                    for parent in sections:
-                        if parent.type.lower() == "casing" and parent.top_md <= md <= parent.end_md:
-                            return parent.casing_id or 8.5
-        except:
-            continue
-
-    last = sections[-1]
-    return last.hole_d if last.hole_d else 8.5
+    return sections[-1].hole_d
 
 
 # -----------------------------
@@ -96,47 +80,51 @@ def get_annulus_diameter(sections, md):
 # -----------------------------
 def fit_hb(f600, f300, f3):
 
-    try:
-        tau_y = f3
+    tau_y = f3
 
-        gamma1 = 1022
-        gamma2 = 511
+    gamma1 = 1022
+    gamma2 = 511
 
-        tau1 = max(f600 - tau_y, 0.1)
-        tau2 = max(f300 - tau_y, 0.1)
+    tau1 = max(f600 - tau_y, 0.1)
+    tau2 = max(f300 - tau_y, 0.1)
 
-        n = math.log(tau1 / tau2) / math.log(gamma1 / gamma2)
-        K = tau1 / (gamma1 ** n)
+    n = math.log(tau1/tau2) / math.log(gamma1/gamma2)
+    K = tau1 / (gamma1**n)
 
-        return tau_y, K, n
-    except:
-        return 5, 0.5, 0.8
+    return tau_y, K, n
 
 
-def apparent_viscosity(tau_y, K, n, gamma):
+# -----------------------------
+# GENERALIZED REYNOLDS
+# -----------------------------
+def reynolds_hb(rho, v, dh, K, n):
 
-    gamma = max(gamma, 0.1)
-
-    tau = tau_y + K * (gamma ** n)
-
-    return tau / gamma
+    return (rho * (v**(2-n)) * (dh**n)) / (K * (8**(n-1)))
 
 
-def pressure_loss(mw, v, dh, tau_y, K, n, length):
+# -----------------------------
+# FRICTION FACTOR
+# -----------------------------
+def friction_factor(Re):
 
-    try:
-        # Apparent viscosity (cp)
-        gamma = 8 * v / dh
-        mu = apparent_viscosity(tau_y, K, n, gamma)
+    if Re < 2100:
+        return 16 / Re
 
-        # 🔥 FIELD CALIBRATED MODEL
-        # dp (psi) ≈ (0.0001 * MW * v^2 / dh) * length
-        dp = 0.0001 * mw * (v**2) / dh * length
+    # turbulent (approx)
+    f = 0.005
 
-        return max(dp, 0)
+    for _ in range(10):
+        f = 1 / ( (4*math.log10(Re*math.sqrt(f)) - 0.4)**2 )
 
-    except:
-        return 0
+    return f
+
+
+# -----------------------------
+# PRESSURE LOSS
+# -----------------------------
+def pressure_loss(rho, v, dh, f, L):
+
+    return f * (rho * v**2 / (2 * GC)) * (L / dh)
 
 
 # -----------------------------
@@ -144,81 +132,71 @@ def pressure_loss(mw, v, dh, tau_y, K, n, length):
 # -----------------------------
 def run_simulation(data):
 
-    try:
+    Q = data.flowrate
+    depth = data.depth
+    mw = data.fluid.mw
 
-        Q = float(data.flowrate or 400)
-        depth = max(float(data.depth or 10000), 100)
-        mw = float(data.fluid.mw or 10)
+    rho = mw * 8.34  # lbm/gal → lbm/ft³ approx
 
-        tau_y, K, n = fit_hb(
-            data.fluid.fann_600,
-            data.fluid.fann_300,
-            data.fluid.fann_3
-        )
+    tau_y, K, n = fit_hb(
+        data.fluid.fann_600,
+        data.fluid.fann_300,
+        data.fluid.fann_3
+    )
 
-        bha_profile = build_bha_profile(data.bha, depth)
+    bha_profile = build_bha_profile(data.bha, depth)
 
-        depths = []
-        ecd_profile = []
-        esd_profile = []
+    depths = []
+    ecd_profile = []
+    esd_profile = []
 
-        cumulative_dp = 0
+    cumulative_dp = 0
 
-        step = max(int(depth / 100), 50)
+    step = 100
+    md_list = list(range(step, int(depth)+step, step))
 
-        md_list = list(range(step, int(depth) + step, step))
+    for md in md_list:
 
-        for md2 in md_list:
+        Do = get_annulus(data.well_sections, md)
+        Di = get_pipe_od(bha_profile, md)
 
-            if md2 <= 0:
-                continue
+        Do = max(Do, Di + 0.1)
 
-            length = step
+        area = annular_area(Do, Di)
+        v = Q / (24.5 * area)
 
-            outer_d = get_annulus_diameter(data.well_sections, md2)
-            pipe_od = get_pipe_od(bha_profile, md2)
+        dh = hydraulic_diameter(Do, Di)
 
-            outer_d = max(outer_d, pipe_od + 0.1)
+        Re = reynolds_hb(rho, v, dh, K, n)
+        f = friction_factor(Re)
 
-            area = annular_area(outer_d, pipe_od)
+        dp = pressure_loss(rho, v, dh, f, step)
+        cumulative_dp += dp
 
-            v = Q / (24.5 * area)
+        ecd = mw + cumulative_dp / (0.051948 * md)
 
-            dh = hydraulic_diameter(outer_d, pipe_od)
+        # temperature
+        Tsurf = data.temperature.surface_temp
+        Tbh = data.temperature.bhct
 
-            dp = pressure_loss(mw, v, dh, tau_y, K, n, length)
-            cumulative_dp += dp
+        T = Tsurf + (Tbh - Tsurf)*(md/depth)
+        factor = 1 - 0.0003*(T - Tsurf)
 
-            ecd = mw + cumulative_dp / (0.051948 * md2)
+        ecd_t = ecd * factor
+        esd = mw * factor
 
-            # Temperature
-            surface_temp = data.temperature.surface_temp
-            bhct = data.temperature.bhct
+        depths.append(md)
+        ecd_profile.append(round(ecd_t,3))
+        esd_profile.append(round(esd,3))
 
-            temp_local = surface_temp + (bhct - surface_temp) * (md2 / depth)
-            factor = 1 - 0.0003 * (temp_local - surface_temp)
-
-            ecd_t = ecd * factor
-            esd = mw * factor
-
-            depths.append(md2)
-            ecd_profile.append(round(ecd_t, 3))
-            esd_profile.append(round(esd, 3))
-
-        return {
-            "summary": {
-                "ecd_bottom": ecd_profile[-1] if ecd_profile else 0,
-                "esd_bottom": esd_profile[-1] if esd_profile else 0,
-                "pressure_loss": round(cumulative_dp, 2)
-            },
-            "profile": {
-                "depth": depths,
-                "ecd": ecd_profile,
-                "esd": esd_profile
-            }
+    return {
+        "summary": {
+            "ecd_bottom": ecd_profile[-1],
+            "esd_bottom": esd_profile[-1]
+        },
+        "profile": {
+            "depth": depths,
+            "ecd": ecd_profile,
+            "esd": esd_profile
         }
-
-    except Exception as e:
-        return {
-            "error": str(e)
-        }
+    }
