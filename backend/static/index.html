@@ -9,244 +9,149 @@
 
 <h1>Drilling Hydraulics Simulator</h1>
 
-<button onclick="showTab('run')">Run</button>
-<button onclick="showTab('well')">Well Design</button>
-<button onclick="showTab('bha')">BHA</button>
-<button onclick="showTab('mud')">Mud</button>
+<h3>Quick Run</h3>
 
-<hr>
-
-<!-- RUN -->
-<div id="run" class="tab">
 Flowrate: <input id="flowrate" value="400"><br><br>
 Depth: <input id="depth" value="10000"><br><br>
+
 <button onclick="runSimulation()">Run Simulation</button>
-</div>
 
-<!-- WELL DESIGN -->
-<div id="well" class="tab" style="display:none">
+<h3>Results</h3>
+<pre id="result">Waiting...</pre>
 
-<h3>Well Design (Top → Bottom)</h3>
-
-<table border="1" id="wellTable">
-<tr>
-<th>Type</th>
-<th>Top MD</th>
-<th>Bottom MD</th>
-<th>Hole Size (in)</th>
-<th>Casing ID (in)</th>
-</tr>
-
-<tr>
-<td>
-<select>
-<option>Casing</option>
-<option>Liner</option>
-<option selected>Open Hole</option>
-</select>
-</td>
-<td contenteditable>0</td>
-<td contenteditable>2000</td>
-<td contenteditable>36</td>
-<td contenteditable>30</td>
-</tr>
-
-<tr>
-<td>
-<select>
-<option selected>Casing</option>
-<option>Liner</option>
-<option>Open Hole</option>
-</select>
-</td>
-<td contenteditable>2000</td>
-<td contenteditable>6000</td>
-<td contenteditable>26</td>
-<td contenteditable>20</td>
-</tr>
-
-<tr>
-<td>
-<select>
-<option>Open Hole</option>
-<option>Casing</option>
-<option>Liner</option>
-</select>
-</td>
-<td contenteditable>6000</td>
-<td contenteditable>10000</td>
-<td contenteditable>8.5</td>
-<td contenteditable>0</td>
-</tr>
-
-</table>
-
-<br>
-<button onclick="addWellRow()">Add Row</button>
-
-</div>
-
-<!-- BHA -->
-<div id="bha" class="tab" style="display:none">
-
-<h3>BHA (Top → Bottom)</h3>
-
-<table border="1" id="bhaTable">
-<tr>
-<th>Name</th><th>OD</th><th>ID</th><th>Length</th>
-</tr>
-
-<tr>
-<td contenteditable>DP</td>
-<td contenteditable>5</td>
-<td contenteditable>4</td>
-<td contenteditable>8000</td>
-</tr>
-
-<tr>
-<td contenteditable>HWDP</td>
-<td contenteditable>6</td>
-<td contenteditable>3</td>
-<td contenteditable>1000</td>
-</tr>
-
-<tr>
-<td contenteditable>DC</td>
-<td contenteditable>8</td>
-<td contenteditable>3</td>
-<td contenteditable>1000</td>
-</tr>
-
-</table>
-
-</div>
-
-<!-- MUD -->
-<div id="mud" class="tab" style="display:none">
-MW <input id="mw" value="10"><br>
-600 <input id="f600" value="60"><br>
-300 <input id="f300" value="40"><br>
-3 <input id="f3" value="5"><br>
-</div>
-
-<hr>
-
-<pre id="result"></pre>
-<canvas id="chart"></canvas>
+<canvas id="chart" width="600" height="400"></canvas>
 
 <script>
 
-function showTab(tab){
-document.querySelectorAll('.tab').forEach(t=>t.style.display='none');
-document.getElementById(tab).style.display='block';
+let chartInstance = null;
+
+async function runSimulation() {
+
+    document.getElementById("result").innerText = "Running...";
+
+    const payload = {
+        flowrate: Number(document.getElementById("flowrate").value),
+        depth: Number(document.getElementById("depth").value),
+
+        fluid: {
+            mw: 10,
+            fann_600: 60,
+            fann_300: 40,
+            fann_200: 30,
+            fann_100: 20,
+            fann_6: 10,
+            fann_3: 5
+        },
+
+        temperature: {
+            surface_temp: 80,
+            bhct: 150,
+            geothermal_grad: 1.5
+        },
+
+        trajectory: [
+            {md: 0, inc: 0, azi: 0, tvd: 0},
+            {md: 10000, inc: 0, azi: 0, tvd: 10000}
+        ],
+
+        well_sections: [
+            {
+                type: "casing",
+                top_md: 0,
+                end_md: 5000,
+                casing_id: 9.625,
+                hole_d: 12.25
+            },
+            {
+                type: "open hole",
+                top_md: 5000,
+                end_md: 10000,
+                casing_id: 0,
+                hole_d: 8.5
+            }
+        ],
+
+        bha: [
+            {name: "Drill Pipe", od: 5, id: 4, length: 8000},
+            {name: "Drill Collar", od: 6.5, id: 2.5, length: 2000}
+        ]
+    };
+
+    try {
+
+        const response = await fetch("/simulate", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify(payload)
+        });
+
+        const result = await response.json();
+
+        // 🔥 HANDLE BACKEND ERROR
+        if (!response.ok) {
+            document.getElementById("result").innerText =
+                "ERROR " + response.status + ":\n" + JSON.stringify(result, null, 2);
+            return;
+        }
+
+        // ✅ SAFE ACCESS
+        document.getElementById("result").innerText =
+            "ECD Bottom: " + result.summary.ecd_bottom + "\n" +
+            "ESD Bottom: " + result.summary.esd_bottom + "\n" +
+            "Pressure Loss: " + result.summary.total_pressure_loss;
+
+        plotChart(result.profile);
+
+    } catch (error) {
+        document.getElementById("result").innerText =
+            "ERROR: " + error.message;
+    }
 }
 
-function addWellRow(){
-let row=document.getElementById("wellTable").insertRow();
-row.innerHTML=`
-<td>
-<select>
-<option>Casing</option>
-<option>Liner</option>
-<option>Open Hole</option>
-</select>
-</td>
-<td contenteditable></td>
-<td contenteditable></td>
-<td contenteditable></td>
-<td contenteditable></td>
-`;
-}
+function plotChart(profile) {
 
-function getWellData(){
-let table=document.getElementById("wellTable");
-let data=[];
+    const ctx = document.getElementById("chart").getContext("2d");
 
-for(let i=1;i<table.rows.length;i++){
-let r=table.rows[i];
+    // 🔥 SAFE DESTROY
+    if (chartInstance && typeof chartInstance.destroy === "function") {
+        chartInstance.destroy();
+    }
 
-data.push({
-type:r.cells[0].querySelector("select").value,
-top_md:Number(r.cells[1].innerText),
-end_md:Number(r.cells[2].innerText),
-hole_d:Number(r.cells[3].innerText),
-casing_id:Number(r.cells[4].innerText)
-});
-}
-return data;
-}
-
-function getBHAData(){
-let t=document.getElementById("bhaTable");
-let data=[];
-for(let i=1;i<t.rows.length;i++){
-let r=t.rows[i];
-
-data.push({
-name:r.cells[0].innerText,
-od:Number(r.cells[1].innerText),
-length:Number(r.cells[3].innerText)
-});
-}
-return data;
-}
-
-async function runSimulation(){
-
-const depth=Number(document.getElementById("depth").value);
-
-const payload={
-flowrate:Number(document.getElementById("flowrate").value),
-depth:depth,
-
-trajectory:[
-{md:0,tvd:0},
-{md:depth,tvd:depth}
-],
-
-well_sections:getWellData(),
-bha:getBHAData(),
-
-fluid:{
-mw:Number(document.getElementById("mw").value),
-fann_600:Number(document.getElementById("f600").value),
-fann_300:Number(document.getElementById("f300").value),
-fann_3:Number(document.getElementById("f3").value)
-},
-
-temperature:{surface_temp:80,bhct:150},
-cuttings:{rop:50,concentration:0.05,size:0.2,density:2.65,rpm:120}
-};
-
-const res=await fetch("/simulate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
-const data=await res.json();
-
-document.getElementById("result").innerText="ECD "+data.summary.ecd_bottom;
-
-plot(data.profile.depth,data.profile.ecd);
-}
-
-function plot(depth,ecd){
-
-const ctx=document.getElementById("chart").getContext("2d");
-if(window.chart)window.chart.destroy();
-
-window.chart=new Chart(ctx,{
-type:"scatter",
-data:{
-datasets:[{
-label:"ECD",
-data:depth.map((d,i)=>({x:ecd[i],y:d})),
-showLine:true
-}]
-},
-options:{
-scales:{
-y:{reverse:true,title:{display:true,text:"Depth"}},
-x:{title:{display:true,text:"ppg"}}
-}
-}
-});
+    chartInstance = new Chart(ctx, {
+        type: "line",
+        data: {
+            labels: profile.depth,
+            datasets: [
+                {
+                    label: "ECD",
+                    data: profile.ecd
+                },
+                {
+                    label: "ESD",
+                    data: profile.esd
+                }
+            ]
+        },
+        options: {
+            scales: {
+                y: {
+                    reverse: true,
+                    title: {
+                        display: true,
+                        text: "Depth"
+                    }
+                },
+                x: {
+                    title: {
+                        display: true,
+                        text: "ECD / ESD"
+                    }
+                }
+            }
+        }
+    });
 }
 
 </script>
