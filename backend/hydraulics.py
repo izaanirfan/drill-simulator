@@ -3,13 +3,12 @@ import math
 # -----------------------------
 # CONSTANTS
 # -----------------------------
-GC = 32.174  # gravitational constant (lbm-ft/lbf-s²)
+GC = 32.174  # lbm-ft/lbf-s²
 
 # -----------------------------
 # GEOMETRY
 # -----------------------------
 def annular_area(Do, Di):
-    # inches → ft
     Do_ft = Do / 12
     Di_ft = Di / 12
     area = math.pi / 4 * (Do_ft**2 - Di_ft**2)
@@ -17,7 +16,7 @@ def annular_area(Do, Di):
 
 
 def hydraulic_diameter(Do, Di):
-    return max((Do - Di) / 12, 0.01)  # ft
+    return max((Do - Di) / 12, 0.01)
 
 
 # -----------------------------
@@ -80,7 +79,6 @@ def get_annulus(sections, md):
                 if md >= sec.top_md:
                     return sec.casing_id or 8.5
 
-                # parent casing
                 for parent in sections:
                     if parent.type.lower() == "casing" and parent.top_md <= md <= parent.end_md:
                         return parent.casing_id or 8.5
@@ -93,7 +91,7 @@ def get_annulus(sections, md):
 # -----------------------------
 def fit_hb(f600, f300, f3):
 
-    tau_y = f3  # lb/100 ft²
+    tau_y = f3
 
     gamma1 = 1022
     gamma2 = 511
@@ -112,14 +110,11 @@ def fit_hb(f600, f300, f3):
 # -----------------------------
 def apparent_viscosity_hb(tau_y, K, n, v, dh):
 
-    # shear rate
     gamma = max(8 * v / dh, 0.1)
 
-    # shear stress
     tau = tau_y + K * (gamma ** n)
 
-    # viscosity (lb·s/ft²)
-    mu = tau / gamma
+    mu = tau / gamma  # lb·s/ft²
 
     # convert to cp
     mu_cp = mu * 4788
@@ -138,8 +133,8 @@ def run_simulation(data):
         depth = max(float(data.depth or 10000), 100)
         mw = float(data.fluid.mw or 10)
 
-        # density (lbm/ft³)
-        rho = mw * 0.052 * 144
+        # ✅ CORRECT density (lbm/ft³)
+        rho = mw * 7.48052
 
         # HB rheology
         tau_y, K, n = fit_hb(
@@ -170,16 +165,19 @@ def run_simulation(data):
 
             area = annular_area(Do, Di)
 
-            # velocity ft/s
+            # velocity (ft/s)
             v = Q / (24.5 * area)
 
             dh = hydraulic_diameter(Do, Di)
 
-            # HB apparent viscosity
+            # HB apparent viscosity (cp)
             mu_cp = apparent_viscosity_hb(tau_y, K, n, v, dh)
 
-            # Reynolds number (field form)
-            Re = (928 * rho * v * dh) / mu_cp
+            # convert cp → lbm/(ft·s)
+            mu = mu_cp / 4788
+
+            # ✅ CORRECT Reynolds
+            Re = (rho * v * dh) / mu
 
             # friction factor
             if Re < 2100:
