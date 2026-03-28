@@ -3,19 +3,21 @@ import math
 # -----------------------------
 # CONSTANTS
 # -----------------------------
-GC = 32.174  # lbm-ft/lbf-s²
+GC = 32.174  # gravitational constant (lbm-ft/lbf-s²)
 
 # -----------------------------
-# AREA
+# GEOMETRY
 # -----------------------------
 def annular_area(Do, Di):
-    return math.pi / 4 * ((Do/12)**2 - (Di/12)**2)
+    # inches → ft
+    Do_ft = Do / 12
+    Di_ft = Di / 12
+    area = math.pi / 4 * (Do_ft**2 - Di_ft**2)
+    return max(area, 0.0001)
 
-# -----------------------------
-# HYD DIAMETER
-# -----------------------------
+
 def hydraulic_diameter(Do, Di):
-    return (Do - Di) / 12
+    return max((Do - Di) / 12, 0.01)  # ft
 
 
 # -----------------------------
@@ -26,13 +28,19 @@ def build_bha_profile(bha, depth):
     profile = []
     current = depth
 
+    if not bha:
+        return [{"top": 0, "bottom": depth, "od": 5}]
+
     for comp in reversed(bha):
-        top = max(current - comp.length, 0)
+        length = comp.length or 0
+        od = comp.od or 5
+
+        top = max(current - length, 0)
 
         profile.append({
             "top": top,
             "bottom": current,
-            "od": comp.od
+            "od": od
         })
 
         current = top
@@ -48,31 +56,36 @@ def get_pipe_od(profile, md):
 
 
 # -----------------------------
-# ANNULUS
+# WELL GEOMETRY
 # -----------------------------
 def get_annulus(sections, md):
 
+    if not sections:
+        return 8.5
+
     for sec in sections:
+
         if sec.top_md <= md <= sec.end_md:
 
             t = sec.type.lower()
 
             if t == "open hole":
-                return sec.hole_d
+                return sec.hole_d or 8.5
 
             if t == "casing":
-                return sec.casing_id
+                return sec.casing_id or 8.5
 
             if t == "liner":
 
                 if md >= sec.top_md:
-                    return sec.casing_id
+                    return sec.casing_id or 8.5
 
+                # parent casing
                 for parent in sections:
                     if parent.type.lower() == "casing" and parent.top_md <= md <= parent.end_md:
-                        return parent.casing_id
+                        return parent.casing_id or 8.5
 
-    return sections[-1].hole_d
+    return sections[-1].hole_d or 8.5
 
 
 # -----------------------------
@@ -80,7 +93,7 @@ def get_annulus(sections, md):
 # -----------------------------
 def fit_hb(f600, f300, f3):
 
-    tau_y = f3
+    tau_y = f3  # lb/100 ft²
 
     gamma1 = 1022
     gamma2 = 511
@@ -88,115 +101,126 @@ def fit_hb(f600, f300, f3):
     tau1 = max(f600 - tau_y, 0.1)
     tau2 = max(f300 - tau_y, 0.1)
 
-    n = math.log(tau1/tau2) / math.log(gamma1/gamma2)
-    K = tau1 / (gamma1**n)
+    n = math.log(tau1 / tau2) / math.log(gamma1 / gamma2)
+    K = tau1 / (gamma1 ** n)
 
     return tau_y, K, n
 
 
 # -----------------------------
-# GENERALIZED REYNOLDS
+# HB → APPARENT VISCOSITY
 # -----------------------------
-def reynolds_hb(rho, v, dh, K, n):
+def apparent_viscosity_hb(tau_y, K, n, v, dh):
 
-    return (rho * (v**(2-n)) * (dh**n)) / (K * (8**(n-1)))
+    # shear rate
+    gamma = max(8 * v / dh, 0.1)
 
+    # shear stress
+    tau = tau_y + K * (gamma ** n)
 
-# -----------------------------
-# FRICTION FACTOR
-# -----------------------------
-def friction_factor(Re):
+    # viscosity (lb·s/ft²)
+    mu = tau / gamma
 
-    if Re < 2100:
-        return 16 / Re
+    # convert to cp
+    mu_cp = mu * 4788
 
-    # turbulent (approx)
-    f = 0.005
-
-    for _ in range(10):
-        f = 1 / ( (4*math.log10(Re*math.sqrt(f)) - 0.4)**2 )
-
-    return f
+    return max(mu_cp, 1)
 
 
 # -----------------------------
-# PRESSURE LOSS
-# -----------------------------
-def pressure_loss(rho, v, dh, f, L):
-
-    return f * (rho * v**2 / (2 * GC)) * (L / dh)
-
-
-# -----------------------------
-# MAIN
+# MAIN SIMULATION
 # -----------------------------
 def run_simulation(data):
 
-    Q = data.flowrate
-    depth = data.depth
-    mw = data.fluid.mw
+    try:
 
-    rho = mw * 8.34  # lbm/gal → lbm/ft³ approx
+        Q = float(data.flowrate or 400)      # gpm
+        depth = max(float(data.depth or 10000), 100)
+        mw = float(data.fluid.mw or 10)
 
-    tau_y, K, n = fit_hb(
-        data.fluid.fann_600,
-        data.fluid.fann_300,
-        data.fluid.fann_3
-    )
+        # density (lbm/ft³)
+        rho = mw * 0.052 * 144
 
-    bha_profile = build_bha_profile(data.bha, depth)
+        # HB rheology
+        tau_y, K, n = fit_hb(
+            data.fluid.fann_600,
+            data.fluid.fann_300,
+            data.fluid.fann_3
+        )
 
-    depths = []
-    ecd_profile = []
-    esd_profile = []
+        bha_profile = build_bha_profile(data.bha, depth)
 
-    cumulative_dp = 0
+        depths = []
+        ecd_profile = []
+        esd_profile = []
 
-    step = 100
-    md_list = list(range(step, int(depth)+step, step))
+        cumulative_dp = 0
 
-    for md in md_list:
+        step = max(int(depth / 100), 50)
 
-        Do = get_annulus(data.well_sections, md)
-        Di = get_pipe_od(bha_profile, md)
+        md_list = list(range(step, int(depth) + step, step))
 
-        Do = max(Do, Di + 0.1)
+        for md in md_list:
 
-        area = annular_area(Do, Di)
-        v = Q / (24.5 * area)
+            # geometry
+            Do = get_annulus(data.well_sections, md)
+            Di = get_pipe_od(bha_profile, md)
 
-        dh = hydraulic_diameter(Do, Di)
+            Do = max(Do, Di + 0.1)
 
-        Re = reynolds_hb(rho, v, dh, K, n)
-        f = friction_factor(Re)
+            area = annular_area(Do, Di)
 
-        dp = pressure_loss(rho, v, dh, f, step)
-        cumulative_dp += dp
+            # velocity ft/s
+            v = Q / (24.5 * area)
 
-        ecd = mw + cumulative_dp / (0.051948 * md)
+            dh = hydraulic_diameter(Do, Di)
 
-        # temperature
-        Tsurf = data.temperature.surface_temp
-        Tbh = data.temperature.bhct
+            # HB apparent viscosity
+            mu_cp = apparent_viscosity_hb(tau_y, K, n, v, dh)
 
-        T = Tsurf + (Tbh - Tsurf)*(md/depth)
-        factor = 1 - 0.0003*(T - Tsurf)
+            # Reynolds number (field form)
+            Re = (928 * rho * v * dh) / mu_cp
 
-        ecd_t = ecd * factor
-        esd = mw * factor
+            # friction factor
+            if Re < 2100:
+                f = 16 / max(Re, 1)
+            else:
+                f = 0.079 / (Re ** 0.25)
 
-        depths.append(md)
-        ecd_profile.append(round(ecd_t,3))
-        esd_profile.append(round(esd,3))
+            # pressure loss (psi)
+            dp = f * (rho * v**2 / (2 * GC)) * (step / dh)
 
-    return {
-        "summary": {
-            "ecd_bottom": ecd_profile[-1],
-            "esd_bottom": esd_profile[-1]
-        },
-        "profile": {
-            "depth": depths,
-            "ecd": ecd_profile,
-            "esd": esd_profile
+            cumulative_dp += dp
+
+            # ECD
+            ecd = mw + cumulative_dp / (0.051948 * md)
+
+            # temperature correction
+            Tsurf = data.temperature.surface_temp
+            Tbh = data.temperature.bhct
+
+            T = Tsurf + (Tbh - Tsurf) * (md / depth)
+            factor = 1 - 0.0003 * (T - Tsurf)
+
+            ecd_t = ecd * factor
+            esd = mw * factor
+
+            depths.append(md)
+            ecd_profile.append(round(ecd_t, 3))
+            esd_profile.append(round(esd, 3))
+
+        return {
+            "summary": {
+                "ecd_bottom": ecd_profile[-1] if ecd_profile else 0,
+                "esd_bottom": esd_profile[-1] if esd_profile else 0,
+                "pressure_loss": round(cumulative_dp, 2)
+            },
+            "profile": {
+                "depth": depths,
+                "ecd": ecd_profile,
+                "esd": esd_profile
+            }
         }
-    }
+
+    except Exception as e:
+        return {"error": str(e)}
