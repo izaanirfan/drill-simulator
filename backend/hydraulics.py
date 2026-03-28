@@ -13,7 +13,52 @@ def hydraulic_diameter(hole_d, pipe_od):
     return (hole_d - pipe_od) / 12
 
 # -----------------------------
-# FIT HB PARAMETERS
+# BUILD BHA PROFILE (TOP → BOTTOM)
+# -----------------------------
+def build_bha_profile(bha, total_depth):
+
+    profile = []
+    current_depth = total_depth
+
+    # Build from bottom up
+    for comp in reversed(bha):
+        length = comp.length
+        top = current_depth - length
+
+        profile.append({
+            "top": top,
+            "bottom": current_depth,
+            "od": comp.od
+        })
+
+        current_depth = top
+
+    return profile
+
+# -----------------------------
+# GET PIPE OD AT DEPTH
+# -----------------------------
+def get_pipe_od(bha_profile, md):
+
+    for comp in bha_profile:
+        if comp["top"] <= md <= comp["bottom"]:
+            return comp["od"]
+
+    return bha_profile[0]["od"]  # fallback
+
+# -----------------------------
+# GET HOLE SIZE
+# -----------------------------
+def get_hole_size(sections, md):
+
+    for sec in sections:
+        if sec.top_md <= md <= sec.end_md:
+            return sec.hole_d
+
+    return sections[-1].hole_d
+
+# -----------------------------
+# HB FIT
 # -----------------------------
 def fit_hb(f600, f300, f3):
 
@@ -38,26 +83,20 @@ def apparent_viscosity(tau_y, K, n, gamma):
     return tau / max(gamma, 0.1)
 
 # -----------------------------
-# REYNOLDS NUMBER
-# -----------------------------
-def reynolds_number(mw, v, dh, mu):
-    rho = mw * 7.48
-    return (rho * v * dh) / max(mu, 0.01)
-
-# -----------------------------
 # PRESSURE LOSS
 # -----------------------------
 def pressure_loss(mw, v, dh, tau_y, K, n, length):
 
     gamma = 8 * v / dh
     mu = apparent_viscosity(tau_y, K, n, gamma)
-    Re = reynolds_number(mw, v, dh, mu)
+
+    rho = mw * 7.48
+    Re = (rho * v * dh) / max(mu, 0.01)
 
     if Re < 2100:
         dp = (32 * mu * v / (dh**2)) * length * 0.01
     else:
         f = 0.079 / (Re ** 0.25)
-        rho = mw * 7.48
         dp = f * (rho * v**2 / (2 * dh)) * length * 0.01
 
     return dp
@@ -78,7 +117,10 @@ def run_simulation(data):
     tau_y, K, n = fit_hb(f600, f300, f3)
 
     sections = data.well_sections
+    bha = data.bha
     traj = data.trajectory
+
+    bha_profile = build_bha_profile(bha, depth)
 
     depths = []
     ecd_profile = []
@@ -92,25 +134,10 @@ def run_simulation(data):
         md2 = traj[i].md
         length = md2 - md1
 
-        # -----------------------------
-        # FIND SECTION (FIXED)
-        # -----------------------------
-        hole_d = None
-        pipe_od = None
+        # 🔥 NEW LOGIC
+        hole_d = get_hole_size(sections, md2)
+        pipe_od = get_pipe_od(bha_profile, md2)
 
-        for sec in sections:
-            if md2 <= sec.end_md:   # ✅ FIX HERE
-                hole_d = sec.hole_d
-                pipe_od = sec.pipe_od
-                break
-
-        if hole_d is None:
-            hole_d = sections[-1].hole_d
-            pipe_od = sections[-1].pipe_od
-
-        # -----------------------------
-        # CALCULATIONS
-        # -----------------------------
         area = annular_area(hole_d, pipe_od)
         area = max(area, 0.01)
 
@@ -120,12 +147,11 @@ def run_simulation(data):
         dh = max(dh, 0.01)
 
         dp = pressure_loss(mw, v, dh, tau_y, K, n, length)
+
         cumulative_dp += dp
 
-        # ECD (correct constant)
         ecd = mw + cumulative_dp / (0.051948 * md2)
 
-        # Temperature
         temp = data.temperature
         surface_temp = temp.surface_temp
         bhct = temp.bhct
@@ -146,8 +172,7 @@ def run_simulation(data):
             "esd_bottom": esd_profile[-1],
             "tau_y": round(tau_y, 2),
             "K": round(K, 4),
-            "n": round(n, 3),
-            "total_pressure_loss": round(cumulative_dp, 2)
+            "n": round(n, 3)
         },
         "profile": {
             "depth": depths,
