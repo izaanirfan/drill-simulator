@@ -9,112 +9,189 @@
 
 <h1>Drilling Hydraulics Simulator</h1>
 
-<h3>Quick Run</h3>
+<button onclick="showTab('quick')">Quick</button>
+<button onclick="showTab('advanced')">Advanced</button>
 
-Flowrate: <input id="flowrate" value="400"><br><br>
-Depth: <input id="depth" value="10000"><br><br>
+<!-- ================= QUICK TAB ================= -->
+<div id="quickTab">
+    <h3>Quick Run</h3>
 
-<button onclick="runSimulation()">Run Simulation</button>
+    Flowrate: <input id="flowrate" value="400"><br><br>
+    Depth: <input id="depth" value="10000"><br><br>
 
+    <button onclick="runSimulation()">Run Simulation</button>
+</div>
+
+<!-- ================= ADVANCED TAB ================= -->
+<div id="advancedTab" style="display:none">
+
+<h3>Well Design</h3>
+<table id="wellTable" border="1">
+<tr>
+<th>Type</th><th>Top MD</th><th>End MD</th><th>Casing ID</th><th>Hole Size</th>
+</tr>
+<tr>
+<td>
+<select>
+<option>casing</option>
+<option>liner</option>
+<option selected>open hole</option>
+</select>
+</td>
+<td><input value="0"></td>
+<td><input value="10000"></td>
+<td><input value="0"></td>
+<td><input value="8.5"></td>
+</tr>
+</table>
+
+<h3>BHA</h3>
+<table id="bhaTable" border="1">
+<tr><th>Name</th><th>OD</th><th>ID</th><th>Length</th></tr>
+<tr>
+<td>Drill Pipe</td>
+<td><input value="5"></td>
+<td><input value="4"></td>
+<td><input value="8000"></td>
+</tr>
+<tr>
+<td>Drill Collar</td>
+<td><input value="6.5"></td>
+<td><input value="2.5"></td>
+<td><input value="2000"></td>
+</tr>
+</table>
+
+<h3>Mud</h3>
+MW: <input id="mw" value="10"><br>
+600: <input id="f600" value="60">
+300: <input id="f300" value="40">
+3: <input id="f3" value="5"><br><br>
+
+<h3>Temperature</h3>
+Surface: <input id="surface_temp" value="80">
+BHCT: <input id="bhct" value="150"><br><br>
+
+</div>
+
+<!-- ================= RESULT ================= -->
 <h3>Results</h3>
 <pre id="result">Waiting...</pre>
 
-<canvas id="chart" width="600" height="400"></canvas>
+<canvas id="chart"></canvas>
 
 <script>
 
 let chartInstance = null;
 
-async function runSimulation() {
+function showTab(tab) {
+    document.getElementById("quickTab").style.display = tab === "quick" ? "block" : "none";
+    document.getElementById("advancedTab").style.display = tab === "advanced" ? "block" : "none";
+}
 
-    document.getElementById("result").innerText = "Running...";
+// ================= BUILD PAYLOAD =================
+function buildPayload() {
 
-    const payload = {
+    // WELL SECTIONS
+    const wellRows = document.getElementById("wellTable").rows;
+    let well_sections = [];
+
+    for (let i = 1; i < wellRows.length; i++) {
+        let cells = wellRows[i].cells;
+
+        well_sections.push({
+            type: cells[0].children[0].value,
+            top_md: Number(cells[1].children[0].value),
+            end_md: Number(cells[2].children[0].value),
+            casing_id: Number(cells[3].children[0].value),
+            hole_d: Number(cells[4].children[0].value)
+        });
+    }
+
+    // BHA
+    const bhaRows = document.getElementById("bhaTable").rows;
+    let bha = [];
+
+    for (let i = 1; i < bhaRows.length; i++) {
+        let cells = bhaRows[i].cells;
+
+        bha.push({
+            name: cells[0].innerText,
+            od: Number(cells[1].children[0].value),
+            id: Number(cells[2].children[0].value),
+            length: Number(cells[3].children[0].value)
+        });
+    }
+
+    return {
         flowrate: Number(document.getElementById("flowrate").value),
         depth: Number(document.getElementById("depth").value),
 
         fluid: {
-            mw: 10,
-            fann_600: 60,
-            fann_300: 40,
+            mw: Number(document.getElementById("mw").value),
+            fann_600: Number(document.getElementById("f600").value),
+            fann_300: Number(document.getElementById("f300").value),
             fann_200: 30,
             fann_100: 20,
             fann_6: 10,
-            fann_3: 5
+            fann_3: Number(document.getElementById("f3").value)
         },
 
         temperature: {
-            surface_temp: 80,
-            bhct: 150,
+            surface_temp: Number(document.getElementById("surface_temp").value),
+            bhct: Number(document.getElementById("bhct").value),
             geothermal_grad: 1.5
         },
 
         trajectory: [
             {md: 0, inc: 0, azi: 0, tvd: 0},
-            {md: 10000, inc: 0, azi: 0, tvd: 10000}
+            {md: Number(document.getElementById("depth").value), inc: 0, azi: 0, tvd: Number(document.getElementById("depth").value)}
         ],
 
-        well_sections: [
-            {
-                type: "casing",
-                top_md: 0,
-                end_md: 5000,
-                casing_id: 9.625,
-                hole_d: 12.25
-            },
-            {
-                type: "open hole",
-                top_md: 5000,
-                end_md: 10000,
-                casing_id: 0,
-                hole_d: 8.5
-            }
-        ],
-
-        bha: [
-            {name: "Drill Pipe", od: 5, id: 4, length: 8000},
-            {name: "Drill Collar", od: 6.5, id: 2.5, length: 2000}
-        ]
+        well_sections: well_sections,
+        bha: bha
     };
+}
+
+// ================= RUN =================
+async function runSimulation() {
+
+    document.getElementById("result").innerText = "Running...";
+
+    const payload = buildPayload();
 
     try {
 
         const response = await fetch("/simulate", {
             method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
+            headers: {"Content-Type": "application/json"},
             body: JSON.stringify(payload)
         });
 
         const result = await response.json();
 
-        // 🔥 HANDLE BACKEND ERROR
         if (!response.ok) {
             document.getElementById("result").innerText =
                 "ERROR " + response.status + ":\n" + JSON.stringify(result, null, 2);
             return;
         }
 
-        // ✅ SAFE ACCESS
         document.getElementById("result").innerText =
             "ECD Bottom: " + result.summary.ecd_bottom + "\n" +
-            "ESD Bottom: " + result.summary.esd_bottom + "\n" +
-            "Pressure Loss: " + result.summary.total_pressure_loss;
+            "ESD Bottom: " + result.summary.esd_bottom;
 
         plotChart(result.profile);
 
-    } catch (error) {
-        document.getElementById("result").innerText =
-            "ERROR: " + error.message;
+    } catch (err) {
+        document.getElementById("result").innerText = "ERROR: " + err.message;
     }
 }
 
+// ================= CHART =================
 function plotChart(profile) {
 
-    const ctx = document.getElementById("chart").getContext("2d");
+    const ctx = document.getElementById("chart");
 
-    // 🔥 SAFE DESTROY
     if (chartInstance && typeof chartInstance.destroy === "function") {
         chartInstance.destroy();
     }
@@ -124,31 +201,13 @@ function plotChart(profile) {
         data: {
             labels: profile.depth,
             datasets: [
-                {
-                    label: "ECD",
-                    data: profile.ecd
-                },
-                {
-                    label: "ESD",
-                    data: profile.esd
-                }
+                {label: "ECD", data: profile.ecd},
+                {label: "ESD", data: profile.esd}
             ]
         },
         options: {
             scales: {
-                y: {
-                    reverse: true,
-                    title: {
-                        display: true,
-                        text: "Depth"
-                    }
-                },
-                x: {
-                    title: {
-                        display: true,
-                        text: "ECD / ESD"
-                    }
-                }
+                y: {reverse: true}
             }
         }
     });
