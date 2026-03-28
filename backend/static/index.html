@@ -5,9 +5,14 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
     <style>
-        .tab { display: none; }
+        body { font-family: sans-serif; margin: 20px; }
+        .tab { display: none; margin-top: 20px; }
         .active { display: block; }
         input:disabled { background-color: #ddd; }
+        table { border-collapse: collapse; margin-top: 10px; width: 100%; max-width: 600px; }
+        th, td { padding: 8px; text-align: left; }
+        button { margin-top: 10px; padding: 5px 10px; cursor: pointer; }
+        .nav-btn { padding: 10px 15px; font-weight: bold; }
     </style>
 </head>
 
@@ -15,139 +20,140 @@
 
 <h1>Drilling Hydraulics Simulator</h1>
 
-<button onclick="showTab('simulation')">Simulation</button>
-<button onclick="showTab('well')">Well Design</button>
-<button onclick="showTab('bha')">BHA</button>
-<button onclick="showTab('mud')">Mud</button>
-<button onclick="showTab('temp')">Temperature</button>
+<button class="nav-btn" onclick="showTab('simulation')">Simulation</button>
+<button class="nav-btn" onclick="showTab('well')">Well Design</button>
+<button class="nav-btn" onclick="showTab('trajectory')">Trajectory</button>
+<button class="nav-btn" onclick="showTab('bha')">BHA</button>
+<button class="nav-btn" onclick="showTab('mud')">Mud</button>
+<button class="nav-btn" onclick="showTab('temp')">Temperature</button>
 
-<!-- ================= SIMULATION ================= -->
 <div id="simulation" class="tab active">
+    <h3>Simulation Parameters</h3>
+    Flowrate (gpm): <input id="flowrate" value="400"><br><br>
+    Depth (ft): <input id="depth" value="10000"><br><br>
+    Surface Backpressure (psi): <input id="sbp" value="0"><br><br>
 
-Flowrate: <input id="flowrate" value="400"><br><br>
-Depth: <input id="depth" value="10000"><br><br>
+    <button onclick="runSimulation()" style="background-color: #4CAF50; color: white; padding: 10px 20px; border: none; font-size: 16px;">Run Simulation</button>
 
-<button onclick="runSimulation()">Run Simulation</button>
-
-<pre id="result">Waiting...</pre>
-<canvas id="chart"></canvas>
-
+    <h3 id="result" style="color: #333;">Waiting...</h3>
+    <div style="max-width: 800px;">
+        <canvas id="chart"></canvas>
+    </div>
 </div>
 
-<!-- ================= WELL DESIGN ================= -->
 <div id="well" class="tab">
-
-<h3>Well Design (Top → Bottom)</h3>
-
-<table id="wellTable" border="1">
-<tr>
-<th>Type</th>
-<th>Name</th>
-<th>Top MD</th>
-<th>Bottom MD</th>
-<th>OD</th>
-<th>ID</th>
-</tr>
-
-<!-- ROW 1 -->
-<tr>
-<td>
-<select onchange="toggleOD(this)">
-<option value="casing">Casing</option>
-<option value="liner">Liner</option>
-<option value="open hole">Open Hole</option>
-</select>
-</td>
-<td contenteditable>13-3/8" Casing</td>
-<td contenteditable>0</td>
-<td contenteditable>3000</td>
-<td><input value="17.5"></td>
-<td><input value="12.347"></td>
-</tr>
-
-<!-- ROW 2 -->
-<tr>
-<td>
-<select onchange="toggleOD(this)">
-<option value="casing">Casing</option>
-<option value="liner" selected>Liner</option>
-<option value="open hole">Open Hole</option>
-</select>
-</td>
-<td contenteditable>9-5/8" Liner</td>
-<td contenteditable>2700</td>
-<td contenteditable>7000</td>
-<td><input value="12.25"></td>
-<td><input value="8.535"></td>
-</tr>
-
-<!-- ROW 3 -->
-<tr>
-<td>
-<select onchange="toggleOD(this)">
-<option value="casing">Casing</option>
-<option value="liner">Liner</option>
-<option value="open hole" selected>Open Hole</option>
-</select>
-</td>
-<td contenteditable>8-1/2" OH</td>
-<td contenteditable>7000</td>
-<td contenteditable>10000</td>
-<td><input disabled></td>
-<td><input value="8.5"></td>
-</tr>
-
-</table>
-
-<br>
-<button onclick="addWellRow()">Add Row</button>
-
+    <h3>Well Design (Top → Bottom)</h3>
+    <table id="wellTable" border="1">
+        <tr>
+            <th>Type</th>
+            <th>Name</th>
+            <th>Top MD</th>
+            <th>Bottom MD</th>
+            <th>OD</th>
+            <th>ID</th>
+        </tr>
+        <tr>
+            <td>
+                <select onchange="toggleOD(this)">
+                    <option value="casing">Casing</option>
+                    <option value="liner">Liner</option>
+                    <option value="open hole">Open Hole</option>
+                </select>
+            </td>
+            <td contenteditable>13-3/8" Casing</td>
+            <td contenteditable>0</td>
+            <td contenteditable>3000</td>
+            <td><input value="17.5"></td>
+            <td><input value="12.347"></td>
+        </tr>
+        <tr>
+            <td>
+                <select onchange="toggleOD(this)">
+                    <option value="casing">Casing</option>
+                    <option value="liner" selected>Liner</option>
+                    <option value="open hole">Open Hole</option>
+                </select>
+            </td>
+            <td contenteditable>9-5/8" Liner</td>
+            <td contenteditable>2700</td>
+            <td contenteditable>7000</td>
+            <td><input value="12.25"></td>
+            <td><input value="8.535"></td>
+        </tr>
+        <tr>
+            <td>
+                <select onchange="toggleOD(this)">
+                    <option value="casing">Casing</option>
+                    <option value="liner">Liner</option>
+                    <option value="open hole" selected>Open Hole</option>
+                </select>
+            </td>
+            <td contenteditable>8-1/2" OH</td>
+            <td contenteditable>7000</td>
+            <td contenteditable>10000</td>
+            <td><input disabled></td>
+            <td><input value="8.5"></td>
+        </tr>
+    </table>
+    <button onclick="addWellRow()">Add Row</button>
 </div>
 
-<!-- ================= BHA ================= -->
+<div id="trajectory" class="tab">
+    <h3>Wellbore Trajectory</h3>
+    <table id="trajectoryTable" border="1">
+        <tr>
+            <th>MD (ft)</th>
+            <th>Inclination (deg)</th>
+            <th>Azimuth (deg)</th>
+        </tr>
+        <tr>
+            <td contenteditable>0</td>
+            <td contenteditable>0</td>
+            <td contenteditable>0</td>
+        </tr>
+        <tr>
+            <td contenteditable>10000</td>
+            <td contenteditable>0</td>
+            <td contenteditable>0</td>
+        </tr>
+    </table>
+    <button onclick="addTrajectoryRow()">Add Survey Point</button>
+</div>
+
 <div id="bha" class="tab">
-
-<table id="bhaTable" border="1">
-<tr><th>Name</th><th>OD</th><th>ID</th><th>Length</th></tr>
-
-<tr>
-<td>Drill Pipe</td>
-<td><input value="5"></td>
-<td><input value="4"></td>
-<td><input value="8000"></td>
-</tr>
-
-<tr>
-<td>Drill Collar</td>
-<td><input value="6.5"></td>
-<td><input value="2.5"></td>
-<td><input value="2000"></td>
-</tr>
-
-</table>
-
+    <h3>Bottom Hole Assembly</h3>
+    <table id="bhaTable" border="1">
+        <tr><th>Name</th><th>OD</th><th>ID</th><th>Length</th></tr>
+        <tr>
+            <td>Drill Pipe</td>
+            <td><input value="5"></td>
+            <td><input value="4"></td>
+            <td><input value="8000"></td>
+        </tr>
+        <tr>
+            <td>Drill Collar</td>
+            <td><input value="6.5"></td>
+            <td><input value="2.5"></td>
+            <td><input value="2000"></td>
+        </tr>
+    </table>
 </div>
 
-<!-- ================= MUD ================= -->
 <div id="mud" class="tab">
-
-MW <input id="mw" value="10"><br><br>
-
-600 <input id="f600" value="60">
-300 <input id="f300" value="40">
-200 <input id="f200" value="30">
-100 <input id="f100" value="20">
-6 <input id="f6" value="10">
-3 <input id="f3" value="5">
-
+    <h3>Fluid Properties</h3>
+    MW (ppg): <input id="mw" value="10"><br><br>
+    600: <input id="f600" value="60"> | 
+    300: <input id="f300" value="40"> | 
+    200: <input id="f200" value="30"><br><br>
+    100: <input id="f100" value="20"> | 
+    6: <input id="f6" value="10"> | 
+    3: <input id="f3" value="5">
 </div>
 
-<!-- ================= TEMP ================= -->
 <div id="temp" class="tab">
-
-Surface Temp <input id="surface_temp" value="80"><br><br>
-BHCT <input id="bhct" value="150">
-
+    <h3>Temperature Gradient</h3>
+    Surface Temp (°F): <input id="surface_temp" value="80"><br><br>
+    BHCT (°F): <input id="bhct" value="150">
 </div>
 
 <script>
@@ -159,14 +165,9 @@ function showTab(tab) {
     document.getElementById(tab).classList.add("active");
 }
 
-// -----------------------------
-// ENABLE/DISABLE OD
-// -----------------------------
 function toggleOD(select){
-
     const row = select.parentElement.parentElement;
     const odInput = row.cells[4].querySelector("input");
-
     if(select.value === "open hole"){
         odInput.disabled = true;
         odInput.value = "";
@@ -175,60 +176,65 @@ function toggleOD(select){
     }
 }
 
-// -----------------------------
-// ADD ROW
-// -----------------------------
 function addWellRow(){
-
     const table = document.getElementById("wellTable");
-
     const row = table.insertRow();
-
     row.innerHTML = `
-<td>
-<select onchange="toggleOD(this)">
-<option value="casing">Casing</option>
-<option value="liner">Liner</option>
-<option value="open hole">Open Hole</option>
-</select>
-</td>
-<td contenteditable>New Section</td>
-<td contenteditable></td>
-<td contenteditable></td>
-<td><input></td>
-<td><input></td>
-`;
+        <td>
+            <select onchange="toggleOD(this)">
+                <option value="casing">Casing</option>
+                <option value="liner">Liner</option>
+                <option value="open hole">Open Hole</option>
+            </select>
+        </td>
+        <td contenteditable>New Section</td>
+        <td contenteditable></td>
+        <td contenteditable></td>
+        <td><input></td>
+        <td><input></td>
+    `;
 }
 
-// -----------------------------
-// BUILD PAYLOAD
-// -----------------------------
-function buildPayload(){
+function addTrajectoryRow(){
+    const table = document.getElementById("trajectoryTable");
+    const row = table.insertRow();
+    row.innerHTML = `
+        <td contenteditable></td>
+        <td contenteditable></td>
+        <td contenteditable></td>
+    `;
+}
 
+function buildPayload(){
     let well_sections = [];
     let rows = document.getElementById("wellTable").rows;
-
     for (let i = 1; i < rows.length; i++) {
         let c = rows[i].cells;
-
         let type = c[0].children[0].value;
-
         well_sections.push({
             type: type,
             top_md: Number(c[2].innerText),
             end_md: Number(c[3].innerText),
-
             casing_id: Number(c[5].querySelector("input").value),
             hole_d: type === "open hole" ? Number(c[5].querySelector("input").value) : Number(c[4].querySelector("input").value)
         });
     }
 
+    let trajectory = [];
+    let trajRows = document.getElementById("trajectoryTable").rows;
+    for (let i = 1; i < trajRows.length; i++) {
+        let c = trajRows[i].cells;
+        trajectory.push({
+            md: Number(c[0].innerText),
+            inc: Number(c[1].innerText),
+            azi: Number(c[2].innerText)
+        });
+    }
+
     let bha = [];
     let bhaRows = document.getElementById("bhaTable").rows;
-
     for (let i = 1; i < bhaRows.length; i++) {
         let c = bhaRows[i].cells;
-
         bha.push({
             name: c[0].innerText,
             od: Number(c[1].children[0].value),
@@ -240,6 +246,8 @@ function buildPayload(){
     return {
         flowrate: Number(document.getElementById("flowrate").value),
         depth: Number(document.getElementById("depth").value),
+        sbp: Number(document.getElementById("sbp").value),
+        hole_diameter: 8.5,
 
         mpd_mode: "SBP",
         gradient_mode: "static",
@@ -257,20 +265,16 @@ function buildPayload(){
         temperature: {
             surface_temp: Number(document.getElementById("surface_temp").value),
             bhct: Number(document.getElementById("bhct").value),
-            geothermal_grad: 1.5
+            geothermal_grad: 1.5,
+            beta: 0.0003
         },
 
-        trajectory: [
-            {md: 0, inc: 0, azi: 0, tvd: 0},
-            {md: Number(document.getElementById("depth").value), inc: 0, azi: 0, tvd: Number(document.getElementById("depth").value)}
-        ],
-
+        trajectory: trajectory,
         well_sections: well_sections,
         bha: bha,
 
         cuttings: {
             rop: 50,
-            concentration: 0.05,
             size: 0.2,
             density: 2.65,
             rpm: 120
@@ -278,36 +282,40 @@ function buildPayload(){
     };
 }
 
-// -----------------------------
-// RUN
-// -----------------------------
 async function runSimulation(){
-
     document.getElementById("result").innerText = "Running...";
-
     const payload = buildPayload();
 
-    const response = await fetch("/simulate", {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify(payload)
-    });
+    try {
+        const response = await fetch("/simulate", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify(payload)
+        });
 
-    const result = await response.json();
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
 
-    document.getElementById("result").innerText =
-        "ECD Bottom: " + result.summary.ecd_bottom;
+        const result = await response.json();
+        
+        if (result.error) {
+            document.getElementById("result").innerText = "Error: " + result.error;
+            return;
+        }
 
-    plotChart(result.profile);
+        document.getElementById("result").innerText =
+            "ECD Bottom: " + result.summary.ecd_bottom + " ppg | Annular Loss: " + result.summary.total_annular_loss_psi + " psi";
+
+        plotChart(result.profile);
+    } catch (error) {
+        document.getElementById("result").innerText = "Failed to run simulation. Check console.";
+        console.error("Simulation error:", error);
+    }
 }
 
-// -----------------------------
-// CHART
-// -----------------------------
 function plotChart(profile){
-
     const ctx = document.getElementById("chart");
-
     if(chartInstance) chartInstance.destroy();
 
     const ecdData = profile.depth.map((d,i)=>({x:profile.ecd[i], y:d}));
@@ -317,20 +325,19 @@ function plotChart(profile){
         type:"scatter",
         data:{
             datasets:[
-                {label:"ECD (ppg)", data:ecdData, showLine:true},
-                {label:"ESD (ppg)", data:esdData, showLine:true}
+                {label:"ECD (ppg)", data:ecdData, showLine:true, borderColor: "red", backgroundColor: "red"},
+                {label:"ESD (ppg)", data:esdData, showLine:true, borderColor: "blue", backgroundColor: "blue"}
             ]
         },
         options:{
             scales:{
                 x:{title:{display:true,text:"Density (ppg)"}},
-                y:{reverse:true,title:{display:true,text:"Depth (ft)"}}
+                y:{reverse:true,title:{display:true,text:"Measured Depth (ft)"}}
             }
         }
     });
 }
 
 </script>
-
 </body>
 </html>
