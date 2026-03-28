@@ -5,16 +5,24 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
     <style>
-        body { font-family: sans-serif; margin: 20px; }
+        body { font-family: sans-serif; margin: 20px; color: #333; }
         .tab { display: none; margin-top: 20px; }
         .active { display: block; }
+        input { width: 80px; padding: 4px; }
         input:disabled { background-color: #ddd; }
         table { border-collapse: collapse; margin-top: 10px; width: 100%; max-width: 700px; }
-        th, td { padding: 8px; text-align: left; }
-        button { margin-top: 10px; padding: 5px 10px; cursor: pointer; }
-        .nav-btn { padding: 10px 15px; font-weight: bold; }
+        th, td { padding: 8px; text-align: left; border: 1px solid #ccc; }
+        button { margin-top: 10px; padding: 8px 15px; cursor: pointer; border-radius: 4px; border: 1px solid #ccc; background: #eee; }
+        button:hover { background: #ddd; }
+        .nav-btn { padding: 10px 15px; font-weight: bold; border: none; background: #ddd; border-radius: 4px 4px 0 0; cursor: pointer; }
+        .nav-btn.active-nav { background: #4CAF50; color: white; }
         .unit-settings { display: grid; grid-template-columns: 150px 100px; gap: 10px; margin-bottom: 20px; }
-        .unit-label { font-weight: bold; color: #555; }
+        
+        /* Dashboard Layout */
+        .dashboard-container { display: flex; gap: 20px; align-items: stretch; margin-top: 15px; max-width: 900px; }
+        .schematic-box { width: 120px; background: #f4f7f6; border: 1px solid #ccc; display: flex; justify-content: center; }
+        .chart-box { flex-grow: 1; background: #fff; border: 1px solid #ccc; padding: 10px; }
+        .controls-row { display: flex; gap: 20px; align-items: center; background: #f9f9f9; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
     </style>
 </head>
 
@@ -22,13 +30,15 @@
 
 <h1>Drilling Hydraulics Simulator</h1>
 
-<button class="nav-btn" onclick="showTab('simulation')">Simulation</button>
-<button class="nav-btn" onclick="showTab('well')">Well Design</button>
-<button class="nav-btn" onclick="showTab('trajectory')">Trajectory</button>
-<button class="nav-btn" onclick="showTab('bha')">BHA</button>
-<button class="nav-btn" onclick="showTab('mud')">Mud</button>
-<button class="nav-btn" onclick="showTab('temp')">Temperature</button>
-<button class="nav-btn" onclick="showTab('units')" style="background-color: #e0e0e0;">Units ⚙️</button>
+<div>
+    <button class="nav-btn active-nav" onclick="showTab('simulation', this)">Simulation</button>
+    <button class="nav-btn" onclick="showTab('well', this)">Well Design</button>
+    <button class="nav-btn" onclick="showTab('trajectory', this)">Trajectory</button>
+    <button class="nav-btn" onclick="showTab('bha', this)">BHA</button>
+    <button class="nav-btn" onclick="showTab('mud', this)">Mud</button>
+    <button class="nav-btn" onclick="showTab('temp', this)">Temperature</button>
+    <button class="nav-btn" onclick="showTab('units', this)" style="float: right; background-color: #555; color: white;">Units ⚙️</button>
+</div>
 
 <div id="units" class="tab">
     <h3>Global Unit Preferences</h3>
@@ -75,79 +85,112 @@
 </div>
 
 <div id="simulation" class="tab active">
-    <h3>Simulation Parameters</h3>
-    Flowrate (<span class="lbl-flow">gpm</span>): <input id="flowrate" class="val-flow" value="400"><br><br>
-    Depth (<span class="lbl-length">ft</span>): <input id="depth" class="val-length" value="10000"><br><br>
-    Surface Backpressure (<span class="lbl-press">psi</span>): <input id="sbp" class="val-press" value="0"><br><br>
+    
+    <div class="controls-row">
+        <div>
+            <label>Flowrate (<span class="lbl-flow">gpm</span>):</label><br>
+            <input id="flowrate" class="val-flow" value="400">
+        </div>
+        <div>
+            <label>Depth (<span class="lbl-length">ft</span>):</label><br>
+            <input id="depth" class="val-length" value="10000" onkeyup="updateSchematics()">
+        </div>
+        <div>
+            <label>SBP (<span class="lbl-press">psi</span>):</label><br>
+            <input id="sbp" class="val-press" value="0">
+        </div>
+        <div>
+            <label>Chart Depth Scale:</label><br>
+            <select id="chartScale" onchange="replotChart()">
+                <option value="auto">Adjustable (Surface to TD)</option>
+                <option value="open_hole">Open Hole Only (Shoe to TD)</option>
+            </select>
+        </div>
+        <div style="margin-left: auto;">
+            <button onclick="runSimulation()" style="background-color: #4CAF50; color: white; border: none; font-size: 16px; font-weight: bold;">Run Simulation</button>
+        </div>
+    </div>
 
-    <button onclick="runSimulation()" style="background-color: #4CAF50; color: white; padding: 10px 20px; border: none; font-size: 16px;">Run Simulation</button>
-
-    <h3 id="result" style="color: #333;">Waiting...</h3>
-    <div style="max-width: 800px;">
-        <canvas id="chart"></canvas>
+    <h4 id="result" style="color: #4CAF50; margin-top: 15px;">Ready to run...</h4>
+    
+    <div class="dashboard-container">
+        <div class="schematic-box">
+            <canvas id="wellCanvasSim" width="100" height="500"></canvas>
+        </div>
+        <div class="chart-box">
+            <canvas id="chart"></canvas>
+        </div>
     </div>
 </div>
 
 <div id="well" class="tab">
-    <h3>Well Design (Top → Bottom)</h3>
-    <table id="wellTable" border="1">
-        <tr>
-            <th>Type</th>
-            <th>Name</th>
-            <th>Top MD (<span class="lbl-length">ft</span>)</th>
-            <th>Bottom MD (<span class="lbl-length">ft</span>)</th>
-            <th>OD (<span class="lbl-diam">in</span>)</th>
-            <th>ID (<span class="lbl-diam">in</span>)</th>
-        </tr>
-        <tr>
-            <td>
-                <select onchange="toggleOD(this)">
-                    <option value="casing">Casing</option>
-                    <option value="liner">Liner</option>
-                    <option value="open hole">Open Hole</option>
-                </select>
-            </td>
-            <td contenteditable>13-3/8" Casing</td>
-            <td contenteditable class="val-length">0</td>
-            <td contenteditable class="val-length">3000</td>
-            <td><input class="val-diam" value="17.5"></td>
-            <td><input class="val-diam" value="12.347"></td>
-        </tr>
-        <tr>
-            <td>
-                <select onchange="toggleOD(this)">
-                    <option value="casing">Casing</option>
-                    <option value="liner" selected>Liner</option>
-                    <option value="open hole">Open Hole</option>
-                </select>
-            </td>
-            <td contenteditable>9-5/8" Liner</td>
-            <td contenteditable class="val-length">2700</td>
-            <td contenteditable class="val-length">7000</td>
-            <td><input class="val-diam" value="12.25"></td>
-            <td><input class="val-diam" value="8.535"></td>
-        </tr>
-        <tr>
-            <td>
-                <select onchange="toggleOD(this)">
-                    <option value="casing">Casing</option>
-                    <option value="liner">Liner</option>
-                    <option value="open hole" selected>Open Hole</option>
-                </select>
-            </td>
-            <td contenteditable>8-1/2" OH</td>
-            <td contenteditable class="val-length">7000</td>
-            <td contenteditable class="val-length">10000</td>
-            <td><input class="val-diam" disabled></td>
-            <td><input class="val-diam" value="8.5"></td>
-        </tr>
-    </table>
-    <button onclick="addWellRow()">Add Row</button>
+    <div style="display: flex; gap: 40px; align-items: flex-start;">
+        <div>
+            <h3>Well Design (Top → Bottom)</h3>
+            <table id="wellTable" onkeyup="updateSchematics()" onchange="updateSchematics()">
+                <tr>
+                    <th>Type</th>
+                    <th>Name</th>
+                    <th>Top MD (<span class="lbl-length">ft</span>)</th>
+                    <th>Bottom MD (<span class="lbl-length">ft</span>)</th>
+                    <th>OD (<span class="lbl-diam">in</span>)</th>
+                    <th>ID (<span class="lbl-diam">in</span>)</th>
+                </tr>
+                <tr>
+                    <td>
+                        <select onchange="toggleOD(this)">
+                            <option value="casing">Casing</option>
+                            <option value="liner">Liner</option>
+                            <option value="open hole">Open Hole</option>
+                        </select>
+                    </td>
+                    <td contenteditable>13-3/8" Casing</td>
+                    <td contenteditable class="val-length">0</td>
+                    <td contenteditable class="val-length">3000</td>
+                    <td><input class="val-diam" value="17.5"></td>
+                    <td><input class="val-diam" value="12.347"></td>
+                </tr>
+                <tr>
+                    <td>
+                        <select onchange="toggleOD(this)">
+                            <option value="casing">Casing</option>
+                            <option value="liner" selected>Liner</option>
+                            <option value="open hole">Open Hole</option>
+                        </select>
+                    </td>
+                    <td contenteditable>9-5/8" Liner</td>
+                    <td contenteditable class="val-length">2700</td>
+                    <td contenteditable class="val-length">7000</td>
+                    <td><input class="val-diam" value="12.25"></td>
+                    <td><input class="val-diam" value="8.535"></td>
+                </tr>
+                <tr>
+                    <td>
+                        <select onchange="toggleOD(this)">
+                            <option value="casing">Casing</option>
+                            <option value="liner">Liner</option>
+                            <option value="open hole" selected>Open Hole</option>
+                        </select>
+                    </td>
+                    <td contenteditable>8-1/2" OH</td>
+                    <td contenteditable class="val-length">7000</td>
+                    <td contenteditable class="val-length">10000</td>
+                    <td><input class="val-diam" disabled></td>
+                    <td><input class="val-diam" value="8.5"></td>
+                </tr>
+            </table>
+            <button onclick="addWellRow()">Add Row</button>
+        </div>
+        <div style="background: #f4f7f6; padding: 10px; border: 1px solid #ccc;">
+            <h4 style="margin-top: 0; text-align: center;">Schematic</h4>
+            <canvas id="wellCanvasDesign" width="100" height="400"></canvas>
+        </div>
+    </div>
 </div>
 
 <div id="trajectory" class="tab">
     <h3>Wellbore Trajectory</h3>
-    <table id="trajectoryTable" border="1">
+    <table id="trajectoryTable">
         <tr>
             <th>MD (<span class="lbl-length">ft</span>)</th>
             <th>Inclination (deg)</th>
@@ -169,7 +212,7 @@
 
 <div id="bha" class="tab">
     <h3>Bottom Hole Assembly</h3>
-    <table id="bhaTable" border="1">
+    <table id="bhaTable">
         <tr>
             <th>Name</th>
             <th>OD (<span class="lbl-diam">in</span>)</th>
@@ -212,21 +255,20 @@
 <script>
 
 let chartInstance = null;
+let lastSimResult = null; // Store last run for fast re-plotting
 
-// Track the current unit state to know *how* to convert when a dropdown changes
-let currentUnits = {
-    length: "ft",
-    diam: "in",
-    density: "ppg",
-    press: "psi",
-    flow: "gpm",
-    temp: "F"
-};
+// Unit Tracker
+let currentUnits = { length: "ft", diam: "in", density: "ppg", press: "psi", flow: "gpm", temp: "F" };
 
-// ================= UI NAVIGATION & DYNAMIC ROWS =================
-function showTab(tab) {
+// ================= UI NAVIGATION =================
+function showTab(tab, btn) {
     document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
     document.getElementById(tab).classList.add("active");
+    
+    document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active-nav"));
+    btn.classList.add("active-nav");
+
+    updateSchematics();
 }
 
 function toggleOD(select){
@@ -238,6 +280,7 @@ function toggleOD(select){
     } else {
         odInput.disabled = false;
     }
+    updateSchematics();
 }
 
 function addWellRow(){
@@ -262,16 +305,10 @@ function addWellRow(){
 function addTrajectoryRow(){
     const table = document.getElementById("trajectoryTable");
     const row = table.insertRow();
-    row.innerHTML = `
-        <td contenteditable class="val-length"></td>
-        <td contenteditable></td>
-        <td contenteditable></td>
-    `;
+    row.innerHTML = `<td contenteditable class="val-length"></td><td contenteditable></td><td contenteditable></td>`;
 }
 
 // ================= REACTIVE UNIT CONVERSION ENGINE =================
-
-// Master math dictionaries
 const converters = {
     length: { toBase: (v, u) => u === "m" ? v * 3.28084 : v,  fromBase: (v, u) => u === "m" ? v / 3.28084 : v },
     diam:   { toBase: (v, u) => u === "mm" ? v / 25.4 : v,    fromBase: (v, u) => u === "mm" ? v * 25.4 : v },
@@ -281,55 +318,128 @@ const converters = {
     temp:   { toBase: (v, u) => u === "C" ? (v * 9/5) + 32 : v, fromBase: (v, u) => u === "C" ? (v - 32) * 5/9 : v }
 };
 
-// Fires whenever a dropdown is changed
 function changeUnit(category, selectElement) {
     const newUnit = selectElement.value;
     const oldUnit = currentUnits[category];
     if (oldUnit === newUnit) return;
 
-    // Find every input or cell that belongs to this category
     const elements = document.querySelectorAll(`.val-${category}`);
-    
     elements.forEach(el => {
-        // Read current value (works for standard <input> and <td contenteditable>)
         let isInput = el.tagName === 'INPUT';
         let valStr = isInput ? el.value : el.innerText;
-        
         if (valStr.trim() !== "") {
             let val = parseFloat(valStr);
             if (!isNaN(val)) {
-                // Route through the base standard (e.g., convert user's m -> ft -> user's new unit)
                 let baseVal = converters[category].toBase(val, oldUnit);
                 let newVal = converters[category].fromBase(baseVal, newUnit);
-                
-                // Keep the UI numbers clean (up to 3 decimals, dropping trailing zeros)
                 newVal = Number(newVal.toFixed(3));
-                
-                if (isInput) { el.value = newVal; } else { el.innerText = newVal; }
+                if (isInput) el.value = newVal; else el.innerText = newVal;
             }
         }
     });
 
-    // Update labels and state
     document.querySelectorAll(`.lbl-${category}`).forEach(el => el.innerText = category === "temp" ? "°" + newUnit : newUnit);
     currentUnits[category] = newUnit;
+    
+    // Refresh plots and drawings in new units
+    if (lastSimResult) replotChart();
+    updateSchematics();
 }
 
-// Convert TO Base (Called during API request to sanitize payload for Python)
 function toBaseLength(v) { return converters.length.toBase(v, currentUnits.length); }
 function toBaseDiam(v)   { return converters.diam.toBase(v, currentUnits.diam); }
-function toBaseFlow(v)   { return converters.flow.toBase(v, currentUnits.flow); }
-function toBasePress(v)  { return converters.press.toBase(v, currentUnits.press); }
-function toBaseDens(v)   { return converters.density.toBase(v, currentUnits.density); }
-function toBaseTemp(v)   { return converters.temp.toBase(v, currentUnits.temp); }
-
-// Convert FROM Base (Called during chart plotting to show user's unit preference)
 function fromBaseLength(v) { return converters.length.fromBase(v, currentUnits.length); }
 function fromBaseDens(v)   { return converters.density.fromBase(v, currentUnits.density); }
 function fromBasePress(v)  { return converters.press.fromBase(v, currentUnits.press); }
 
+// ================= WELL SCHEMATIC VISUALIZATION =================
+function getWellSectionsForDrawing() {
+    let well_sections = [];
+    let rows = document.getElementById("wellTable").rows;
+    for (let i = 1; i < rows.length; i++) {
+        let c = rows[i].cells;
+        let type = c[0].children[0].value;
+        well_sections.push({
+            type: type,
+            top: toBaseLength(Number(c[2].innerText)),
+            bottom: toBaseLength(Number(c[3].innerText)),
+            od: toBaseDiam(Number(c[4].querySelector("input").value || 20)),
+            id: toBaseDiam(Number(c[5].querySelector("input").value || 8.5))
+        });
+    }
+    return well_sections;
+}
+
+function drawWellCanvas(canvasId, yMinBase, yMaxBase) {
+    const canvas = document.getElementById(canvasId);
+    if(!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width;
+    const h = canvas.height;
+
+    ctx.clearRect(0, 0, w, h);
+    if(yMaxBase <= 0) return;
+
+    const sections = getWellSectionsForDrawing();
+    if(sections.length === 0) return;
+
+    let maxOD = Math.max(...sections.map(s => s.od));
+
+    sections.forEach(sec => {
+        // Skip if outside drawing window
+        if (sec.bottom <= yMinBase || sec.top >= yMaxBase) return;
+
+        let drawTop = Math.max(sec.top, yMinBase);
+        let drawBottom = Math.min(sec.bottom, yMaxBase);
+
+        let y1 = ((drawTop - yMinBase) / (yMaxBase - yMinBase)) * h;
+        let y2 = ((drawBottom - yMinBase) / (yMaxBase - yMinBase)) * h;
+        let secH = y2 - y1;
+
+        let secW = (sec.id / maxOD) * (w * 0.7);
+        let x = (w - secW) / 2;
+
+        if (sec.type === "open hole") {
+            ctx.fillStyle = "#d4c5b9"; // Earthy tone
+            ctx.fillRect(x, y1, secW, secH);
+            ctx.strokeStyle = "#8c7b6c";
+            ctx.strokeRect(x, y1, secW, secH);
+        } else {
+            ctx.fillStyle = "#555"; // Casing steel
+            ctx.fillRect(x, y1, secW, secH);
+            
+            // Draw hollow ID
+            let idW = secW * 0.75;
+            let idX = (w - idW) / 2;
+            ctx.fillStyle = "#f4f7f6";
+            ctx.fillRect(idX, y1, idW, secH);
+        }
+    });
+}
+
+function updateSchematics() {
+    let maxDepthBase = toBaseLength(Number(document.getElementById("depth").value) || 10000);
+    
+    // Draw Well Design Tab (Always 0 to TD)
+    drawWellCanvas("wellCanvasDesign", 0, maxDepthBase);
+
+    // Draw Simulation Tab (Respects dropdown scale)
+    let scaleMode = document.getElementById("chartScale").value;
+    let minDepthBase = 0;
+    
+    if (scaleMode === "open_hole") {
+        let sections = getWellSectionsForDrawing();
+        let openHoles = sections.filter(s => s.type === "open hole");
+        if (openHoles.length > 0) minDepthBase = openHoles[0].top;
+    }
+    
+    drawWellCanvas("wellCanvasSim", minDepthBase, maxDepthBase);
+}
+
+
 // ================= BUILD & RUN =================
 function buildPayload(){
+    // Existing buildPayload logic...
     let well_sections = [];
     let rows = document.getElementById("wellTable").rows;
     for (let i = 1; i < rows.length; i++) {
@@ -348,136 +458,123 @@ function buildPayload(){
     let trajRows = document.getElementById("trajectoryTable").rows;
     for (let i = 1; i < trajRows.length; i++) {
         let c = trajRows[i].cells;
-        trajectory.push({
-            md: toBaseLength(Number(c[0].innerText)),
-            inc: Number(c[1].innerText),
-            azi: Number(c[2].innerText)
-        });
+        trajectory.push({ md: toBaseLength(Number(c[0].innerText)), inc: Number(c[1].innerText), azi: Number(c[2].innerText) });
     }
 
     let bha = [];
     let bhaRows = document.getElementById("bhaTable").rows;
     for (let i = 1; i < bhaRows.length; i++) {
         let c = bhaRows[i].cells;
-        bha.push({
-            name: c[0].innerText,
-            od: toBaseDiam(Number(c[1].children[0].value)),
-            id: toBaseDiam(Number(c[2].children[0].value)),
-            length: toBaseLength(Number(c[3].children[0].value))
-        });
+        bha.push({ name: c[0].innerText, od: converters.diam.toBase(Number(c[1].children[0].value), currentUnits.diam), id: converters.diam.toBase(Number(c[2].children[0].value), currentUnits.diam), length: converters.length.toBase(Number(c[3].children[0].value), currentUnits.length) });
     }
 
     return {
-        // The API strictly wants the standard Field units. These functions guarantee it gets them.
-        flowrate: toBaseFlow(Number(document.getElementById("flowrate").value)),
+        flowrate: converters.flow.toBase(Number(document.getElementById("flowrate").value), currentUnits.flow),
         depth: toBaseLength(Number(document.getElementById("depth").value)),
-        sbp: toBasePress(Number(document.getElementById("sbp").value)),
+        sbp: converters.press.toBase(Number(document.getElementById("sbp").value), currentUnits.press),
         hole_diameter: 8.5, 
-
-        mpd_mode: "SBP",
-        gradient_mode: "static",
-
+        mpd_mode: "SBP", gradient_mode: "static",
         fluid: {
-            mw: toBaseDens(Number(document.getElementById("mw").value)),
-            fann_600: Number(document.getElementById("f600").value),
-            fann_300: Number(document.getElementById("f300").value),
-            fann_200: Number(document.getElementById("f200").value),
-            fann_100: Number(document.getElementById("f100").value),
-            fann_6: Number(document.getElementById("f6").value),
-            fann_3: Number(document.getElementById("f3").value)
+            mw: converters.density.toBase(Number(document.getElementById("mw").value), currentUnits.density),
+            fann_600: Number(document.getElementById("f600").value), fann_300: Number(document.getElementById("f300").value), fann_200: Number(document.getElementById("f200").value),
+            fann_100: Number(document.getElementById("f100").value), fann_6: Number(document.getElementById("f6").value), fann_3: Number(document.getElementById("f3").value)
         },
-
-        temperature: {
-            surface_temp: toBaseTemp(Number(document.getElementById("surface_temp").value)),
-            bhct: toBaseTemp(Number(document.getElementById("bhct").value)),
-            geothermal_grad: 1.5,
-            beta: 0.0003
-        },
-
-        trajectory: trajectory,
-        well_sections: well_sections,
-        bha: bha,
-
-        cuttings: {
-            rop: toBaseLength(50), 
-            size: toBaseDiam(0.2),
-            density: toBaseDens(22.1), 
-            rpm: 120
-        }
+        temperature: { surface_temp: converters.temp.toBase(Number(document.getElementById("surface_temp").value), currentUnits.temp), bhct: converters.temp.toBase(Number(document.getElementById("bhct").value), currentUnits.temp), geothermal_grad: 1.5, beta: 0.0003 },
+        trajectory: trajectory, well_sections: well_sections, bha: bha,
+        cuttings: { rop: converters.length.toBase(50, currentUnits.length), size: converters.diam.toBase(0.2, currentUnits.diam), density: converters.density.toBase(22.1, currentUnits.density), rpm: 120 }
     };
 }
 
 async function runSimulation(){
-    document.getElementById("result").innerText = "Running...";
+    document.getElementById("result").innerText = "Running Simulation...";
+    document.getElementById("result").style.color = "#333";
     const payload = buildPayload();
 
     try {
         const response = await fetch("/simulate", {
-            method: "POST",
-            headers: {"Content-Type": "application/json"},
-            body: JSON.stringify(payload)
+            method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(payload)
         });
 
-        if (!response.ok) { throw new Error(`HTTP error! status: ${response.status}`); }
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
         const result = await response.json();
-        
         if (result.error) {
             document.getElementById("result").innerText = "Error: " + result.error;
+            document.getElementById("result").style.color = "red";
             return;
         }
 
-        // Convert the backend's Base Unit responses back into the user's preferred units
+        lastSimResult = result; // Cache for dropdown replotting
+        
         let displayEcd = fromBaseDens(result.summary.ecd_bottom).toFixed(3);
         let displayLoss = fromBasePress(result.summary.total_annular_loss_psi).toFixed(1);
         
-        let u_dens = document.getElementById("u_density").value;
-        let u_press = document.getElementById("u_press").value;
+        document.getElementById("result").innerText = `✅ Success | ECD Bottom: ${displayEcd} ${currentUnits.density} | Annular Loss: ${displayLoss} ${currentUnits.press}`;
+        document.getElementById("result").style.color = "#4CAF50";
 
-        document.getElementById("result").innerText =
-            `ECD Bottom: ${displayEcd} ${u_dens} | Annular Loss: ${displayLoss} ${u_press}`;
-
-        plotChart(result.profile);
+        replotChart();
     } catch (error) {
         document.getElementById("result").innerText = "Failed to run simulation. Check console.";
+        document.getElementById("result").style.color = "red";
         console.error("Simulation error:", error);
     }
 }
 
-function plotChart(profile){
+function replotChart(){
+    if(!lastSimResult) return;
+    
+    updateSchematics(); // Sync schematic with the scale dropdown
+    const profile = lastSimResult.profile;
+
     const ctx = document.getElementById("chart");
     if(chartInstance) chartInstance.destroy();
 
-    let u_dens = document.getElementById("u_density").value;
-    let u_length = document.getElementById("u_length").value;
-
+    // Apply Unit Conversions
     const ecdData = profile.depth.map((d,i) => ({x: fromBaseDens(profile.ecd[i]), y: fromBaseLength(d)}));
     const esdData = profile.depth.map((d,i) => ({x: fromBaseDens(profile.esd[i]), y: fromBaseLength(d)}));
+
+    // Determine Y-Axis Scale
+    let scaleMode = document.getElementById("chartScale").value;
+    let yMin = 0;
+    let yMax = fromBaseLength(toBaseLength(Number(document.getElementById("depth").value)));
+
+    if (scaleMode === "open_hole") {
+        let sections = getWellSectionsForDrawing();
+        let openHoles = sections.filter(s => s.type === "open hole");
+        if (openHoles.length > 0) yMin = fromBaseLength(openHoles[0].top);
+    }
 
     chartInstance = new Chart(ctx,{
         type:"scatter",
         data:{
             datasets:[
-                {label:`ECD (${u_dens})`, data:ecdData, showLine:true, borderColor: "red", backgroundColor: "red"},
-                {label:`ESD (${u_dens})`, data:esdData, showLine:true, borderColor: "blue", backgroundColor: "blue"}
+                {label:`ECD (${currentUnits.density})`, data:ecdData, showLine:true, borderColor: "#ff3b3b", backgroundColor: "#ff3b3b", pointRadius: 1},
+                {label:`ESD (${currentUnits.density})`, data:esdData, showLine:true, borderColor: "#3b82f6", backgroundColor: "#3b82f6", pointRadius: 1}
             ]
         },
         options:{
+            maintainAspectRatio: false, // Allows the chart to fill the container height
             scales:{
-                x:{title:{display:true,text:`Density (${u_dens})`}},
-                y:{reverse:true,title:{display:true,text:`Measured Depth (${u_length})`}}
-            }
+                x:{ 
+                    title:{display:true, text:`Density (${currentUnits.density})`, font: {weight: 'bold'}},
+                    grid: { color: '#e5e7eb' }
+                },
+                y:{
+                    min: yMin,
+                    max: yMax,
+                    reverse:true, 
+                    title:{display:true, text:`Measured Depth (${currentUnits.length})`, font: {weight: 'bold'}},
+                    grid: { color: '#e5e7eb' }
+                }
+            },
+            plugins: { legend: { position: 'top' } }
         }
     });
 }
 
-// Set up initial UI labels on first load
+// Initialize UI on load
 window.onload = function() {
-    Object.keys(currentUnits).forEach(category => {
-        document.querySelectorAll(`.lbl-${category}`).forEach(el => 
-            el.innerText = category === "temp" ? "°" + currentUnits[category] : currentUnits[category]
-        );
-    });
+    updateSchematics();
 };
 
 </script>
