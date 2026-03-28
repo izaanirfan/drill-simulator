@@ -1,28 +1,26 @@
 import math
 
 # -----------------------------
-# ANNULAR AREA
+# AREA
 # -----------------------------
 def annular_area(outer_d, inner_d):
     return math.pi / 4 * ((outer_d / 12)**2 - (inner_d / 12)**2)
 
 # -----------------------------
-# HYDRAULIC DIAMETER
+# HYD DIAMETER
 # -----------------------------
 def hydraulic_diameter(outer_d, inner_d):
     return (outer_d - inner_d) / 12
 
 # -----------------------------
-# BUILD BHA PROFILE (TOP → BOTTOM)
+# BUILD BHA PROFILE
 # -----------------------------
 def build_bha_profile(bha, total_depth):
 
     profile = []
     current_depth = total_depth
 
-    # Build from bottom up
     for comp in reversed(bha):
-
         top = current_depth - comp.length
 
         profile.append({
@@ -44,7 +42,7 @@ def get_pipe_od(bha_profile, md):
         if comp["top"] <= md <= comp["bottom"]:
             return comp["od"]
 
-    return bha_profile[0]["od"]  # fallback
+    return bha_profile[0]["od"]
 
 # -----------------------------
 # GET ANNULUS DIAMETER
@@ -55,24 +53,20 @@ def get_annulus_diameter(sections, md):
 
         if sec.top_md <= md <= sec.end_md:
 
-            sec_type = sec.type.lower()
+            t = sec.type.lower()
 
-            # OPEN HOLE
-            if sec_type == "open hole":
+            if t == "open hole":
                 return sec.hole_d
 
-            # CASING
-            if sec_type == "casing":
+            if t == "casing":
                 return sec.casing_id
 
-            # LINER
-            if sec_type == "liner":
+            if t == "liner":
 
-                # below liner top → inside liner
                 if md >= sec.top_md:
                     return sec.casing_id
 
-                # above liner → find parent casing
+                # find parent casing
                 for parent in sections:
                     if parent.type.lower() == "casing" and parent.top_md <= md <= parent.end_md:
                         return parent.casing_id
@@ -126,7 +120,7 @@ def pressure_loss(mw, v, dh, tau_y, K, n, length):
     return dp
 
 # -----------------------------
-# MAIN SIMULATION
+# MAIN
 # -----------------------------
 def run_simulation(data):
 
@@ -134,14 +128,12 @@ def run_simulation(data):
     depth = data.depth
     mw = data.fluid.mw
 
-    # Rheology
     tau_y, K, n = fit_hb(
         data.fluid.fann_600,
         data.fluid.fann_300,
         data.fluid.fann_3
     )
 
-    # Build BHA profile
     bha_profile = build_bha_profile(data.bha, depth)
 
     depths = []
@@ -156,13 +148,10 @@ def run_simulation(data):
         md2 = data.trajectory[i].md
         length = md2 - md1
 
-        # -----------------------------
-        # ANNULUS SELECTION (CORE LOGIC)
-        # -----------------------------
+        # ✅ NEW CORRECT LOGIC
         outer_d = get_annulus_diameter(data.well_sections, md2)
         pipe_od = get_pipe_od(bha_profile, md2)
 
-        # Safety
         outer_d = max(outer_d, pipe_od + 0.1)
 
         area = annular_area(outer_d, pipe_od)
@@ -173,11 +162,9 @@ def run_simulation(data):
         dh = hydraulic_diameter(outer_d, pipe_od)
         dh = max(dh, 0.01)
 
-        # Pressure loss
         dp = pressure_loss(mw, v, dh, tau_y, K, n, length)
         cumulative_dp += dp
 
-        # ECD
         ecd = mw + cumulative_dp / (0.051948 * md2)
 
         # Temperature correction
@@ -186,23 +173,20 @@ def run_simulation(data):
         bhct = temp.bhct
 
         temp_local = surface_temp + (bhct - surface_temp) * (md2 / depth)
-        temp_factor = 1 - 0.0003 * (temp_local - surface_temp)
+        factor = 1 - 0.0003 * (temp_local - surface_temp)
 
-        ecd_temp = ecd * temp_factor
-        esd = mw * temp_factor
+        ecd_t = ecd * factor
+        esd = mw * factor
 
         depths.append(md2)
-        ecd_profile.append(round(ecd_temp, 3))
+        ecd_profile.append(round(ecd_t, 3))
         esd_profile.append(round(esd, 3))
 
     return {
         "summary": {
             "ecd_bottom": ecd_profile[-1],
             "esd_bottom": esd_profile[-1],
-            "tau_y": round(tau_y, 2),
-            "K": round(K, 4),
-            "n": round(n, 3),
-            "total_pressure_loss": round(cumulative_dp, 2)
+            "pressure_loss": round(cumulative_dp, 2)
         },
         "profile": {
             "depth": depths,
