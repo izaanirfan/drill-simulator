@@ -1,127 +1,3 @@
-import math
-
-# -----------------------------
-# AREA
-# -----------------------------
-def annular_area(outer_d, inner_d):
-    return math.pi / 4 * ((outer_d / 12)**2 - (inner_d / 12)**2)
-
-# -----------------------------
-# HYD DIAMETER
-# -----------------------------
-def hydraulic_diameter(outer_d, inner_d):
-    return (outer_d - inner_d) / 12
-
-# -----------------------------
-# BUILD BHA PROFILE
-# -----------------------------
-def build_bha_profile(bha, total_depth):
-
-    profile = []
-    current_depth = total_depth
-
-    for comp in reversed(bha):
-        top = current_depth - comp.length
-
-        profile.append({
-            "top": top,
-            "bottom": current_depth,
-            "od": comp.od
-        })
-
-        current_depth = top
-
-    return profile
-
-# -----------------------------
-# GET PIPE OD AT DEPTH
-# -----------------------------
-def get_pipe_od(bha_profile, md):
-
-    for comp in bha_profile:
-        if comp["top"] <= md <= comp["bottom"]:
-            return comp["od"]
-
-    return bha_profile[0]["od"]
-
-# -----------------------------
-# GET ANNULUS DIAMETER
-# -----------------------------
-def get_annulus_diameter(sections, md):
-
-    for sec in sections:
-
-        if sec.top_md <= md <= sec.end_md:
-
-            t = sec.type.lower()
-
-            if t == "open hole":
-                return sec.hole_d
-
-            if t == "casing":
-                return sec.casing_id
-
-            if t == "liner":
-
-                if md >= sec.top_md:
-                    return sec.casing_id
-
-                # find parent casing
-                for parent in sections:
-                    if parent.type.lower() == "casing" and parent.top_md <= md <= parent.end_md:
-                        return parent.casing_id
-
-    # fallback
-    last = sections[-1]
-    return last.hole_d if last.hole_d > 0 else last.casing_id
-
-# -----------------------------
-# HB FIT
-# -----------------------------
-def fit_hb(f600, f300, f3):
-
-    tau_y = f3
-
-    gamma1 = 1022
-    gamma2 = 511
-
-    tau1 = max(f600 - tau_y, 0.1)
-    tau2 = max(f300 - tau_y, 0.1)
-
-    n = math.log(tau1 / tau2) / math.log(gamma1 / gamma2)
-    K = tau1 / (gamma1 ** n)
-
-    return tau_y, K, n
-
-# -----------------------------
-# APPARENT VISCOSITY
-# -----------------------------
-def apparent_viscosity(tau_y, K, n, gamma):
-    tau = tau_y + K * (gamma ** n)
-    return tau / max(gamma, 0.1)
-
-# -----------------------------
-# PRESSURE LOSS
-# -----------------------------
-def pressure_loss(mw, v, dh, tau_y, K, n, length):
-
-    gamma = 8 * v / dh
-    mu = apparent_viscosity(tau_y, K, n, gamma)
-
-    rho = mw * 7.48
-    Re = (rho * v * dh) / max(mu, 0.01)
-
-    if Re < 2100:
-        dp = (32 * mu * v / (dh**2)) * length * 0.01
-    else:
-        f = 0.079 / (Re ** 0.25)
-        dp = f * (rho * v**2 / (2 * dh)) * length * 0.01
-
-    return dp
-
-# -----------------------------
-# MAIN
-# -----------------------------
 def run_simulation(data):
 
     Q = data.flowrate
@@ -142,13 +18,16 @@ def run_simulation(data):
 
     cumulative_dp = 0
 
-    for i in range(1, len(data.trajectory)):
+    # 🔥 KEY FIX: create depth steps
+    step = 200   # ft (you can change later)
 
-        md1 = data.trajectory[i-1].md
-        md2 = data.trajectory[i].md
-        length = md2 - md1
+    md_list = list(range(step, int(depth)+step, step))
 
-        # ✅ NEW CORRECT LOGIC
+    for md2 in md_list:
+
+        length = step
+
+        # ANNULUS
         outer_d = get_annulus_diameter(data.well_sections, md2)
         pipe_od = get_pipe_od(bha_profile, md2)
 
@@ -185,8 +64,7 @@ def run_simulation(data):
     return {
         "summary": {
             "ecd_bottom": ecd_profile[-1],
-            "esd_bottom": esd_profile[-1],
-            "pressure_loss": round(cumulative_dp, 2)
+            "esd_bottom": esd_profile[-1]
         },
         "profile": {
             "depth": depths,
