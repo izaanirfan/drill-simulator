@@ -34,51 +34,51 @@
     <h3>Global Unit Preferences</h3>
     <div class="unit-settings">
         <label>Depth & Length:</label>
-        <select id="u_length" onchange="updateLabels()">
+        <select id="u_length" onchange="changeUnit('length', this)">
             <option value="ft">ft</option>
             <option value="m">m</option>
         </select>
 
         <label>Diameter:</label>
-        <select id="u_diam" onchange="updateLabels()">
+        <select id="u_diam" onchange="changeUnit('diam', this)">
             <option value="in">in</option>
             <option value="mm">mm</option>
         </select>
 
         <label>Fluid Density:</label>
-        <select id="u_density" onchange="updateLabels()">
+        <select id="u_density" onchange="changeUnit('density', this)">
             <option value="ppg">ppg</option>
             <option value="sg">sg</option>
             <option value="kg/m3">kg/m³</option>
         </select>
 
         <label>Pressure:</label>
-        <select id="u_press" onchange="updateLabels()">
+        <select id="u_press" onchange="changeUnit('press', this)">
             <option value="psi">psi</option>
             <option value="bar">bar</option>
             <option value="kPa">kPa</option>
         </select>
 
         <label>Flowrate:</label>
-        <select id="u_flow" onchange="updateLabels()">
+        <select id="u_flow" onchange="changeUnit('flow', this)">
             <option value="gpm">gpm</option>
             <option value="lpm">lpm</option>
         </select>
 
         <label>Temperature:</label>
-        <select id="u_temp" onchange="updateLabels()">
+        <select id="u_temp" onchange="changeUnit('temp', this)">
             <option value="F">°F</option>
             <option value="C">°C</option>
         </select>
     </div>
-    <p style="color: gray; font-size: 0.9em;"><i>Changes here will automatically update labels and values across the app.</i></p>
+    <p style="color: gray; font-size: 0.9em;"><i>Inputs across all tabs will automatically convert when you change units here.</i></p>
 </div>
 
 <div id="simulation" class="tab active">
     <h3>Simulation Parameters</h3>
-    Flowrate (<span class="lbl-flow">gpm</span>): <input id="flowrate" value="400"><br><br>
-    Depth (<span class="lbl-length">ft</span>): <input id="depth" value="10000"><br><br>
-    Surface Backpressure (<span class="lbl-press">psi</span>): <input id="sbp" value="0"><br><br>
+    Flowrate (<span class="lbl-flow">gpm</span>): <input id="flowrate" class="val-flow" value="400"><br><br>
+    Depth (<span class="lbl-length">ft</span>): <input id="depth" class="val-length" value="10000"><br><br>
+    Surface Backpressure (<span class="lbl-press">psi</span>): <input id="sbp" class="val-press" value="0"><br><br>
 
     <button onclick="runSimulation()" style="background-color: #4CAF50; color: white; padding: 10px 20px; border: none; font-size: 16px;">Run Simulation</button>
 
@@ -108,10 +108,10 @@
                 </select>
             </td>
             <td contenteditable>13-3/8" Casing</td>
-            <td contenteditable>0</td>
-            <td contenteditable>3000</td>
-            <td><input value="17.5"></td>
-            <td><input value="12.347"></td>
+            <td contenteditable class="val-length">0</td>
+            <td contenteditable class="val-length">3000</td>
+            <td><input class="val-diam" value="17.5"></td>
+            <td><input class="val-diam" value="12.347"></td>
         </tr>
         <tr>
             <td>
@@ -122,10 +122,10 @@
                 </select>
             </td>
             <td contenteditable>9-5/8" Liner</td>
-            <td contenteditable>2700</td>
-            <td contenteditable>7000</td>
-            <td><input value="12.25"></td>
-            <td><input value="8.535"></td>
+            <td contenteditable class="val-length">2700</td>
+            <td contenteditable class="val-length">7000</td>
+            <td><input class="val-diam" value="12.25"></td>
+            <td><input class="val-diam" value="8.535"></td>
         </tr>
         <tr>
             <td>
@@ -136,10 +136,10 @@
                 </select>
             </td>
             <td contenteditable>8-1/2" OH</td>
-            <td contenteditable>7000</td>
-            <td contenteditable>10000</td>
-            <td><input disabled></td>
-            <td><input value="8.5"></td>
+            <td contenteditable class="val-length">7000</td>
+            <td contenteditable class="val-length">10000</td>
+            <td><input class="val-diam" disabled></td>
+            <td><input class="val-diam" value="8.5"></td>
         </tr>
     </table>
     <button onclick="addWellRow()">Add Row</button>
@@ -154,12 +154,12 @@
             <th>Azimuth (deg)</th>
         </tr>
         <tr>
-            <td contenteditable>0</td>
+            <td contenteditable class="val-length">0</td>
             <td contenteditable>0</td>
             <td contenteditable>0</td>
         </tr>
         <tr>
-            <td contenteditable>10000</td>
+            <td contenteditable class="val-length">10000</td>
             <td contenteditable>0</td>
             <td contenteditable>0</td>
         </tr>
@@ -178,22 +178,22 @@
         </tr>
         <tr>
             <td>Drill Pipe</td>
-            <td><input value="5"></td>
-            <td><input value="4"></td>
-            <td><input value="8000"></td>
+            <td><input class="val-diam" value="5"></td>
+            <td><input class="val-diam" value="4"></td>
+            <td><input class="val-length" value="8000"></td>
         </tr>
         <tr>
             <td>Drill Collar</td>
-            <td><input value="6.5"></td>
-            <td><input value="2.5"></td>
-            <td><input value="2000"></td>
+            <td><input class="val-diam" value="6.5"></td>
+            <td><input class="val-diam" value="2.5"></td>
+            <td><input class="val-length" value="2000"></td>
         </tr>
     </table>
 </div>
 
 <div id="mud" class="tab">
     <h3>Fluid Properties</h3>
-    MW (<span class="lbl-density">ppg</span>): <input id="mw" value="10"><br><br>
+    MW (<span class="lbl-density">ppg</span>): <input id="mw" class="val-density" value="10"><br><br>
     <i>Fann Viscometer Readings:</i><br>
     600: <input id="f600" value="60"> | 
     300: <input id="f300" value="40"> | 
@@ -205,15 +205,25 @@
 
 <div id="temp" class="tab">
     <h3>Temperature Gradient</h3>
-    Surface Temp (<span class="lbl-temp">°F</span>): <input id="surface_temp" value="80"><br><br>
-    BHCT (<span class="lbl-temp">°F</span>): <input id="bhct" value="150">
+    Surface Temp (<span class="lbl-temp">°F</span>): <input id="surface_temp" class="val-temp" value="80"><br><br>
+    BHCT (<span class="lbl-temp">°F</span>): <input id="bhct" class="val-temp" value="150">
 </div>
 
 <script>
 
 let chartInstance = null;
 
-// ================= UI NAVIGATION =================
+// Track the current unit state to know *how* to convert when a dropdown changes
+let currentUnits = {
+    length: "ft",
+    diam: "in",
+    density: "ppg",
+    press: "psi",
+    flow: "gpm",
+    temp: "F"
+};
+
+// ================= UI NAVIGATION & DYNAMIC ROWS =================
 function showTab(tab) {
     document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
     document.getElementById(tab).classList.add("active");
@@ -242,10 +252,10 @@ function addWellRow(){
             </select>
         </td>
         <td contenteditable>New Section</td>
-        <td contenteditable></td>
-        <td contenteditable></td>
-        <td><input></td>
-        <td><input></td>
+        <td contenteditable class="val-length"></td>
+        <td contenteditable class="val-length"></td>
+        <td><input class="val-diam"></td>
+        <td><input class="val-diam"></td>
     `;
 }
 
@@ -253,49 +263,70 @@ function addTrajectoryRow(){
     const table = document.getElementById("trajectoryTable");
     const row = table.insertRow();
     row.innerHTML = `
-        <td contenteditable></td>
+        <td contenteditable class="val-length"></td>
         <td contenteditable></td>
         <td contenteditable></td>
     `;
 }
 
-// ================= UNIT MANAGEMENT =================
-// Updates the text inside <span> tags dynamically when units change
-function updateLabels() {
-    document.querySelectorAll(".lbl-length").forEach(el => el.innerText = document.getElementById("u_length").value);
-    document.querySelectorAll(".lbl-diam").forEach(el => el.innerText = document.getElementById("u_diam").value);
-    document.querySelectorAll(".lbl-density").forEach(el => el.innerText = document.getElementById("u_density").value);
-    document.querySelectorAll(".lbl-press").forEach(el => el.innerText = document.getElementById("u_press").value);
-    document.querySelectorAll(".lbl-flow").forEach(el => el.innerText = document.getElementById("u_flow").value);
+// ================= REACTIVE UNIT CONVERSION ENGINE =================
+
+// Master math dictionaries
+const converters = {
+    length: { toBase: (v, u) => u === "m" ? v * 3.28084 : v,  fromBase: (v, u) => u === "m" ? v / 3.28084 : v },
+    diam:   { toBase: (v, u) => u === "mm" ? v / 25.4 : v,    fromBase: (v, u) => u === "mm" ? v * 25.4 : v },
+    density:{ toBase: (v, u) => u === "sg" ? v * 8.33 : (u === "kg/m3" ? v / 119.826 : v), fromBase: (v, u) => u === "sg" ? v / 8.33 : (u === "kg/m3" ? v * 119.826 : v) },
+    press:  { toBase: (v, u) => u === "bar" ? v * 14.5038 : (u === "kPa" ? v * 0.145038 : v), fromBase: (v, u) => u === "bar" ? v / 14.5038 : (u === "kPa" ? v / 0.145038 : v) },
+    flow:   { toBase: (v, u) => u === "lpm" ? v * 0.264172 : v, fromBase: (v, u) => u === "lpm" ? v / 0.264172 : v },
+    temp:   { toBase: (v, u) => u === "C" ? (v * 9/5) + 32 : v, fromBase: (v, u) => u === "C" ? (v - 32) * 5/9 : v }
+};
+
+// Fires whenever a dropdown is changed
+function changeUnit(category, selectElement) {
+    const newUnit = selectElement.value;
+    const oldUnit = currentUnits[category];
+    if (oldUnit === newUnit) return;
+
+    // Find every input or cell that belongs to this category
+    const elements = document.querySelectorAll(`.val-${category}`);
     
-    let tempUnit = document.getElementById("u_temp").value;
-    document.querySelectorAll(".lbl-temp").forEach(el => el.innerText = "°" + tempUnit);
+    elements.forEach(el => {
+        // Read current value (works for standard <input> and <td contenteditable>)
+        let isInput = el.tagName === 'INPUT';
+        let valStr = isInput ? el.value : el.innerText;
+        
+        if (valStr.trim() !== "") {
+            let val = parseFloat(valStr);
+            if (!isNaN(val)) {
+                // Route through the base standard (e.g., convert user's m -> ft -> user's new unit)
+                let baseVal = converters[category].toBase(val, oldUnit);
+                let newVal = converters[category].fromBase(baseVal, newUnit);
+                
+                // Keep the UI numbers clean (up to 3 decimals, dropping trailing zeros)
+                newVal = Number(newVal.toFixed(3));
+                
+                if (isInput) { el.value = newVal; } else { el.innerText = newVal; }
+            }
+        }
+    });
+
+    // Update labels and state
+    document.querySelectorAll(`.lbl-${category}`).forEach(el => el.innerText = category === "temp" ? "°" + newUnit : newUnit);
+    currentUnits[category] = newUnit;
 }
 
-// Convert TO Base (For Backend)
-function toBaseLength(v) { return document.getElementById("u_length").value === "m" ? v * 3.28084 : v; }
-function toBaseDiam(v)   { return document.getElementById("u_diam").value === "mm" ? v / 25.4 : v; }
-function toBaseFlow(v)   { return document.getElementById("u_flow").value === "lpm" ? v * 0.264172 : v; }
-function toBasePress(v)  { 
-    let u = document.getElementById("u_press").value;
-    return u === "bar" ? v * 14.5038 : (u === "kPa" ? v * 0.145038 : v); 
-}
-function toBaseDens(v)   { 
-    let u = document.getElementById("u_density").value;
-    return u === "sg" ? v * 8.33 : (u === "kg/m3" ? v / 119.826 : v); 
-}
-function toBaseTemp(v)   { return document.getElementById("u_temp").value === "C" ? (v * 9/5) + 32 : v; }
+// Convert TO Base (Called during API request to sanitize payload for Python)
+function toBaseLength(v) { return converters.length.toBase(v, currentUnits.length); }
+function toBaseDiam(v)   { return converters.diam.toBase(v, currentUnits.diam); }
+function toBaseFlow(v)   { return converters.flow.toBase(v, currentUnits.flow); }
+function toBasePress(v)  { return converters.press.toBase(v, currentUnits.press); }
+function toBaseDens(v)   { return converters.density.toBase(v, currentUnits.density); }
+function toBaseTemp(v)   { return converters.temp.toBase(v, currentUnits.temp); }
 
-// Convert FROM Base (For Charting Results)
-function fromBaseLength(v) { return document.getElementById("u_length").value === "m" ? v / 3.28084 : v; }
-function fromBaseDens(v)   { 
-    let u = document.getElementById("u_density").value;
-    return u === "sg" ? v / 8.33 : (u === "kg/m3" ? v * 119.826 : v); 
-}
-function fromBasePress(v)  { 
-    let u = document.getElementById("u_press").value;
-    return u === "bar" ? v / 14.5038 : (u === "kPa" ? v / 0.145038 : v); 
-}
+// Convert FROM Base (Called during chart plotting to show user's unit preference)
+function fromBaseLength(v) { return converters.length.fromBase(v, currentUnits.length); }
+function fromBaseDens(v)   { return converters.density.fromBase(v, currentUnits.density); }
+function fromBasePress(v)  { return converters.press.fromBase(v, currentUnits.press); }
 
 // ================= BUILD & RUN =================
 function buildPayload(){
@@ -337,11 +368,11 @@ function buildPayload(){
     }
 
     return {
-        // Wrap all raw inputs in the TO BASE conversion functions
+        // The API strictly wants the standard Field units. These functions guarantee it gets them.
         flowrate: toBaseFlow(Number(document.getElementById("flowrate").value)),
         depth: toBaseLength(Number(document.getElementById("depth").value)),
         sbp: toBasePress(Number(document.getElementById("sbp").value)),
-        hole_diameter: 8.5, // Fallback
+        hole_diameter: 8.5, 
 
         mpd_mode: "SBP",
         gradient_mode: "static",
@@ -370,7 +401,7 @@ function buildPayload(){
         cuttings: {
             rop: toBaseLength(50), 
             size: toBaseDiam(0.2),
-            density: toBaseDens(22.1), // 2.65 SG converted to base ppg approximation
+            density: toBaseDens(22.1), 
             rpm: 120
         }
     };
@@ -387,9 +418,7 @@ async function runSimulation(){
             body: JSON.stringify(payload)
         });
 
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
+        if (!response.ok) { throw new Error(`HTTP error! status: ${response.status}`); }
 
         const result = await response.json();
         
@@ -398,7 +427,7 @@ async function runSimulation(){
             return;
         }
 
-        // Convert backend results back to user's selected units for display
+        // Convert the backend's Base Unit responses back into the user's preferred units
         let displayEcd = fromBaseDens(result.summary.ecd_bottom).toFixed(3);
         let displayLoss = fromBasePress(result.summary.total_annular_loss_psi).toFixed(1);
         
@@ -422,7 +451,6 @@ function plotChart(profile){
     let u_dens = document.getElementById("u_density").value;
     let u_length = document.getElementById("u_length").value;
 
-    // Convert arrays back to user preferred units
     const ecdData = profile.depth.map((d,i) => ({x: fromBaseDens(profile.ecd[i]), y: fromBaseLength(d)}));
     const esdData = profile.depth.map((d,i) => ({x: fromBaseDens(profile.esd[i]), y: fromBaseLength(d)}));
 
@@ -443,8 +471,14 @@ function plotChart(profile){
     });
 }
 
-// Initialize labels on first load
-window.onload = updateLabels;
+// Set up initial UI labels on first load
+window.onload = function() {
+    Object.keys(currentUnits).forEach(category => {
+        document.querySelectorAll(`.lbl-${category}`).forEach(el => 
+            el.innerText = category === "temp" ? "°" + currentUnits[category] : currentUnits[category]
+        );
+    });
+};
 
 </script>
 </body>
