@@ -45,7 +45,7 @@
             content: "↕"; position: absolute; left: -20px; top: -10px; font-size: 16px; color: #eab308; font-weight: bold;
         }
         #scooterBox {
-            position: absolute; right: 10px; top: -35px; background: rgba(255,255,255,0.95); border: 1px solid #999; 
+            position: absolute; left: 10px; top: -45px; background: rgba(255,255,255,0.95); border: 1px solid #999; 
             padding: 5px 10px; border-radius: 4px; box-shadow: 0px 2px 5px rgba(0,0,0,0.2); display: flex; align-items: center; gap: 10px;
             cursor: default; pointer-events: auto;
         }
@@ -205,10 +205,19 @@
             </div>
             
             <div>
-                Import Data As: 
+                Import Press/Dens As: 
                 <select id="importUnit" class="case-select">
                     <option value="psi">Pressure (psi / bar)</option>
                     <option value="ppg">Density (ppg / sg)</option>
+                </select>
+            </div>
+
+            <div>
+                Import Depth As: 
+                <select id="importDepthUnit" class="case-select">
+                    <option value="auto">Auto-Detect from Headers</option>
+                    <option value="ft">Feet (ft)</option>
+                    <option value="m">Meters (m)</option>
                 </select>
             </div>
         </div>
@@ -401,7 +410,7 @@ function addSubsurfaceRow(top="", md="", tvddf="", tvdss="", pp="", pp_psi="", f
     applyGeothermal(); 
 }
 
-// ================= EXCEL IMPORT ENGINE =================
+// ================= EXCEL IMPORT ENGINE (HIGH PERFORMANCE IN-MEMORY) =================
 function handleFileUpload(event) {
     const file = event.target.files[0];
     if (!file) return;
@@ -434,19 +443,32 @@ function handleFileUpload(event) {
             }
 
             let flattenedHeaders = [];
+            let detectedDepthUnit = null; // Smart Auto-Detect for depth
+
             for(let c=0; c < numCols; c++) {
                 let colHeaderParts = [];
                 for(let r=0; r < headerMatrix.length; r++) {
                     let val = headerMatrix[r][c];
                     if(val && !colHeaderParts.includes(val)) { colHeaderParts.push(val); }
                 }
-                flattenedHeaders.push(colHeaderParts.join(" | "));
+                let fullHeader = colHeaderParts.join(" | ");
+                flattenedHeaders.push(fullHeader);
+
+                // Auto-Detect M vs FT from depth headers
+                if (/(tvddf|tvd.*df|tvd|md|tvdss)/i.test(fullHeader)) {
+                    if (/\bm\b|meter/i.test(fullHeader) || /m-tvd/i.test(fullHeader)) detectedDepthUnit = 'm';
+                    if (/\bft\b|feet/i.test(fullHeader)) detectedDepthUnit = 'ft';
+                }
             }
 
             let map = { md: -1, tvddf: -1, tvdss: -1, pp: -1, pp_psi: -1, fp: -1, fp_psi: -1, obg: -1, obg_psi: -1, temp: -1 };
             let casePref = document.getElementById("importCase").value;
             let caseRegex = new RegExp(casePref, 'i');
             let unitPref = document.getElementById("importUnit").value; 
+            
+            // Set explicit depth unit or rely on Smart Detect
+            let importDepthUnit = document.getElementById("importDepthUnit").value;
+            if (importDepthUnit === 'auto') importDepthUnit = detectedDepthUnit || 'ft';
 
             flattenedHeaders.forEach((h, i) => {
                 let isTargetCase = casePref === '.*' ? true : caseRegex.test(h);
@@ -489,19 +511,30 @@ function handleFileUpload(event) {
 
             let activeType = document.getElementById("calcDepthType").value;
 
+            // HELPER: Convert raw imported depth to the UI's currently selected depth unit
+            let targetUIUnit = currentUnits.length;
+            function conformDepth(val) {
+                if (val === null) return null;
+                if (importDepthUnit === 'm' && targetUIUnit === 'ft') return val * 3.28084;
+                if (importDepthUnit === 'ft' && targetUIUnit === 'm') return val / 3.28084;
+                return val;
+            }
+
             let parsedRows = [];
             for (let i = 2; i < rawData.length; i++) {
                 let row = rawData[i];
                 if (!row) continue;
 
-                let md = map.md !== -1 ? parseSafe(row[map.md]) : null;
-                let tvddf = map.tvddf !== -1 ? parseSafe(row[map.tvddf]) : null;
-                let tvdss = map.tvdss !== -1 ? parseSafe(row[map.tvdss]) : null;
+                let mdRaw = map.md !== -1 ? parseSafe(row[map.md]) : null;
+                let tvddfRaw = map.tvddf !== -1 ? parseSafe(row[map.tvddf]) : null;
+                let tvdssRaw = map.tvdss !== -1 ? parseSafe(row[map.tvdss]) : null;
 
-                if (md === null && tvddf === null && tvdss === null) continue;
+                if (mdRaw === null && tvddfRaw === null && tvdssRaw === null) continue;
 
                 parsedRows.push({
-                    md: md, tvddf: tvddf, tvdss: tvdss,
+                    md: conformDepth(mdRaw), 
+                    tvddf: conformDepth(tvddfRaw), 
+                    tvdss: conformDepth(tvdssRaw),
                     pp: map.pp !== -1 ? parseSafe(row[map.pp]) : null, 
                     pp_psi: map.pp_psi !== -1 ? parseSafe(row[map.pp_psi]) : null,
                     fp: map.fp !== -1 ? parseSafe(row[map.fp]) : null, 
@@ -527,7 +560,7 @@ function handleFileUpload(event) {
                 r.top = prevDepth;
                 prevDepth = activeBot;
 
-                let bot_ft = toBaseLength(activeBot);
+                let bot_ft = toBaseLength(activeBot); // activeBot is now perfectly conformed to UI units
                 if (bot_ft > 0) {
                     if (r.pp === null && r.pp_psi !== null) r.pp = fromBaseDens(toBasePress(r.pp_psi) / (bot_ft * c));
                     if (r.pp_psi === null && r.pp !== null) r.pp_psi = fromBasePress(toBaseDens(r.pp) * bot_ft * c);
@@ -587,7 +620,24 @@ function handleFileUpload(event) {
             highlightActiveDepth();
             drawSubsurfaceChartDirect(ppData, fpData, obgData, tempData); 
 
-            let report = `✅ Import Successful (${parsedRows.length} rows processed in memory).\n\n`;
+            let report = `✅ Import Successful (${parsedRows.length} rows processed).\n\nMapped Depths:\n`;
+            if (map.md !== -1) report += `• MD Found\n`;
+            if (map.tvddf !== -1) report += `• TVDDF Found\n`;
+            if (map.tvdss !== -1) report += `• TVDSS Found\n`;
+            
+            report += `\nImport Depth Unit: Recognized as ${importDepthUnit.toUpperCase()}\n`;
+            
+            report += `\nMapped Physics:\n`;
+            if(unitPref === 'psi'){
+                report += `• Pore Pressure: ${map.pp_psi !== -1 ? 'Found (PSI)' : 'NOT FOUND'}\n`;
+                report += `• Frac Gradient: ${map.fp_psi !== -1 ? 'Found (PSI)' : 'NOT FOUND'}\n`;
+                report += `• Overburden: ${map.obg_psi !== -1 ? 'Found (PSI)' : 'NOT FOUND'}\n`;
+            } else {
+                report += `• Pore Pressure: ${map.pp !== -1 ? 'Found (PPG)' : 'NOT FOUND'}\n`;
+                report += `• Frac Gradient: ${map.fp !== -1 ? 'Found (PPG)' : 'NOT FOUND'}\n`;
+                report += `• Overburden: ${map.obg !== -1 ? 'Found (PPG)' : 'NOT FOUND'}\n`;
+            }
+            
             setTimeout(() => alert(report), 100);
             document.getElementById("excelUpload").value = ""; 
 
@@ -826,7 +876,6 @@ function drawWellCanvas(canvasId, yMinBase, yMaxBase) {
             ctx.fillStyle = "#f4f7f6"; ctx.fillRect(idX, y1, idW, secH);
         }
         
-        // Draw Text Annotations
         ctx.fillStyle = "#555";
         ctx.font = "bold 11px sans-serif";
         ctx.textAlign = "right";
@@ -862,12 +911,11 @@ function updateSchematics() {
         minDepthBase = shoeDepthBase;
     } else if (scaleMode === "adjustable") {
         let ohLength = maxDepthBase - shoeDepthBase;
-        minDepthBase = Math.max(0, shoeDepthBase - ohLength); // Bottom 50% is Open Hole
+        minDepthBase = Math.max(0, shoeDepthBase - ohLength); 
     }
     
     drawWellCanvas("wellCanvasSim", minDepthBase, maxDepthBase);
     
-    // Sync Scooter Line if chart is drawn
     if (lastSimResult) initScooter();
 }
 
@@ -950,7 +998,6 @@ function replotChart(){
     const ecdData = profile.depth.map((d,i) => ({x: fromBaseDens(profile.ecd[i]), y: fromBaseLength(d)}));
     const esdData = profile.depth.map((d,i) => ({x: fromBaseDens(profile.esd[i]), y: fromBaseLength(d)}));
 
-    // Dynamic Scaling Calculation
     let maxDepthBase = toBaseLength(Number(document.getElementById("depth").value));
     let scaleMode = document.getElementById("chartScale").value;
     let yMinBase = 0; 
@@ -964,13 +1011,12 @@ function replotChart(){
         yMinBase = shoeDepthBase;
     } else if (scaleMode === "adjustable") {
         let ohLength = yMaxBase - shoeDepthBase;
-        yMinBase = Math.max(0, shoeDepthBase - ohLength); // Bottom 50% is Open Hole
+        yMinBase = Math.max(0, shoeDepthBase - ohLength); 
     }
     
     let yMinUser = fromBaseLength(yMinBase);
     let yMaxUser = fromBaseLength(yMaxBase);
 
-    // Filter PPFG Data (Don't plot above casing shoe)
     let ppfgProfile = getPPFGProfile();
     let ppData = [], fpData = [], obgData = [];
     
@@ -978,8 +1024,8 @@ function replotChart(){
         let top = ppfgProfile.top[i];
         let bot = ppfgProfile.bottom[i];
         
-        if (bot < shoeDepthBase) continue; // Skip completely cased sections
-        let drawTop = Math.max(top, shoeDepthBase); // Clamp line to start exactly at shoe
+        if (bot < shoeDepthBase) continue; 
+        let drawTop = Math.max(top, shoeDepthBase); 
 
         if(!isNaN(ppfgProfile.pp[i])) { ppData.push({x: ppfgProfile.pp[i], y: drawTop}); ppData.push({x: ppfgProfile.pp[i], y: bot}); }
         if(!isNaN(ppfgProfile.fp[i])) { fpData.push({x: ppfgProfile.fp[i], y: drawTop}); fpData.push({x: ppfgProfile.fp[i], y: bot}); }
@@ -1021,13 +1067,11 @@ function initScooter() {
     if (!chartInstance || !lastSimResult) return;
     scooterLine.style.display = 'block';
     
-    // Calculate width to match exactly inside the chart grid
     let leftPad = chartInstance.chartArea.left;
     let rightPad = chartInstance.width - chartInstance.chartArea.right;
     scooterLine.style.left = leftPad + 'px';
     scooterLine.style.width = `calc(100% - ${leftPad + rightPad}px)`;
     
-    // Set to bottom hole by default
     let bottomUserDepth = parseFloat(document.getElementById("depth").value);
     document.getElementById('scooterDepthInput').value = bottomUserDepth.toFixed(0);
     updateScooterFromInput();
@@ -1037,13 +1081,11 @@ function moveScooterTo(pixelY) {
     if (!chartInstance) return;
     let yAxis = chartInstance.scales.y;
     
-    // Clamp to chart area
     if (pixelY < chartInstance.chartArea.top) pixelY = chartInstance.chartArea.top;
     if (pixelY > chartInstance.chartArea.bottom) pixelY = chartInstance.chartArea.bottom;
     
     scooterLine.style.top = pixelY + 'px';
     
-    // Convert Pixel to User Depth
     let userDepth = yAxis.getValueForPixel(pixelY);
     document.getElementById('scooterDepthInput').value = userDepth.toFixed(0);
     
@@ -1055,7 +1097,6 @@ function updateScooterFromInput() {
     if(isNaN(userDepth) || !chartInstance) return;
     
     let yAxis = chartInstance.scales.y;
-    // Clamp Input to Chart Limits
     if (userDepth < yAxis.min) { userDepth = yAxis.min; document.getElementById('scooterDepthInput').value = userDepth.toFixed(0); }
     if (userDepth > yAxis.max) { userDepth = yAxis.max; document.getElementById('scooterDepthInput').value = userDepth.toFixed(0); }
     
@@ -1069,7 +1110,6 @@ function updateScooterValues(depthBase) {
     let prof = lastSimResult.profile;
     let ecd = 0, esd = 0;
     
-    // Linearly interpolate ECD/ESD at the exact slider depth
     for (let i=0; i<prof.depth.length-1; i++) {
         if (depthBase >= prof.depth[i] && depthBase <= prof.depth[i+1]) {
             let ratio = (depthBase - prof.depth[i]) / (prof.depth[i+1] - prof.depth[i]);
@@ -1078,7 +1118,6 @@ function updateScooterValues(depthBase) {
             break;
         }
     }
-    // Handle exact bottom
     if (depthBase >= prof.depth[prof.depth.length-1]) {
         ecd = prof.ecd[prof.ecd.length-1];
         esd = prof.esd[prof.esd.length-1];
@@ -1088,7 +1127,6 @@ function updateScooterValues(depthBase) {
     document.getElementById('scooterEsd').innerText = fromBaseDens(esd).toFixed(3);
 }
 
-// Drag Listeners
 scooterLine.addEventListener('mousedown', (e) => { isDraggingScooter = true; e.preventDefault(); });
 document.addEventListener('mousemove', (e) => {
     if (!isDraggingScooter || !chartInstance) return;
