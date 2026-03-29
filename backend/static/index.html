@@ -4,8 +4,6 @@
     <title>Drilling Hydraulics Simulator</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
-    <script>pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';</script>
 
     <style>
         body { font-family: sans-serif; margin: 20px; color: #333; }
@@ -38,12 +36,14 @@
         .case-select { padding: 5px; font-weight: bold; border-radius: 4px; border: 1px solid #ccc; }
         .highlight-col { background-color: #e8f5e9 !important; }
         
+        /* Universal Scooter Line */
         #scooterLine { position: absolute; height: 2px; background: #eab308; cursor: ns-resize; display: none; z-index: 20; box-shadow: 0px 0px 5px rgba(0,0,0,0.3); pointer-events: none; left: 10px; right: 10px;}
         #scooterLine::before { content: "↔"; position: absolute; left: -10px; top: -8px; font-size: 14px; color: #eab308; font-weight: bold; transform: rotate(90deg); }
         
         #scooterBox { position: absolute; left: 10px; top: -45px; background: rgba(255,255,255,0.95); border: 1px solid #999; padding: 5px 15px; border-radius: 4px; box-shadow: 0px 2px 10px rgba(0,0,0,0.2); display: flex; align-items: center; gap: 15px; cursor: default; pointer-events: auto; }
         .scooter-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px 15px; font-size: 0.85em; line-height: 1.3; }
         
+        /* Dark Mode Gauges Dashboard */
         .dash-panel { display: flex; gap: 15px; background: #334155; padding: 15px; border-radius: 8px; margin-top: 15px; align-items: stretch; justify-content: center; }
         .dash-card { flex: 1; max-width: 300px; background: #1e293b; border: 1px solid #475569; border-radius: 6px; padding: 15px; display: flex; flex-direction: column; align-items: center; position: relative; }
         .dash-card.active-anchor { border-color: #4ade80; box-shadow: 0 0 10px rgba(74, 222, 128, 0.2); }
@@ -98,6 +98,7 @@
 </div>
 
 <div id="simulation" class="tab active">
+    
     <div class="controls-row">
         <div><label>Flowrate (<span class="lbl-flow">gpm</span>):</label><br><input id="flowrate" class="val-flow" value="400" onkeyup="triggerWellDesignChange()"></div>
         <div><label>Depth (<span class="lbl-length">ft</span>):</label><br><input id="depth" class="val-length" value="10000" onkeyup="triggerWellDesignChange()"></div>
@@ -302,8 +303,8 @@
 
 <div id="bha" class="tab">
     <div class="upload-box">
-        <div><strong>Import BHA Profile</strong><br><span style="font-size: 0.85em; color: #555;">Upload an Excel (.xlsx, .csv) or PDF (.pdf) file.</span></div>
-        <label class="upload-btn">Choose Excel/PDF File<input type="file" id="bhaUpload" accept=".xlsx, .xls, .csv, .pdf" onchange="handleBhaUpload(event)"></label>
+        <div><strong>Import BHA Profile</strong><br><span style="font-size: 0.85em; color: #555;">Upload an Excel (.xlsx, .xls) or CSV (.csv) file.</span></div>
+        <label class="upload-btn">Choose Excel/CSV File<input type="file" id="bhaUpload" accept=".xlsx, .xls, .csv" onchange="handleBhaUpload(event)"></label>
     </div>
     <div style="display: flex; gap: 40px; align-items: flex-start;">
         <div>
@@ -361,8 +362,9 @@
         <div><strong>Intelligent Subsurface Import</strong><br><span style="font-size: 0.85em; color: #555;">Upload an Excel (.xlsx) file. We will hunt for MD, TVDDF, and TVDSS columns dynamically.</span></div>
         <div class="upload-controls">
             <div>Target Case: <select id="importCase" class="case-select"><option value="mid">Mid Case (Default)</option><option value="low">Low Case</option><option value="high">High Case</option><option value="base">Base Case</option><option value=".*">Any/Not Specified</option></select></div>
-            <div>Import Press/Dens As: <select id="importUnit" class="case-select"><option value="psi">Pressure (psi / bar)</option><option value="ppg">Density (ppg / sg)</option></select></div>
+            <div>Import As: <select id="importUnit" class="case-select"><option value="ppg" selected>Density (ppg / sg)</option><option value="psi">Pressure (psi / bar)</option></select></div>
             <div>Import Depth As: <select id="importDepthUnit" class="case-select"><option value="auto">Auto-Detect</option><option value="ft">Feet (ft)</option><option value="m">Meters (m)</option></select></div>
+            <div>DF Elev (<span class="lbl-length">ft</span>): <input id="df_elev" type="number" value="100" style="width: 70px; padding: 4px;"></div>
         </div>
         <label class="upload-btn">Choose Excel/CSV File<input type="file" id="excelUpload" accept=".xlsx, .xls, .csv" onchange="handleFileUpload(event)"></label>
     </div>
@@ -383,12 +385,13 @@
                     <tr><th>Top (<span class="lbl-length">ft</span>)</th><th id="th_md">MD (<span class="lbl-length">ft</span>)</th><th id="th_tvddf">TVDDF (<span class="lbl-length">ft</span>)</th><th id="th_tvdss">TVDSS (<span class="lbl-length">ft</span>)</th><th>PP (<span class="lbl-density">ppg</span>)</th><th>PP (<span class="lbl-press">psi</span>)</th><th>FG (<span class="lbl-density">ppg</span>)</th><th>FG (<span class="lbl-press">psi</span>)</th><th>OBG (<span class="lbl-density">ppg</span>)</th><th>OBG (<span class="lbl-press">psi</span>)</th><th>Temp (<span class="lbl-temp">°F</span>)</th></tr>
                 </thead>
                 <tbody id="ppfgBody" onkeyup="handleTableKeyup(event)">
-                    <tr><td contenteditable="false">0</td><td contenteditable></td><td contenteditable></td><td contenteditable></td><td contenteditable></td><td contenteditable></td><td contenteditable></td><td contenteditable></td><td contenteditable></td><td contenteditable></td><td contenteditable></td></tr>
+                    <tr><td contenteditable="false">0</td><td contenteditable class="val-length" onkeyup="calcPPFG(this,'md')"></td><td contenteditable class="val-length" onkeyup="calcPPFG(this,'tvddf')"></td><td contenteditable class="val-length" onkeyup="calcPPFG(this,'tvdss')"></td><td contenteditable class="val-density" onkeyup="calcPPFG(this,'pp_dens')"></td><td contenteditable class="val-press" onkeyup="calcPPFG(this,'pp_press')"></td><td contenteditable class="val-density" onkeyup="calcPPFG(this,'fp_dens')"></td><td contenteditable class="val-press" onkeyup="calcPPFG(this,'fp_press')"></td><td contenteditable class="val-density" onkeyup="calcPPFG(this,'obg_dens')"></td><td contenteditable class="val-press" onkeyup="calcPPFG(this,'obg_press')"></td><td contenteditable class="val-temp" onkeyup="debouncedUpdateSubsurfaceChart()"></td></tr>
                 </tbody>
             </table>
             <button onclick="addSubsurfaceRow()">Add Row</button>
         </div>
-        <div class="chart-box" style="flex: 1; min-width: 400px; min-height: 400px;"><canvas id="subsurfaceChart"></canvas></div>
+        
+        <div class="chart-box" style="flex: 1; min-width: 400px; min-height: 400px; display: block;"><canvas id="subsurfaceChart"></canvas></div>
     </div>
 </div>
 
@@ -624,7 +627,7 @@ function switchCalcDepth() {
         let row = tbody.rows[i]; row.cells[0].textContent = prevDepth.toFixed(0);
         let botDepth = parseFloat(row.cells[col].textContent); if (!isNaN(botDepth)) prevDepth = botDepth;
         
-        // Prevent accidental drift by prioritizing the user's originally imported truth format
+        // Priority recalculation based on original data type
         if (unitPref === 'psi') {
             calcPPFG(row.cells[5], 'pp_press', true); 
             calcPPFG(row.cells[7], 'fp_press', true); 
@@ -663,48 +666,7 @@ function hideScooter() { if(!isDraggingScooter && !document.getElementById('show
 function showScooter() { if(document.getElementById('showScooter').checked && chartDensityInstance) scooterLine.style.display = 'block'; }
 
 
-// EXCEL/PDF PARSING (BHA)
-async function extractTextFromPDF(pdfData) {
-    const pdf = await pdfjsLib.getDocument({data: pdfData}).promise;
-    let allRows = [];
-    for (let i = 1; i <= pdf.numPages; i++) {
-        const page = await pdf.getPage(i);
-        const textContent = await page.getTextContent();
-        let yMap = new Map();
-        textContent.items.forEach(item => {
-            let str = item.str.trim(); if(!str) return;
-            let y = Math.round(item.transform[5] / 5) * 5; 
-            if (!yMap.has(y)) yMap.set(y, []);
-            yMap.get(y).push(item);
-        });
-        let yKeys = Array.from(yMap.keys()).sort((a,b) => b - a); 
-        yKeys.forEach(y => {
-            let lineItems = yMap.get(y).sort((a,b) => a.transform[4] - b.transform[4]);
-            let merged = [];
-            if (lineItems.length > 0) {
-                let currentStr = lineItems[0].str; let currentX = lineItems[0].transform[4]; let currentEndX = currentX + lineItems[0].width;
-                for (let j = 1; j < lineItems.length; j++) {
-                    let item = lineItems[j];
-                    if (item.transform[4] - currentEndX < 20) { currentStr += " " + item.str; currentEndX = item.transform[4] + item.width; } 
-                    else { merged.push({str: currentStr.trim(), x: currentX}); currentStr = item.str; currentX = item.transform[4]; currentEndX = currentX + item.width; }
-                }
-                merged.push({str: currentStr.trim(), x: currentX});
-            }
-            allRows.push(merged);
-        });
-    }
-    let xCoords = [];
-    allRows.forEach(row => { row.forEach(item => { let found = xCoords.find(x => Math.abs(x - item.x) < 30); if (!found) xCoords.push(item.x); }); });
-    xCoords.sort((a,b) => a - b);
-    let table = [];
-    allRows.forEach(row => {
-        let tableRow = new Array(xCoords.length).fill("");
-        row.forEach(item => { let colIdx = xCoords.findIndex(x => Math.abs(x - item.x) < 30); if(colIdx !== -1) tableRow[colIdx] = (tableRow[colIdx] + " " + item.str).trim(); });
-        if(tableRow.some(cell => cell !== "")) table.push(tableRow);
-    });
-    return table;
-}
-
+// ================= EXCEL/CSV PARSING ONLY (BHA) =================
 function askUnitIfNeeded(detectedDiam, detectedLen) {
     let finalDiam = detectedDiam; let finalLen = detectedLen;
     if(!finalDiam) {
@@ -718,106 +680,108 @@ function askUnitIfNeeded(detectedDiam, detectedLen) {
     return {diam: finalDiam, len: finalLen};
 }
 
-async function handleBhaUpload(event) {
+function handleBhaUpload(event) {
     const file = event.target.files[0];
     if (!file) return;
     document.getElementById("bhaBody").innerHTML = `<tr><td colspan="7" style="text-align:center;"><b>Parsing BHA File... Please wait.</b></td></tr>`;
-    try {
-        let rawData = [];
-        if (file.name.toLowerCase().endsWith('.pdf')) {
-            const arrayBuffer = await file.arrayBuffer();
-            rawData = await extractTextFromPDF(new Uint8Array(arrayBuffer));
-        } else {
-            const arrayBuffer = await file.arrayBuffer();
-            const workbook = XLSX.read(new Uint8Array(arrayBuffer), {type: 'array'});
-            rawData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], {header: 1});
-        }
-        if (!rawData || rawData.length < 2) { alert("File empty or unreadable."); document.getElementById("bhaBody").innerHTML = ""; return; }
+    
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        setTimeout(() => {
+            try {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, {type: 'array'});
+                const rawData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], {header: 1});
+                
+                if (!rawData || rawData.length < 2) { alert("File empty or unreadable."); document.getElementById("bhaBody").innerHTML = ""; return; }
 
-        let numCols = 0; rawData.slice(0, 30).forEach(r => { if(r && r.length > numCols) numCols = r.length; });
-        let headerMatrix = [];
-        for(let r=0; r < Math.min(30, rawData.length); r++) {
-            let rowVals = []; let lastVal = "";
-            for(let c=0; c < numCols; c++) {
-                let cell = (rawData[r] && rawData[r][c] !== undefined) ? rawData[r][c] : null;
-                if (cell !== null && String(cell).trim() !== "") lastVal = String(cell).toLowerCase().trim();
-                rowVals.push(lastVal);
-            }
-            headerMatrix.push(rowVals);
-        }
+                let numCols = 0; rawData.slice(0, 30).forEach(r => { if(r && r.length > numCols) numCols = r.length; });
+                let headerMatrix = [];
+                for(let r=0; r < Math.min(30, rawData.length); r++) {
+                    let rowVals = []; let lastVal = "";
+                    for(let c=0; c < numCols; c++) {
+                        let cell = (rawData[r] && rawData[r][c] !== undefined) ? rawData[r][c] : null;
+                        if (cell !== null && String(cell).trim() !== "") lastVal = String(cell).toLowerCase().trim();
+                        rowVals.push(lastVal);
+                    }
+                    headerMatrix.push(rowVals);
+                }
 
-        let flattenedHeaders = []; let detectedDiam = null; let detectedLen = null;
-        for(let c=0; c < numCols; c++) {
-            let colHeaderParts = [];
-            for(let r=0; r < headerMatrix.length; r++) { let val = headerMatrix[r][c]; if(val && !colHeaderParts.includes(val)) colHeaderParts.push(val); }
-            let fullHeader = colHeaderParts.join(" | "); flattenedHeaders.push(fullHeader);
-            if (/(in|inch|inches|mm|milimeter)/i.test(fullHeader)) detectedDiam = /mm/i.test(fullHeader) ? 'mm' : 'in';
-            if (/(ft|feet|m|meter)/i.test(fullHeader) && !/item|name|desc/i.test(fullHeader)) detectedLen = /m|meter/i.test(fullHeader) ? 'm' : 'ft';
-        }
+                let flattenedHeaders = []; let detectedDiam = null; let detectedLen = null;
+                for(let c=0; c < numCols; c++) {
+                    let colHeaderParts = [];
+                    for(let r=0; r < headerMatrix.length; r++) { let val = headerMatrix[r][c]; if(val && !colHeaderParts.includes(val)) colHeaderParts.push(val); }
+                    let fullHeader = colHeaderParts.join(" | "); flattenedHeaders.push(fullHeader);
+                    if (/(in|inch|inches|mm|milimeter)/i.test(fullHeader)) detectedDiam = /mm/i.test(fullHeader) ? 'mm' : 'in';
+                    if (/(ft|feet|m|meter)/i.test(fullHeader) && !/item|name|desc/i.test(fullHeader)) detectedLen = /m|meter/i.test(fullHeader) ? 'm' : 'ft';
+                }
 
-        let map = { name: -1, type: -1, od: -1, id: -1, maxOd: -1, len: -1 };
-        flattenedHeaders.forEach((h, i) => {
-            if (/name|item|desc|component/i.test(h)) map.name = i;
-            else if (/type|class/i.test(h)) map.type = i;
-            else if (/\bod\b|outer.*d/i.test(h) && !/max|conn|tj/i.test(h)) map.od = i;
-            else if (/\bid\b|inner.*d/i.test(h)) map.id = i;
-            else if (/max.*od|conn.*od|tj.*od|gauge/i.test(h)) map.maxOd = i;
-            else if (/len|length/i.test(h)) map.len = i;
-        });
+                let map = { name: -1, type: -1, od: -1, id: -1, maxOd: -1, len: -1 };
+                flattenedHeaders.forEach((h, i) => {
+                    if (/name|item|desc|component/i.test(h)) map.name = i;
+                    else if (/type|class/i.test(h)) map.type = i;
+                    else if (/\bod\b|outer.*d/i.test(h) && !/max|conn|tj/i.test(h)) map.od = i;
+                    else if (/\bid\b|inner.*d/i.test(h)) map.id = i;
+                    else if (/max.*od|conn.*od|tj.*od|gauge/i.test(h)) map.maxOd = i;
+                    else if (/len|length/i.test(h)) map.len = i;
+                });
 
-        if (map.od === -1 || map.len === -1) { 
-            alert(`Could not cleanly detect OD and Length columns.`); document.getElementById("bhaBody").innerHTML = ""; return; 
-        }
+                if (map.od === -1 || map.len === -1) { 
+                    alert(`Could not cleanly detect OD and Length columns.`); document.getElementById("bhaBody").innerHTML = ""; return; 
+                }
 
-        let units = askUnitIfNeeded(detectedDiam, detectedLen);
-        let parsedRows = []; let lastValidName = "Component";
+                let units = askUnitIfNeeded(detectedDiam, detectedLen);
+                let parsedRows = []; let lastValidName = "Component";
 
-        for (let i = 0; i < rawData.length; i++) {
-            let row = rawData[i];
-            if (!row || row[map.len] === undefined) continue;
-            let rawLen = parseFloat(String(row[map.len]).replace(/,/g,'')); if (isNaN(rawLen)) continue;
+                for (let i = 0; i < rawData.length; i++) {
+                    let row = rawData[i];
+                    if (!row || row[map.len] === undefined) continue;
+                    let rawLen = parseFloat(String(row[map.len]).replace(/,/g,'')); if (isNaN(rawLen)) continue;
 
-            let nm = map.name !== -1 && row[map.name] ? String(row[map.name]).trim() : "";
-            if (nm === "" && lastValidName !== "") nm = lastValidName; else if (nm !== "") lastValidName = nm;
-            let tyStr = map.type !== -1 && row[map.type] ? String(row[map.type]).toLowerCase() : "";
-            let searchStr = (tyStr + " " + nm).toLowerCase();
-            
-            let tyOpt = "Other";
-            if (/pipe|dp/i.test(searchStr)) tyOpt = "Pipe";
-            if (/hwdp|heavy/i.test(searchStr)) tyOpt = "HWDP";
-            if (/collar|dc/i.test(searchStr)) tyOpt = "Collar";
-            if (/mwd|lwd|tele|dir|motor|rss/i.test(searchStr)) tyOpt = "MWD";
-            if (/ream|ur|underream/i.test(searchStr)) tyOpt = "Underreamer";
-            if (/circ|bypass|pbl/i.test(searchStr)) tyOpt = "Circ Sub";
-            if (/stab/i.test(searchStr)) tyOpt = "Stabilizer";
-            if (/xo|cross|x-over|xover|x\/o/i.test(searchStr)) tyOpt = "Crossover";
-            if (/bit|pdc|tricone/i.test(searchStr)) tyOpt = "Bit"; 
+                    let nm = map.name !== -1 && row[map.name] ? String(row[map.name]).trim() : "";
+                    if (nm === "" && lastValidName !== "") nm = lastValidName; else if (nm !== "") lastValidName = nm;
+                    let tyStr = map.type !== -1 && row[map.type] ? String(row[map.type]).toLowerCase() : "";
+                    let searchStr = (tyStr + " " + nm).toLowerCase();
+                    
+                    let tyOpt = "Other";
+                    if (/pipe|dp/i.test(searchStr)) tyOpt = "Pipe";
+                    if (/hwdp|heavy/i.test(searchStr)) tyOpt = "HWDP";
+                    if (/collar|dc/i.test(searchStr)) tyOpt = "Collar";
+                    if (/mwd|lwd|tele|dir|motor|rss/i.test(searchStr)) tyOpt = "MWD";
+                    if (/ream|ur|underream/i.test(searchStr)) tyOpt = "Underreamer";
+                    if (/circ|bypass|pbl/i.test(searchStr)) tyOpt = "Circ Sub";
+                    if (/stab/i.test(searchStr)) tyOpt = "Stabilizer";
+                    if (/xo|cross|x-over|xover|x\/o/i.test(searchStr)) tyOpt = "Crossover";
+                    if (/bit|pdc|tricone/i.test(searchStr)) tyOpt = "Bit"; 
 
-            let rawOd = map.od !== -1 ? parseFloat(String(row[map.od]).replace(/,/g,'')) || 0 : 0;
-            let rawId = map.id !== -1 ? parseFloat(String(row[map.id]).replace(/,/g,'')) || 0 : 0;
-            let rawMod = map.maxOd !== -1 ? parseFloat(String(row[map.maxOd]).replace(/,/g,'')) || rawOd : rawOd;
-            parsedRows.push({ nm: nm, tyOpt: tyOpt, rawOd: rawOd, rawId: rawId, rawMod: rawMod, rawLen: rawLen });
-        }
+                    let rawOd = map.od !== -1 ? parseFloat(String(row[map.od]).replace(/,/g,'')) || 0 : 0;
+                    let rawId = map.id !== -1 ? parseFloat(String(row[map.id]).replace(/,/g,'')) || 0 : 0;
+                    let rawMod = map.maxOd !== -1 ? parseFloat(String(row[map.maxOd]).replace(/,/g,'')) || rawOd : rawOd;
+                    parsedRows.push({ nm: nm, tyOpt: tyOpt, rawOd: rawOd, rawId: rawId, rawMod: rawMod, rawLen: rawLen });
+                }
 
-        if (parsedRows.length > 0) {
-            let firstIsBit = /bit/i.test(parsedRows[0].tyOpt) || /bit/i.test(parsedRows[0].nm);
-            let lastIsBit = /bit/i.test(parsedRows[parsedRows.length-1].tyOpt) || /bit/i.test(parsedRows[parsedRows.length-1].nm);
-            if (firstIsBit && !lastIsBit) parsedRows.reverse();
-        }
+                if (parsedRows.length > 0) {
+                    let firstIsBit = /bit/i.test(parsedRows[0].tyOpt) || /bit/i.test(parsedRows[0].nm);
+                    let lastIsBit = /bit/i.test(parsedRows[parsedRows.length-1].tyOpt) || /bit/i.test(parsedRows[parsedRows.length-1].nm);
+                    if (firstIsBit && !lastIsBit) parsedRows.reverse();
+                }
 
-        let htmlString = "";
-        parsedRows.forEach(r => {
-            let baseOd = converters.diam.toBase(r.rawOd, units.diam); let baseId = converters.diam.toBase(r.rawId, units.diam);
-            let baseMod = converters.diam.toBase(r.rawMod, units.diam); let baseLen = converters.length.toBase(r.rawLen, units.len);
-            let uiOd = converters.diam.fromBase(baseOd, currentUnits.diam).toFixed(3); let uiId = converters.diam.fromBase(baseId, currentUnits.diam).toFixed(3);
-            let uiMod = converters.diam.fromBase(baseMod, currentUnits.diam).toFixed(3); let uiLen = converters.length.fromBase(baseLen, currentUnits.length).toFixed(1);
-            htmlString += `<tr><td contenteditable>${r.nm}</td><td><select><option ${r.tyOpt==='Pipe'?'selected':''}>Pipe</option><option ${r.tyOpt==='HWDP'?'selected':''}>HWDP</option><option ${r.tyOpt==='Collar'?'selected':''}>Collar</option><option ${r.tyOpt==='MWD'?'selected':''}>MWD</option><option ${r.tyOpt==='Underreamer'?'selected':''}>Underreamer</option><option ${r.tyOpt==='Circ Sub'?'selected':''}>Circ Sub</option><option ${r.tyOpt==='Stabilizer'?'selected':''}>Stabilizer</option><option ${r.tyOpt==='Crossover'?'selected':''}>Crossover</option><option ${r.tyOpt==='Bit'?'selected':''}>Bit</option><option ${r.tyOpt==='Other'?'selected':''}>Other</option></select></td><td><input class="val-diam" value="${uiOd}"></td><td><input class="val-diam" value="${uiId}"></td><td><input class="val-diam" value="${uiMod}"></td><td><input class="val-length" value="${uiLen}" onkeyup="triggerWellDesignChange()"></td><td><input class="val-length" disabled></td></tr>`;
-        });
-        document.getElementById("bhaBody").innerHTML = htmlString; triggerWellDesignChange(); document.getElementById("bhaUpload").value = "";
-    } catch (err) { console.error(err); alert("Error processing BHA file: " + err.message); document.getElementById("bhaBody").innerHTML = ""; }
+                let htmlString = "";
+                parsedRows.forEach(r => {
+                    let baseOd = converters.diam.toBase(r.rawOd, units.diam); let baseId = converters.diam.toBase(r.rawId, units.diam);
+                    let baseMod = converters.diam.toBase(r.rawMod, units.diam); let baseLen = converters.length.toBase(r.rawLen, units.len);
+                    let uiOd = converters.diam.fromBase(baseOd, currentUnits.diam).toFixed(3); let uiId = converters.diam.fromBase(baseId, currentUnits.diam).toFixed(3);
+                    let uiMod = converters.diam.fromBase(baseMod, currentUnits.diam).toFixed(3); let uiLen = converters.length.fromBase(baseLen, currentUnits.length).toFixed(1);
+                    htmlString += `<tr><td contenteditable>${r.nm}</td><td><select><option ${r.tyOpt==='Pipe'?'selected':''}>Pipe</option><option ${r.tyOpt==='HWDP'?'selected':''}>HWDP</option><option ${r.tyOpt==='Collar'?'selected':''}>Collar</option><option ${r.tyOpt==='MWD'?'selected':''}>MWD</option><option ${r.tyOpt==='Underreamer'?'selected':''}>Underreamer</option><option ${r.tyOpt==='Circ Sub'?'selected':''}>Circ Sub</option><option ${r.tyOpt==='Stabilizer'?'selected':''}>Stabilizer</option><option ${r.tyOpt==='Crossover'?'selected':''}>Crossover</option><option ${r.tyOpt==='Bit'?'selected':''}>Bit</option><option ${r.tyOpt==='Other'?'selected':''}>Other</option></select></td><td><input class="val-diam" value="${uiOd}"></td><td><input class="val-diam" value="${uiId}"></td><td><input class="val-diam" value="${uiMod}"></td><td><input class="val-length" value="${uiLen}" onkeyup="triggerWellDesignChange()"></td><td><input class="val-length" disabled></td></tr>`;
+                });
+                document.getElementById("bhaBody").innerHTML = htmlString; triggerWellDesignChange(); document.getElementById("bhaUpload").value = "";
+            } catch (err) { console.error(err); alert("Error processing BHA file: " + err.message); document.getElementById("bhaBody").innerHTML = ""; }
+        }, 100);
+    };
+    reader.readAsArrayBuffer(file);
 }
 
-// EXCEL PARSING (SUBSURFACE)
+// ================= EXCEL PARSING (SUBSURFACE BULK) =================
 function handleFileUpload(event) {
     const file = event.target.files[0];
     if (!file) return;
@@ -906,35 +870,37 @@ function handleFileUpload(event) {
 
                 const c = 0.051948; let prevDepth = 0;
                 let useGrad = document.getElementById("use_geo_grad").checked; let grad_user = parseFloat(document.getElementById("geo_grad").value) || 0; let baseTemp_user = parseFloat(document.getElementById("surface_temp").value) || 80;
+                let df_elev_user = parseFloat(document.getElementById("df_elev").value) || 0;
+                let df_elev_base = toBaseLength(df_elev_user);
 
                 parsedRows.forEach(r => {
+                    if (r.tvddf !== null && r.tvdss !== null) {
+                        df_elev_base = r.tvddf - r.tvdss;
+                        document.getElementById("df_elev").value = fromBaseLength(df_elev_base).toFixed(1);
+                    } else if (r.tvddf !== null) {
+                        r.tvdss = r.tvddf - df_elev_base;
+                    } else if (r.tvdss !== null) {
+                        r.tvddf = r.tvdss + df_elev_base;
+                    }
+                    
                     let activeBot = r[activeType] !== null ? r[activeType] : 0;
                     r.top = prevDepth; prevDepth = activeBot;
-                    let bot_ft = toBaseLength(activeBot); 
-                    if (bot_ft > 0) {
-                        if (r.pp === null && r.pp_psi !== null) r.pp = fromBaseDens(toBasePress(r.pp_psi) / (bot_ft * c));
-                        if (r.pp_psi === null && r.pp !== null) r.pp_psi = fromBasePress(toBaseDens(r.pp) * bot_ft * c);
-                        if (r.fp === null && r.fp_psi !== null) r.fp = fromBaseDens(toBasePress(r.fp_psi) / (bot_ft * c));
-                        if (r.fp_psi === null && r.fp !== null) r.fp_psi = fromBasePress(toBaseDens(r.fp) * bot_ft * c);
-                        if (r.obg === null && r.obg_psi !== null) r.obg = fromBaseDens(toBasePress(r.obg_psi) / (bot_ft * c));
-                        if (r.obg_psi === null && r.obg !== null) r.obg_psi = fromBasePress(toBaseDens(r.obg) * bot_ft * c);
-                    }
-                    if (useGrad) r.temp = baseTemp_user + (activeBot / 100) * grad_user;
                 });
 
                 let htmlString = "";
                 parsedRows.forEach(r => {
                     let mdStr = r.md !== null ? r.md.toFixed(0) : ""; let dfStr = r.tvddf !== null ? r.tvddf.toFixed(0) : ""; let ssStr = r.tvdss !== null ? r.tvdss.toFixed(0) : "";
+                    
                     let ppStr = r.pp !== null ? r.pp.toFixed(3) : ""; let ppPsiStr = r.pp_psi !== null ? r.pp_psi.toFixed(1) : "";
                     let fpStr = r.fp !== null ? r.fp.toFixed(3) : ""; let fpPsiStr = r.fp_psi !== null ? r.fp_psi.toFixed(1) : "";
                     let obgStr = r.obg !== null ? r.obg.toFixed(3) : ""; let obgPsiStr = r.obg_psi !== null ? r.obg_psi.toFixed(1) : "";
                     let tempStr = r.temp !== null ? r.temp.toFixed(1) : "";
 
-                    htmlString += `<tr><td contenteditable="false">${r.top.toFixed(0)}</td><td contenteditable>${mdStr}</td><td contenteditable>${dfStr}</td><td contenteditable>${ssStr}</td><td contenteditable>${ppStr}</td><td contenteditable>${ppPsiStr}</td><td contenteditable>${fpStr}</td><td contenteditable>${fpPsiStr}</td><td contenteditable>${obgStr}</td><td contenteditable>${obgPsiStr}</td><td contenteditable>${tempStr}</td></tr>`;
+                    htmlString += `<tr><td contenteditable="false">${r.top.toFixed(0)}</td><td contenteditable class="val-length" onkeyup="calcPPFG(this,'md')">${mdStr}</td><td contenteditable class="val-length" onkeyup="calcPPFG(this,'tvddf')">${dfStr}</td><td contenteditable class="val-length" onkeyup="calcPPFG(this,'tvdss')">${ssStr}</td><td contenteditable class="val-density" onkeyup="calcPPFG(this,'pp_dens')">${ppStr}</td><td contenteditable class="val-press" onkeyup="calcPPFG(this,'pp_press')">${ppPsiStr}</td><td contenteditable class="val-density" onkeyup="calcPPFG(this,'fp_dens')">${fpStr}</td><td contenteditable class="val-press" onkeyup="calcPPFG(this,'fp_press')">${fpPsiStr}</td><td contenteditable class="val-density" onkeyup="calcPPFG(this,'obg_dens')">${obgStr}</td><td contenteditable class="val-press" onkeyup="calcPPFG(this,'obg_press')">${obgPsiStr}</td><td contenteditable class="val-temp" onkeyup="debouncedUpdateSubsurfaceChart()">${tempStr}</td></tr>`;
                 });
 
-                document.getElementById("ppfgBody").innerHTML = htmlString; highlightActiveDepth(); 
-                clearTimeout(chartDebounceTimer); chartDebounceTimer = setTimeout(updateSubsurfaceChart, 400);
+                document.getElementById("ppfgBody").innerHTML = htmlString; 
+                switchCalcDepth(); // This safely cross-calculates all missing psi/ppg fields using the selected UI metric
                 document.getElementById("excelUpload").value = ""; 
             } catch (err) { console.error(err); alert("Error processing Subsurface file: " + err.message); document.getElementById("ppfgBody").innerHTML = ""; }
         }, 100); 
@@ -942,7 +908,7 @@ function handleFileUpload(event) {
     reader.readAsArrayBuffer(file);
 }
 
-// UNITS ENGINE
+// ================= UNITS ENGINE =================
 const converters = {
     length: { toBase: (v, u) => u === "m" ? v * 3.28084 : v,  fromBase: (v, u) => u === "m" ? v / 3.28084 : v },
     diam:   { toBase: (v, u) => u === "mm" ? v / 25.4 : v,    fromBase: (v, u) => u === "mm" ? v * 25.4 : v },
@@ -986,7 +952,7 @@ function toBaseLength(v) { return converters.length.toBase(v, currentUnits.lengt
 function toBaseDens(v)   { return converters.density.toBase(v, currentUnits.density); } function toBasePress(v)  { return converters.press.toBase(v, currentUnits.press); }
 function fromBaseLength(v) { return converters.length.fromBase(v, currentUnits.length); } function fromBaseDens(v)   { return converters.density.fromBase(v, currentUnits.density); } function fromBasePress(v)  { return converters.press.fromBase(v, currentUnits.press); }
 
-// SUBSURFACE CHARTING & CALCS
+// ================= SUBSURFACE CHARTING & CALCS =================
 function triggerPPFGCalc(depthCell) {
     let tbody = document.getElementById("ppfgBody"); let col = getCalcDepthCol(); let prevDepth = 0;
     for(let i=0; i<tbody.rows.length; i++) { tbody.rows[i].cells[0].textContent = prevDepth.toFixed(0); let botDepth = parseFloat(tbody.rows[i].cells[col].textContent); if(!isNaN(botDepth)) prevDepth = botDepth; }
@@ -994,16 +960,25 @@ function triggerPPFGCalc(depthCell) {
     applyGeothermal(true); clearTimeout(chartDebounceTimer); chartDebounceTimer = setTimeout(updateSubsurfaceChart, 400);
 }
 function calcPPFG(inputCell, type, skipChart=false) {
-    let row = inputCell.closest("tr"); let col = getCalcDepthCol(); let bottomMD_ft = toBaseLength(parseFloat(row.cells[col].textContent.replace(/,/g,'')) || 0);
-    if (bottomMD_ft <= 0) return; let c = 0.051948;
+    let row = inputCell.closest("tr"); let col = getCalcDepthCol(); 
+    let mdStr = row.cells[col].textContent.replace(/,/g,'');
+    let md = toBaseLength(parseFloat(mdStr) || 0);
+    
+    // Safely fallback to MD if TVDDF is empty to prevent NaN errors
+    let tvddfStr = row.cells[2].textContent.replace(/,/g,'');
+    let tvddf = toBaseLength(parseFloat(tvddfStr) || parseFloat(mdStr) || 0);
+    
+    if (tvddf <= 0.1) return; 
+    let c = 0.051948;
     let parseCell = (td) => parseFloat(td.textContent.replace(/,/g,''));
 
-    if (type === 'pp_dens') { let d = parseCell(row.cells[4]); if(!isNaN(d)) row.cells[5].textContent = fromBasePress(toBaseDens(d) * bottomMD_ft * c).toFixed(1); else row.cells[5].textContent = "";}
-    else if (type === 'pp_press') { let p = parseCell(row.cells[5]); if(!isNaN(p)) row.cells[4].textContent = fromBaseDens(toBasePress(p) / (bottomMD_ft * c)).toFixed(3); else row.cells[4].textContent = ""; }
-    else if (type === 'fp_dens') { let d = parseCell(row.cells[6]); if(!isNaN(d)) row.cells[7].textContent = fromBasePress(toBaseDens(d) * bottomMD_ft * c).toFixed(1); else row.cells[7].textContent = ""; }
-    else if (type === 'fp_press') { let p = parseCell(row.cells[7]); if(!isNaN(p)) row.cells[6].textContent = fromBaseDens(toBasePress(p) / (bottomMD_ft * c)).toFixed(3); else row.cells[6].textContent = ""; }
-    else if (type === 'obg_dens') { let d = parseCell(row.cells[8]); if(!isNaN(d)) row.cells[9].textContent = fromBasePress(toBaseDens(d) * bottomMD_ft * c).toFixed(1); else row.cells[9].textContent = ""; }
-    else if (type === 'obg_press') { let p = parseCell(row.cells[9]); if(!isNaN(p)) row.cells[8].textContent = fromBaseDens(toBasePress(p) / (bottomMD_ft * c)).toFixed(3); else row.cells[8].textContent = ""; }
+    if (type === 'pp_dens') { let d = parseCell(row.cells[4]); if(!isNaN(d)) row.cells[5].textContent = fromBasePress(toBaseDens(d) * tvddf * c).toFixed(1); else row.cells[5].textContent = "";}
+    else if (type === 'pp_press') { let p = parseCell(row.cells[5]); if(!isNaN(p)) row.cells[4].textContent = fromBaseDens(toBasePress(p) / (tvddf * c)).toFixed(3); else row.cells[4].textContent = ""; }
+    else if (type === 'fp_dens') { let d = parseCell(row.cells[6]); if(!isNaN(d)) row.cells[7].textContent = fromBasePress(toBaseDens(d) * tvddf * c).toFixed(1); else row.cells[7].textContent = ""; }
+    else if (type === 'fp_press') { let p = parseCell(row.cells[7]); if(!isNaN(p)) row.cells[6].textContent = fromBaseDens(toBasePress(p) / (tvddf * c)).toFixed(3); else row.cells[6].textContent = ""; }
+    else if (type === 'obg_dens') { let d = parseCell(row.cells[8]); if(!isNaN(d)) row.cells[9].textContent = fromBasePress(toBaseDens(d) * tvddf * c).toFixed(1); else row.cells[9].textContent = ""; }
+    else if (type === 'obg_press') { let p = parseCell(row.cells[9]); if(!isNaN(p)) row.cells[8].textContent = fromBaseDens(toBasePress(p) / (tvddf * c)).toFixed(3); else row.cells[8].textContent = ""; }
+    
     if(!skipChart) { clearTimeout(chartDebounceTimer); chartDebounceTimer = setTimeout(updateSubsurfaceChart, 400); }
 }
 function applyGeothermal(skipChart=false) {
@@ -1041,13 +1016,14 @@ function updateSubsurfaceChart() {
     if(tempData.length > 0) { tempData.unshift({x: surfTemp, y: 0}); }
     drawSubsurfaceChartDirect(ppData, fpData, obgData, tempData);
 }
+
 function drawSubsurfaceChartDirect(ppData, fpData, obgData, tempData) {
     const ctx = document.getElementById("subsurfaceChart"); if (!ctx) return; 
     if (subChartInstance) subChartInstance.destroy();
     subChartInstance = new Chart(ctx,{ type: "scatter", data: { datasets: [ {label: `Pore Press`, data: ppData, showLine: true, borderColor: "#777", borderDash: [5,5], pointRadius: 0, xAxisID: 'x', normalized: true}, {label: `Frac Press`, data: fpData, showLine: true, borderColor: "#b45309", borderDash: [5,5], pointRadius: 0, xAxisID: 'x', normalized: true}, {label: `Overburden`, data: obgData, showLine: true, borderColor: "#000", pointRadius: 0, xAxisID: 'x', normalized: true}, {label: `Temp`, data: tempData, showLine: true, borderColor: "#eab308", backgroundColor: "#eab308", xAxisID: 'x2', normalized: true} ] }, options: { animation: false, maintainAspectRatio: false, scales: { x: { title: {display: true, text: `Density (${currentUnits.density})`}, position: 'bottom' }, x2: { title: {display: true, text: `Temp (°${currentUnits.temp})`}, position: 'top', grid: {drawOnChartArea: false} }, y: { reverse: true, title: {display: true, text: `Depth (${currentUnits.length})`} } } } });
 }
 
-// SCHEMATICS 
+// ================= SCHEMATICS =================
 function getWellSectionsForDrawing() {
     let well_sections = []; let rows = document.getElementById("wellTable").rows;
     for (let i = 1; i < rows.length; i++) {
@@ -1165,7 +1141,7 @@ function updateSchematics() {
     }
 }
 
-// SIMULATION LOGIC
+// ================= SIMULATION LOGIC =================
 function buildPayload(){
     let well_sections = []; let rows = document.getElementById("wellTable").rows;
     for (let i = 1; i < rows.length; i++) { let c = rows[i].cells; let type = c[0].children[0].value;
@@ -1185,7 +1161,7 @@ function buildPayload(){
     let mpdMode = document.getElementById("mpdMode").value;
     let anchorType = document.getElementById("anchorType").value;
     let zfMode = document.getElementById("zeroFlowMode").value;
-    
+
     let el_k_casing = document.getElementById("k_casing");
     let el_cp_casing = document.getElementById("cp_casing");
     let el_k_cement = document.getElementById("k_cement");
@@ -1240,7 +1216,11 @@ async function runSimulation(){
     try {
         let res = await fetch("/simulate", { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(payload) });
         let finalResult = await res.json();
-        if (finalResult.error) throw new Error(finalResult.error);
+        
+        // Catch python crash and missing object safety
+        if (!finalResult || !finalResult.summary || finalResult.error) {
+            throw new Error(finalResult?.error || "Unknown Server Error. Check inputs.");
+        }
 
         lastSimResult = finalResult;
         
@@ -1519,6 +1499,10 @@ function updateScooterValues(depthBase) {
     document.getElementById('scooterObg').innerText = obg; 
 }
 
+scooterLine.addEventListener('mousedown', (e) => { isDraggingScooter = true; e.preventDefault(); });
+document.addEventListener('mousemove', (e) => { if (!isDraggingScooter || !chartDensityInstance) return; let rect = chartWrapper.getBoundingClientRect(); moveScooterTo(e.clientY - rect.top); });
+document.addEventListener('mouseup', () => { isDraggingScooter = false; });
+
 window.onload = function() { 
     toggleMainMode();
     enforceOpenHoleTop();
@@ -1526,7 +1510,6 @@ window.onload = function() {
     calcBhaCumLength();
     updateSchematics(); 
     updateMudProperties();
-    updateSubsurfaceChart(); 
 };
 </script>
 </body>
