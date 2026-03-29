@@ -209,10 +209,10 @@
                 </div>
             </div>
             
+            <p style="font-size: 0.85em; color: gray; margin: 0 0 10px 0;"><i>Note: The table cascades automatically. Each row's depth is the bottom of that interval. Surface is assumed as 0.</i></p>
             <table id="ppfgTable">
                 <thead>
                     <tr>
-                        <th>Top (<span class="lbl-length">ft</span>)</th>
                         <th id="th_md">MD (<span class="lbl-length">ft</span>)</th>
                         <th id="th_tvddf" class="highlight-col">TVDDF (<span class="lbl-length">ft</span>)</th>
                         <th id="th_tvdss">TVDSS (<span class="lbl-length">ft</span>)</th>
@@ -227,7 +227,6 @@
                 </thead>
                 <tbody id="ppfgBody">
                     <tr>
-                        <td contenteditable="false">0</td>
                         <td contenteditable class="val-length" onkeyup="triggerPPFGCalc(this)"></td>
                         <td contenteditable class="val-length highlight-col" onkeyup="triggerPPFGCalc(this)"></td>
                         <td contenteditable class="val-length" onkeyup="triggerPPFGCalc(this)"></td>
@@ -266,17 +265,18 @@ function parseSafe(val) {
     return isNaN(parsed) ? null : parsed;
 }
 
+// 0=MD, 1=TVDDF, 2=TVDSS
 function getCalcDepthCol() {
     let type = document.getElementById("calcDepthType").value;
-    if (type === "md") return 1;
-    if (type === "tvddf") return 2;
-    if (type === "tvdss") return 3;
-    return 2;
+    if (type === "md") return 0;
+    if (type === "tvddf") return 1;
+    if (type === "tvdss") return 2;
+    return 1;
 }
 
 function highlightActiveDepth() {
     let colIndex = getCalcDepthCol();
-    document.querySelectorAll('#ppfgTable th').forEach((th, i) => { if(i>0 && i<4) th.classList.remove('highlight-col'); });
+    document.querySelectorAll('#ppfgTable th').forEach((th, i) => { if(i>=0 && i<3) th.classList.remove('highlight-col'); });
     document.querySelectorAll('#ppfgBody td').forEach((td, i) => { td.classList.remove('highlight-col'); });
     
     document.getElementById("ppfgTable").rows[0].cells[colIndex].classList.add('highlight-col');
@@ -289,19 +289,14 @@ function highlightActiveDepth() {
 function switchCalcDepth() {
     let col = getCalcDepthCol();
     let tbody = document.getElementById("ppfgBody");
-    let prevDepth = 0;
     
     highlightActiveDepth();
     
     for (let i = 0; i < tbody.rows.length; i++) {
         let row = tbody.rows[i];
-        row.cells[0].textContent = prevDepth.toFixed(0);
-        let botDepth = parseFloat(row.cells[col].textContent);
-        if (!isNaN(botDepth)) prevDepth = botDepth;
-
-        calcPPFG(row.cells[4], 'pp_dens', true);
-        calcPPFG(row.cells[6], 'fp_dens', true);
-        calcPPFG(row.cells[8], 'obg_dens', true);
+        calcPPFG(row.cells[3], 'pp_dens', true);
+        calcPPFG(row.cells[5], 'fp_dens', true);
+        calcPPFG(row.cells[7], 'obg_dens', true);
     }
     applyGeothermal(true); 
     debouncedUpdateSubsurfaceChart();
@@ -336,16 +331,15 @@ function addTrajectoryRow(){
     row.innerHTML = `<td contenteditable class="val-length"></td><td contenteditable></td><td contenteditable></td>`;
 }
 
-function addSubsurfaceRow(top="", md="", tvddf="", tvdss="", pp="", pp_psi="", fp="", fp_psi="", obg="", obg_psi="", temp=""){
+function addSubsurfaceRow(md="", tvddf="", tvdss="", pp="", pp_psi="", fp="", fp_psi="", obg="", obg_psi="", temp=""){
     const tbody = document.getElementById("ppfgBody");
     const row = tbody.insertRow();
     
-    let isMD = getCalcDepthCol() === 1 ? 'highlight-col' : '';
-    let isDF = getCalcDepthCol() === 2 ? 'highlight-col' : '';
-    let isSS = getCalcDepthCol() === 3 ? 'highlight-col' : '';
+    let isMD = getCalcDepthCol() === 0 ? 'highlight-col' : '';
+    let isDF = getCalcDepthCol() === 1 ? 'highlight-col' : '';
+    let isSS = getCalcDepthCol() === 2 ? 'highlight-col' : '';
 
     row.innerHTML = `
-        <td contenteditable="false" class="val-length">${top}</td>
         <td contenteditable class="val-length ${isMD}" onkeyup="triggerPPFGCalc(this)">${md}</td>
         <td contenteditable class="val-length ${isDF}" onkeyup="triggerPPFGCalc(this)">${tvddf}</td>
         <td contenteditable class="val-length ${isSS}" onkeyup="triggerPPFGCalc(this)">${tvdss}</td>
@@ -357,13 +351,6 @@ function addSubsurfaceRow(top="", md="", tvddf="", tvdss="", pp="", pp_psi="", f
         <td contenteditable class="val-press" onkeyup="calcPPFG(this, 'obg_press')">${obg_psi}</td>
         <td contenteditable class="val-temp" onkeyup="debouncedUpdateSubsurfaceChart()">${temp}</td>`;
     
-    let prevDepth = 0;
-    for(let i=0; i<tbody.rows.length; i++) {
-        tbody.rows[i].cells[0].textContent = prevDepth.toFixed(0);
-        let botDepth = parseFloat(tbody.rows[i].cells[getCalcDepthCol()].textContent);
-        if(!isNaN(botDepth)) prevDepth = botDepth;
-    }
-
     applyGeothermal(); 
 }
 
@@ -372,7 +359,7 @@ function handleFileUpload(event) {
     const file = event.target.files[0];
     if (!file) return;
 
-    document.getElementById("ppfgBody").innerHTML = `<tr><td colspan="11" style="text-align:center; padding: 20px;"><b>Processing Data in Memory... Please wait.</b></td></tr>`;
+    document.getElementById("ppfgBody").innerHTML = `<tr><td colspan="10" style="text-align:center; padding: 20px;"><b>Processing Data in Memory... Please wait.</b></td></tr>`;
 
     const reader = new FileReader();
     reader.onload = function(e) {
@@ -456,15 +443,17 @@ function handleFileUpload(event) {
             let activeType = document.getElementById("calcDepthType").value;
 
             let parsedRows = [];
-            for (let i = 2; i < rawData.length; i++) {
+            for (let i = 0; i < rawData.length; i++) {
                 let row = rawData[i];
                 if (!row) continue;
+
+                // Safely grab the driving depth column. If it's not a number, skip this row (bypasses headers automatically)
+                let drivingDepthIdx = map[activeType];
+                if(drivingDepthIdx === -1 || row[drivingDepthIdx] === undefined || isNaN(parseFloat(row[drivingDepthIdx]))) continue;
 
                 let md = map.md !== -1 ? parseSafe(row[map.md]) : null;
                 let tvddf = map.tvddf !== -1 ? parseSafe(row[map.tvddf]) : null;
                 let tvdss = map.tvdss !== -1 ? parseSafe(row[map.tvdss]) : null;
-
-                if (md === null && tvddf === null && tvdss === null) continue;
 
                 parsedRows.push({
                     md: md, tvddf: tvddf, tvdss: tvdss,
@@ -482,16 +471,16 @@ function handleFileUpload(event) {
 
             // HIGH PERFORMANCE IN-MEMORY MATH
             const c = 0.051948;
-            let prevDepth = 0;
             let useGrad = document.getElementById("use_geo_grad").checked;
             let grad_user = parseFloat(document.getElementById("geo_grad").value) || 0;
             let baseTemp_user = parseFloat(document.getElementById("surface_temp").value) || 80;
 
             let ppData = [], fpData = [], obgData = [], tempData = [];
+            let prevDepth = 0;
 
             parsedRows.forEach(r => {
                 let activeBot = r[activeType] !== null ? r[activeType] : 0;
-                r.top = prevDepth;
+                let topForPlot = prevDepth;
                 prevDepth = activeBot;
 
                 let bot_ft = toBaseLength(activeBot);
@@ -509,9 +498,9 @@ function handleFileUpload(event) {
                 if (useGrad) r.temp = baseTemp_user + (activeBot / 100) * grad_user;
 
                 // Build Chart Data directly from array
-                if(r.pp !== null && !isNaN(r.pp)) { ppData.push({x: r.pp, y: r.top}); ppData.push({x: r.pp, y: activeBot}); }
-                if(r.fp !== null && !isNaN(r.fp)) { fpData.push({x: r.fp, y: r.top}); fpData.push({x: r.fp, y: activeBot}); }
-                if(r.obg !== null && !isNaN(r.obg)) { obgData.push({x: r.obg, y: r.top}); obgData.push({x: r.obg, y: activeBot}); }
+                if(r.pp !== null && !isNaN(r.pp)) { ppData.push({x: r.pp, y: topForPlot}); ppData.push({x: r.pp, y: activeBot}); }
+                if(r.fp !== null && !isNaN(r.fp)) { fpData.push({x: r.fp, y: topForPlot}); fpData.push({x: r.fp, y: activeBot}); }
+                if(r.obg !== null && !isNaN(r.obg)) { obgData.push({x: r.obg, y: topForPlot}); obgData.push({x: r.obg, y: activeBot}); }
                 if(r.temp !== null && !isNaN(r.temp)){ tempData.push({x: r.temp, y: activeBot}); }
             });
             
@@ -538,7 +527,6 @@ function handleFileUpload(event) {
 
                 htmlString += `
                     <tr>
-                        <td contenteditable="false" class="val-length">${r.top.toFixed(0)}</td>
                         <td contenteditable class="val-length ${isMD}" onkeyup="triggerPPFGCalc(this)">${mdStr}</td>
                         <td contenteditable class="val-length ${isDF}" onkeyup="triggerPPFGCalc(this)">${dfStr}</td>
                         <td contenteditable class="val-length ${isSS}" onkeyup="triggerPPFGCalc(this)">${ssStr}</td>
@@ -554,9 +542,24 @@ function handleFileUpload(event) {
 
             document.getElementById("ppfgBody").innerHTML = htmlString;
             highlightActiveDepth();
-            drawSubsurfaceChartDirect(ppData, fpData, obgData, tempData); // Direct draw, skips DOM read
+            drawSubsurfaceChartDirect(ppData, fpData, obgData, tempData); 
 
-            let report = `✅ Import Successful (${parsedRows.length} rows processed in memory).\n\n`;
+            let report = `✅ Import Successful (${parsedRows.length} rows processed in memory).\n\nMapped Depths:\n`;
+            if (map.md !== -1) report += `• MD Found\n`;
+            if (map.tvddf !== -1) report += `• TVDDF Found\n`;
+            if (map.tvdss !== -1) report += `• TVDSS Found\n`;
+            
+            report += `\nMapped Physics:\n`;
+            if(unitPref === 'psi'){
+                report += `• Pore Pressure: ${map.pp_psi !== -1 ? 'Found (PSI)' : 'NOT FOUND'}\n`;
+                report += `• Frac Gradient: ${map.fp_psi !== -1 ? 'Found (PSI)' : 'NOT FOUND'}\n`;
+                report += `• Overburden: ${map.obg_psi !== -1 ? 'Found (PSI)' : 'NOT FOUND'}\n`;
+            } else {
+                report += `• Pore Pressure: ${map.pp !== -1 ? 'Found (PPG)' : 'NOT FOUND'}\n`;
+                report += `• Frac Gradient: ${map.fp !== -1 ? 'Found (PPG)' : 'NOT FOUND'}\n`;
+                report += `• Overburden: ${map.obg !== -1 ? 'Found (PPG)' : 'NOT FOUND'}\n`;
+            }
+            
             setTimeout(() => alert(report), 100);
             document.getElementById("excelUpload").value = ""; 
 
@@ -612,20 +615,10 @@ function fromBasePress(v)  { return converters.press.fromBase(v, currentUnits.pr
 
 // ================= SUBSURFACE LOGIC (DEBOUNCED TYPING) =================
 function triggerPPFGCalc(depthCell) {
-    let tbody = document.getElementById("ppfgBody");
-    let col = getCalcDepthCol();
-    
-    let prevDepth = 0;
-    for(let i=0; i<tbody.rows.length; i++) {
-        tbody.rows[i].cells[0].textContent = prevDepth.toFixed(0);
-        let botDepth = parseFloat(tbody.rows[i].cells[col].textContent);
-        if(!isNaN(botDepth)) prevDepth = botDepth;
-    }
-
     let row = depthCell.closest("tr");
-    calcPPFG(row.cells[4], 'pp_dens', true);
-    calcPPFG(row.cells[6], 'fp_dens', true);
-    calcPPFG(row.cells[8], 'obg_dens', true);
+    calcPPFG(row.cells[3], 'pp_dens', true);
+    calcPPFG(row.cells[5], 'fp_dens', true);
+    calcPPFG(row.cells[7], 'obg_dens', true);
     
     applyGeothermal(true);
     debouncedUpdateSubsurfaceChart();
@@ -640,23 +633,23 @@ function calcPPFG(inputCell, type, skipChart=false) {
     let c = 0.051948;
     
     if (type === 'pp_dens') {
-        let d = parseFloat(row.cells[4].textContent);
-        if(!isNaN(d)) row.cells[5].textContent = fromBasePress(toBaseDens(d) * bottomMD_ft * c).toFixed(1);
+        let d = parseFloat(row.cells[3].textContent);
+        if(!isNaN(d)) row.cells[4].textContent = fromBasePress(toBaseDens(d) * bottomMD_ft * c).toFixed(1);
     } else if (type === 'pp_press') {
-        let p = parseFloat(row.cells[5].textContent);
-        if(!isNaN(p)) row.cells[4].textContent = fromBaseDens(toBasePress(p) / (bottomMD_ft * c)).toFixed(3);
+        let p = parseFloat(row.cells[4].textContent);
+        if(!isNaN(p)) row.cells[3].textContent = fromBaseDens(toBasePress(p) / (bottomMD_ft * c)).toFixed(3);
     } else if (type === 'fp_dens') {
-        let d = parseFloat(row.cells[6].textContent);
-        if(!isNaN(d)) row.cells[7].textContent = fromBasePress(toBaseDens(d) * bottomMD_ft * c).toFixed(1);
+        let d = parseFloat(row.cells[5].textContent);
+        if(!isNaN(d)) row.cells[6].textContent = fromBasePress(toBaseDens(d) * bottomMD_ft * c).toFixed(1);
     } else if (type === 'fp_press') {
-        let p = parseFloat(row.cells[7].textContent);
-        if(!isNaN(p)) row.cells[6].textContent = fromBaseDens(toBasePress(p) / (bottomMD_ft * c)).toFixed(3);
+        let p = parseFloat(row.cells[6].textContent);
+        if(!isNaN(p)) row.cells[5].textContent = fromBaseDens(toBasePress(p) / (bottomMD_ft * c)).toFixed(3);
     } else if (type === 'obg_dens') {
-        let d = parseFloat(row.cells[8].textContent);
-        if(!isNaN(d)) row.cells[9].textContent = fromBasePress(toBaseDens(d) * bottomMD_ft * c).toFixed(1);
+        let d = parseFloat(row.cells[7].textContent);
+        if(!isNaN(d)) row.cells[8].textContent = fromBasePress(toBaseDens(d) * bottomMD_ft * c).toFixed(1);
     } else if (type === 'obg_press') {
-        let p = parseFloat(row.cells[9].textContent);
-        if(!isNaN(p)) row.cells[8].textContent = fromBaseDens(toBasePress(p) / (bottomMD_ft * c)).toFixed(3);
+        let p = parseFloat(row.cells[8].textContent);
+        if(!isNaN(p)) row.cells[7].textContent = fromBaseDens(toBasePress(p) / (bottomMD_ft * c)).toFixed(3);
     }
     
     if(!skipChart) debouncedUpdateSubsurfaceChart();
@@ -671,7 +664,7 @@ function applyGeothermal(skipChart=false) {
     let col = getCalcDepthCol();
 
     for (let i = 0; i < rows.length; i++) {
-        let tempCell = rows[i].cells[10];
+        let tempCell = rows[i].cells[9];
         if (useGrad) {
             tempCell.contentEditable = "false";
             let depth_user = parseFloat(rows[i].cells[col].textContent) || 0;
@@ -685,7 +678,6 @@ function applyGeothermal(skipChart=false) {
     if(!skipChart) debouncedUpdateSubsurfaceChart();
 }
 
-// Chart Debouncer (prevents freezing while typing)
 function debouncedUpdateSubsurfaceChart() {
     clearTimeout(chartDebounceTimer);
     chartDebounceTimer = setTimeout(updateSubsurfaceChart, 400); 
@@ -696,16 +688,19 @@ function getPPFGProfile() {
     let col = getCalcDepthCol();
     let data = { top: [], bottom: [], pp: [], fp: [], obg: [], temp: [] };
     
-    // Uses .textContent for massively improved DOM read speeds
-    let len = rows.length;
-    for (let i = 0; i < len; i++) {
+    let prevDepth = 0;
+    for (let i = 0; i < rows.length; i++) {
         let r = rows[i].cells;
-        data.top.push(parseFloat(r[0].textContent) || 0); 
-        data.bottom.push(parseFloat(r[col].textContent) || 0); 
-        data.pp.push(parseFloat(r[4].textContent)); 
-        data.fp.push(parseFloat(r[6].textContent));
-        data.obg.push(parseFloat(r[8].textContent));
-        data.temp.push(parseFloat(r[10].textContent));
+        let activeBot = parseFloat(r[col].textContent) || 0;
+        
+        data.top.push(prevDepth); 
+        data.bottom.push(activeBot); 
+        data.pp.push(parseFloat(r[3].textContent)); 
+        data.fp.push(parseFloat(r[5].textContent));
+        data.obg.push(parseFloat(r[7].textContent));
+        data.temp.push(parseFloat(r[9].textContent));
+        
+        prevDepth = activeBot;
     }
     return data;
 }
@@ -743,7 +738,7 @@ function drawSubsurfaceChartDirect(ppData, fpData, obgData, tempData) {
             ]
         },
         options: {
-            animation: false, // Disables animation for zero lag on 40,000+ points
+            animation: false,
             maintainAspectRatio: false,
             scales: {
                 x: { title: {display: true, text: `Density (${currentUnits.density})`}, position: 'bottom' },
@@ -841,7 +836,7 @@ function buildPayload(){
     let ppfg = getPPFGProfile();
     let validTemps = ppfg.temp.filter(t => !isNaN(t));
     let defaultSurfTemp = parseFloat(document.getElementById("surface_temp").value) || 80;
-    let maxTempUser = validTemps.length > 0 ? validTemps[validTemps.length-1] : defaultSurfTemp; // Defaults to surface temp if blank
+    let maxTempUser = validTemps.length > 0 ? validTemps[validTemps.length-1] : defaultSurfTemp; 
 
     return {
         flowrate: converters.flow.toBase(Number(document.getElementById("flowrate").value), currentUnits.flow),
