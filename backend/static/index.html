@@ -167,18 +167,18 @@
             <h3>Bottom Hole Assembly (Top → Bottom)</h3>
             <table id="bhaTable" onkeyup="triggerWellDesignChange()" onchange="triggerWellDesignChange()">
                 <thead>
-                    <tr><th>Name</th><th>Type</th><th>OD (<span class="lbl-diam">in</span>)</th><th>ID (<span class="lbl-diam">in</span>)</th><th>Max OD (<span class="lbl-diam">in</span>)</th><th>Length (<span class="lbl-length">ft</span>)</th></tr>
+                    <tr><th>Name</th><th>Type</th><th>OD (<span class="lbl-diam">in</span>)</th><th>ID (<span class="lbl-diam">in</span>)</th><th>Max OD (<span class="lbl-diam">in</span>)</th><th>Length (<span class="lbl-length">ft</span>)</th><th>Cum. Len (<span class="lbl-length">ft</span>)</th></tr>
                 </thead>
                 <tbody id="bhaBody">
                     <tr>
                         <td contenteditable>Drill Pipe</td>
                         <td><select><option selected>Pipe</option><option>HWDP</option><option>Collar</option><option>MWD</option><option>Underreamer</option><option>Circ Sub</option><option>Stabilizer</option><option>Crossover</option><option>Bit</option><option>Other</option></select></td>
-                        <td><input class="val-diam" value="5"></td><td><input class="val-diam" value="4"></td><td><input class="val-diam" value="6.5"></td><td><input class="val-length" value="8000" onkeyup="triggerWellDesignChange()"></td>
+                        <td><input class="val-diam" value="5"></td><td><input class="val-diam" value="4"></td><td><input class="val-diam" value="6.5"></td><td><input class="val-length" value="8000" onkeyup="triggerWellDesignChange()"></td><td><input class="val-length" disabled value="10000"></td>
                     </tr>
                     <tr>
                         <td contenteditable>Drill Collar</td>
                         <td><select><option>Pipe</option><option>HWDP</option><option selected>Collar</option><option>MWD</option><option>Underreamer</option><option>Circ Sub</option><option>Stabilizer</option><option>Crossover</option><option>Bit</option><option>Other</option></select></td>
-                        <td><input class="val-diam" value="6.5"></td><td><input class="val-diam" value="2.5"></td><td><input class="val-diam" value="6.5"></td><td><input class="val-length" value="2000" onkeyup="triggerWellDesignChange()"></td>
+                        <td><input class="val-diam" value="6.5"></td><td><input class="val-diam" value="2.5"></td><td><input class="val-diam" value="6.5"></td><td><input class="val-length" value="2000" onkeyup="triggerWellDesignChange()"></td><td><input class="val-length" disabled value="2000"></td>
                     </tr>
                 </tbody>
             </table>
@@ -295,8 +295,25 @@ function showTab(tab, btn) {
     if(tab === 'simulation') { toggleScooter(); }
 }
 
+function calcBhaCumLength() {
+    let tbody = document.getElementById("bhaBody");
+    if (!tbody) return;
+    let cum = 0;
+    // Calculate running sum from Bottom to Top
+    for (let i = tbody.rows.length - 1; i >= 0; i--) {
+        let lenInput = tbody.rows[i].cells[5].querySelector("input");
+        let cumInput = tbody.rows[i].cells[6].querySelector("input");
+        if(lenInput && cumInput) {
+            let l = parseFloat(lenInput.value.replace(/,/g, '')) || 0;
+            cum += l;
+            cumInput.value = cum.toFixed(1);
+        }
+    }
+}
+
 function triggerWellDesignChange() {
     enforceOpenHoleTop();
+    calcBhaCumLength();
     updateSchematics();
     if (lastSimResult) { clearTimeout(wellChangeTimer); wellChangeTimer = setTimeout(replotChart, 500); }
 }
@@ -333,7 +350,8 @@ function addTrajectoryRow(){
 }
 function addBhaRow(){
     const tbody = document.getElementById("bhaBody"); const row = tbody.insertRow();
-    row.innerHTML = `<td contenteditable>New Item</td><td><select><option>Pipe</option><option>HWDP</option><option>Collar</option><option>MWD</option><option>Underreamer</option><option>Circ Sub</option><option>Stabilizer</option><option>Crossover</option><option>Bit</option><option>Other</option></select></td><td><input class="val-diam"></td><td><input class="val-diam"></td><td><input class="val-diam"></td><td><input class="val-length" onkeyup="triggerWellDesignChange()"></td>`;
+    row.innerHTML = `<td contenteditable>New Item</td><td><select><option>Pipe</option><option>HWDP</option><option>Collar</option><option>MWD</option><option>Underreamer</option><option>Circ Sub</option><option>Stabilizer</option><option>Crossover</option><option>Bit</option><option>Other</option></select></td><td><input class="val-diam"></td><td><input class="val-diam"></td><td><input class="val-diam"></td><td><input class="val-length" onkeyup="triggerWellDesignChange()"></td><td><input class="val-length" disabled></td>`;
+    triggerWellDesignChange();
 }
 function addSubsurfaceRow(top="", md="", tvddf="", tvdss="", pp="", pp_psi="", fp="", fp_psi="", obg="", obg_psi="", temp=""){
     const tbody = document.getElementById("ppfgBody"); const row = tbody.insertRow();
@@ -382,7 +400,7 @@ async function handleBhaUpload(event) {
     const file = event.target.files[0];
     if (!file) return;
 
-    document.getElementById("bhaBody").innerHTML = `<tr><td colspan="6" style="text-align:center;"><b>Parsing BHA File... Please wait.</b></td></tr>`;
+    document.getElementById("bhaBody").innerHTML = `<tr><td colspan="7" style="text-align:center;"><b>Parsing BHA File... Please wait.</b></td></tr>`;
 
     try {
         let rawData = [];
@@ -399,27 +417,37 @@ async function handleBhaUpload(event) {
             alert("File appears to be empty or unreadable."); document.getElementById("bhaBody").innerHTML = ""; return; 
         }
 
-        let map = { name: -1, type: -1, od: -1, id: -1, maxOd: -1, len: -1 };
-        let headerRowIndex = 0; let detectedDiam = null; let detectedLen = null;
-
-        for (let r=0; r < Math.min(30, rawData.length); r++) {
-            if(!rawData[r]) continue;
-            let rowStrs = rawData[r].map(cell => String(cell).toLowerCase().trim());
-            let matches = 0;
-            
-            rowStrs.forEach((h, i) => {
-                if (/(in|inch|inches|mm|milimeter)/.test(h)) detectedDiam = /mm/.test(h) ? 'mm' : 'in';
-                if (/(ft|feet|m|meter)/.test(h)) detectedLen = /m|meter/.test(h) ? 'm' : 'ft';
-
-                if (/name|item|desc/i.test(h)) { map.name = i; matches++; }
-                else if (/type|class/i.test(h)) { map.type = i; matches++; }
-                else if (/^od|outer.*d/i.test(h) && !/max|conn|tj/i.test(h)) { map.od = i; matches++; }
-                else if (/^id|inner.*d/i.test(h)) { map.id = i; matches++; }
-                else if (/max.*od|conn.*od|tj.*od/i.test(h)) { map.maxOd = i; matches++; }
-                else if (/len|length/i.test(h)) { map.len = i; matches++; }
-            });
-            if (matches >= 2) { headerRowIndex = r; break; }
+        let numCols = 0; rawData.slice(0, 30).forEach(r => { if(r && r.length > numCols) numCols = r.length; });
+        let headerMatrix = [];
+        for(let r=0; r < Math.min(30, rawData.length); r++) {
+            let rowVals = []; let lastVal = "";
+            for(let c=0; c < numCols; c++) {
+                let cell = (rawData[r] && rawData[r][c] !== undefined) ? rawData[r][c] : null;
+                if (cell !== null && String(cell).trim() !== "") lastVal = String(cell).toLowerCase().trim();
+                rowVals.push(lastVal);
+            }
+            headerMatrix.push(rowVals);
         }
+
+        let flattenedHeaders = []; let detectedDiam = null; let detectedLen = null;
+        for(let c=0; c < numCols; c++) {
+            let colHeaderParts = [];
+            for(let r=0; r < headerMatrix.length; r++) { let val = headerMatrix[r][c]; if(val && !colHeaderParts.includes(val)) colHeaderParts.push(val); }
+            let fullHeader = colHeaderParts.join(" | "); flattenedHeaders.push(fullHeader);
+            
+            if (/(in|inch|inches|mm|milimeter)/i.test(fullHeader)) detectedDiam = /mm/i.test(fullHeader) ? 'mm' : 'in';
+            if (/(ft|feet|m|meter)/i.test(fullHeader) && !/item|name|desc/i.test(fullHeader)) detectedLen = /m|meter/i.test(fullHeader) ? 'm' : 'ft';
+        }
+
+        let map = { name: -1, type: -1, od: -1, id: -1, maxOd: -1, len: -1 };
+        flattenedHeaders.forEach((h, i) => {
+            if (/name|item|desc|component/i.test(h)) map.name = i;
+            else if (/type|class/i.test(h)) map.type = i;
+            else if (/\bod\b|outer.*d/i.test(h) && !/max|conn|tj/i.test(h)) map.od = i;
+            else if (/\bid\b|inner.*d/i.test(h)) map.id = i;
+            else if (/max.*od|conn.*od|tj.*od|gauge/i.test(h)) map.maxOd = i;
+            else if (/len|length/i.test(h)) map.len = i;
+        });
 
         if (map.od === -1 || map.len === -1) { 
             alert("Could not cleanly detect OD and Length columns. Please ensure headers are clear."); 
@@ -431,14 +459,14 @@ async function handleBhaUpload(event) {
         let parsedRows = [];
         let lastValidName = "Component";
 
-        for (let i = headerRowIndex + 1; i < rawData.length; i++) {
+        for (let i = 2; i < rawData.length; i++) {
             let row = rawData[i];
+            if (!row || !row[map.len]) continue;
             let rawLen = parseFloat(String(row[map.len]).replace(/,/g,''));
-            if (!row || !row[map.len] || isNaN(rawLen)) continue;
+            if (isNaN(rawLen)) continue;
 
             let nm = map.name !== -1 && row[map.name] ? String(row[map.name]).trim() : "";
-            if (nm === "" && lastValidName !== "") nm = lastValidName;
-            else if (nm !== "") lastValidName = nm;
+            if (nm === "" && lastValidName !== "") nm = lastValidName; else if (nm !== "") lastValidName = nm;
 
             let tyStr = map.type !== -1 && row[map.type] ? String(row[map.type]).toLowerCase() : "";
             let searchStr = (tyStr + " " + nm).toLowerCase();
@@ -452,7 +480,7 @@ async function handleBhaUpload(event) {
             if (/circ|bypass|pbl/i.test(searchStr)) tyOpt = "Circ Sub";
             if (/stab/i.test(searchStr)) tyOpt = "Stabilizer";
             if (/xo|cross|x-over|xover|x\/o/i.test(searchStr)) tyOpt = "Crossover";
-            if (/bit|pdc|tricone/i.test(searchStr)) tyOpt = "Bit"; // Evaluated last to ensure Bit overrides everything
+            if (/bit|pdc|tricone/i.test(searchStr)) tyOpt = "Bit"; 
 
             let rawOd = map.od !== -1 ? parseFloat(String(row[map.od]).replace(/,/g,'')) || 0 : 0;
             let rawId = map.id !== -1 ? parseFloat(String(row[map.id]).replace(/,/g,'')) || 0 : 0;
@@ -461,7 +489,6 @@ async function handleBhaUpload(event) {
             parsedRows.push({ nm: nm, tyOpt: tyOpt, rawOd: rawOd, rawId: rawId, rawMod: rawMod, rawLen: rawLen });
         }
 
-        // Intelligent Auto-Reverse for Bottom-to-Top Contractor Tallys
         if (parsedRows.length > 0) {
             let firstIsBit = /bit/i.test(parsedRows[0].tyOpt) || /bit/i.test(parsedRows[0].nm);
             let lastIsBit = /bit/i.test(parsedRows[parsedRows.length-1].tyOpt) || /bit/i.test(parsedRows[parsedRows.length-1].nm);
@@ -488,6 +515,7 @@ async function handleBhaUpload(event) {
                     <td><input class="val-diam" value="${uiId}"></td>
                     <td><input class="val-diam" value="${uiMod}"></td>
                     <td><input class="val-length" value="${uiLen}" onkeyup="triggerWellDesignChange()"></td>
+                    <td><input class="val-length" disabled></td>
                 </tr>`;
         });
 
@@ -632,9 +660,7 @@ function handleFileUpload(event) {
                     htmlString += `<tr><td contenteditable="false">${r.top.toFixed(0)}</td><td contenteditable>${mdStr}</td><td contenteditable>${dfStr}</td><td contenteditable>${ssStr}</td><td contenteditable>${ppStr}</td><td contenteditable>${ppPsiStr}</td><td contenteditable>${fpStr}</td><td contenteditable>${fpPsiStr}</td><td contenteditable>${obgStr}</td><td contenteditable>${obgPsiStr}</td><td contenteditable>${tempStr}</td></tr>`;
                 });
 
-                document.getElementById("ppfgBody").innerHTML = htmlString; 
-                highlightActiveDepth(); 
-                drawSubsurfaceChartDirect(ppData, fpData, obgData, tempData); 
+                document.getElementById("ppfgBody").innerHTML = htmlString; highlightActiveDepth(); drawSubsurfaceChartDirect(ppData, fpData, obgData, tempData); 
                 document.getElementById("excelUpload").value = ""; 
                 
             } catch (err) {
@@ -1063,6 +1089,7 @@ document.addEventListener('mouseup', () => { isDraggingScooter = false; });
 window.onload = function() { 
     enforceOpenHoleTop();
     highlightActiveDepth(); 
+    calcBhaCumLength();
     updateSchematics(); 
     debouncedUpdateSubsurfaceChart(); 
 };
