@@ -36,6 +36,7 @@
         
         .highlight-col { background-color: #e8f5e9 !important; }
         
+        /* Scooter Box styling */
         #scooterLine { position: absolute; height: 2px; background: #eab308; cursor: ns-resize; display: none; z-index: 10; box-shadow: 0px 0px 5px rgba(0,0,0,0.3); }
         #scooterLine::before { content: "↔"; position: absolute; left: -15px; top: -8px; font-size: 14px; color: #eab308; font-weight: bold; transform: rotate(90deg); }
         #scooterBox { position: absolute; left: 10px; top: -35px; background: rgba(255,255,255,0.95); border: 1px solid #999; padding: 5px 10px; border-radius: 4px; box-shadow: 0px 2px 5px rgba(0,0,0,0.2); display: flex; align-items: center; gap: 10px; cursor: default; pointer-events: auto; }
@@ -299,7 +300,6 @@ function calcBhaCumLength() {
     let tbody = document.getElementById("bhaBody");
     if (!tbody) return;
     let cum = 0;
-    // Calculate running sum from Bottom to Top
     for (let i = tbody.rows.length - 1; i >= 0; i--) {
         let lenInput = tbody.rows[i].cells[5].querySelector("input");
         let cumInput = tbody.rows[i].cells[6].querySelector("input");
@@ -355,32 +355,78 @@ function addBhaRow(){
 }
 function addSubsurfaceRow(top="", md="", tvddf="", tvdss="", pp="", pp_psi="", fp="", fp_psi="", obg="", obg_psi="", temp=""){
     const tbody = document.getElementById("ppfgBody"); const row = tbody.insertRow();
-    row.innerHTML = `<td contenteditable="false">${top}</td><td contenteditable>${md}</td><td contenteditable>${tvddf}</td><td contenteditable>${tvdss}</td><td contenteditable>${pp}</td><td contenteditable>${pp_psi}</td><td contenteditable>${fp}</td><td contenteditable>${fp_psi}</td><td contenteditable>${obg}</td><td contenteditable>${obg_psi}</td><td contenteditable>${temp}</td>`;
-    let prevDepth = 0; let col = getCalcDepthCol();
-    for(let i=0; i<tbody.rows.length; i++) { tbody.rows[i].cells[0].textContent = prevDepth.toFixed(0); let botDepth = parseFloat(tbody.rows[i].cells[col].textContent); if(!isNaN(botDepth)) prevDepth = botDepth; }
+    let isMD = getCalcDepthCol() === 1 ? 'highlight-col' : ''; let isDF = getCalcDepthCol() === 2 ? 'highlight-col' : ''; let isSS = getCalcDepthCol() === 3 ? 'highlight-col' : '';
+    row.innerHTML = `<td contenteditable="false" class="val-length">${top}</td><td contenteditable class="val-length ${isMD}" onkeyup="triggerPPFGCalc(this)">${md}</td><td contenteditable class="val-length ${isDF}" onkeyup="triggerPPFGCalc(this)">${tvddf}</td><td contenteditable class="val-length ${isSS}" onkeyup="triggerPPFGCalc(this)">${tvdss}</td><td contenteditable class="val-density" onkeyup="calcPPFG(this, 'pp_dens')">${pp}</td><td contenteditable class="val-press" onkeyup="calcPPFG(this, 'pp_press')">${pp_psi}</td><td contenteditable class="val-density" onkeyup="calcPPFG(this, 'fp_dens')">${fp}</td><td contenteditable class="val-press" onkeyup="calcPPFG(this, 'fp_press')">${fp_psi}</td><td contenteditable class="val-density" onkeyup="calcPPFG(this, 'obg_dens')">${obg}</td><td contenteditable class="val-press" onkeyup="calcPPFG(this, 'obg_press')">${obg_psi}</td><td contenteditable class="val-temp" onkeyup="debouncedUpdateSubsurfaceChart()">${temp}</td>`;
+    let prevDepth = 0;
+    for(let i=0; i<tbody.rows.length; i++) { tbody.rows[i].cells[0].textContent = prevDepth.toFixed(0); let botDepth = parseFloat(tbody.rows[i].cells[getCalcDepthCol()].textContent); if(!isNaN(botDepth)) prevDepth = botDepth; }
     applyGeothermal(); 
 }
 
 // ================= EXCEL/PDF PARSING (BHA) =================
 async function extractTextFromPDF(pdfData) {
     const pdf = await pdfjsLib.getDocument({data: pdfData}).promise;
-    let rows = [];
+    let allRows = [];
+    
     for (let i = 1; i <= pdf.numPages; i++) {
         const page = await pdf.getPage(i);
         const textContent = await page.getTextContent();
         let yMap = new Map();
+        
         textContent.items.forEach(item => {
-            let y = Math.round(item.transform[5] / 4) * 4; 
+            let str = item.str.trim();
+            if(!str) return;
+            let y = Math.round(item.transform[5] / 5) * 5; 
             if (!yMap.has(y)) yMap.set(y, []);
             yMap.get(y).push(item);
         });
+        
         let yKeys = Array.from(yMap.keys()).sort((a,b) => b - a); 
         yKeys.forEach(y => {
-            let lineItems = yMap.get(y).sort((a,b) => a.transform[4] - b.transform[4]); 
-            rows.push(lineItems.map(item => item.str)); 
+            let lineItems = yMap.get(y).sort((a,b) => a.transform[4] - b.transform[4]);
+            let merged = [];
+            if (lineItems.length > 0) {
+                let currentStr = lineItems[0].str;
+                let currentX = lineItems[0].transform[4];
+                let currentEndX = currentX + lineItems[0].width;
+                for (let j = 1; j < lineItems.length; j++) {
+                    let item = lineItems[j];
+                    if (item.transform[4] - currentEndX < 20) { 
+                        currentStr += " " + item.str;
+                        currentEndX = item.transform[4] + item.width;
+                    } else {
+                        merged.push({str: currentStr.trim(), x: currentX});
+                        currentStr = item.str;
+                        currentX = item.transform[4];
+                        currentEndX = currentX + item.width;
+                    }
+                }
+                merged.push({str: currentStr.trim(), x: currentX});
+            }
+            allRows.push(merged);
         });
     }
-    return rows;
+    
+    let xCoords = [];
+    allRows.forEach(row => {
+        row.forEach(item => {
+            let found = xCoords.find(x => Math.abs(x - item.x) < 30); 
+            if (!found) xCoords.push(item.x);
+        });
+    });
+    xCoords.sort((a,b) => a - b);
+    
+    let table = [];
+    allRows.forEach(row => {
+        let tableRow = new Array(xCoords.length).fill("");
+        row.forEach(item => {
+            let colIdx = xCoords.findIndex(x => Math.abs(x - item.x) < 30);
+            if(colIdx !== -1) {
+                tableRow[colIdx] = (tableRow[colIdx] + " " + item.str).trim();
+            }
+        });
+        if(tableRow.some(cell => cell !== "")) table.push(tableRow);
+    });
+    return table;
 }
 
 function askUnitIfNeeded(detectedDiam, detectedLen) {
@@ -450,7 +496,7 @@ async function handleBhaUpload(event) {
         });
 
         if (map.od === -1 || map.len === -1) { 
-            alert("Could not cleanly detect OD and Length columns. Please ensure headers are clear."); 
+            alert(`Could not cleanly detect OD and Length columns.\nFound -> Name:${map.name}, OD:${map.od}, ID:${map.id}, Length:${map.len}\nPlease ensure headers are clear.`); 
             document.getElementById("bhaBody").innerHTML = "";
             return; 
         }
@@ -459,14 +505,15 @@ async function handleBhaUpload(event) {
         let parsedRows = [];
         let lastValidName = "Component";
 
-        for (let i = 2; i < rawData.length; i++) {
+        for (let i = 0; i < rawData.length; i++) {
             let row = rawData[i];
-            if (!row || !row[map.len]) continue;
+            if (!row || row[map.len] === undefined) continue;
             let rawLen = parseFloat(String(row[map.len]).replace(/,/g,''));
             if (isNaN(rawLen)) continue;
 
             let nm = map.name !== -1 && row[map.name] ? String(row[map.name]).trim() : "";
-            if (nm === "" && lastValidName !== "") nm = lastValidName; else if (nm !== "") lastValidName = nm;
+            if (nm === "" && lastValidName !== "") nm = lastValidName;
+            else if (nm !== "") lastValidName = nm;
 
             let tyStr = map.type !== -1 && row[map.type] ? String(row[map.type]).toLowerCase() : "";
             let searchStr = (tyStr + " " + nm).toLowerCase();
@@ -649,6 +696,7 @@ function handleFileUpload(event) {
                 });
                 tempData.unshift({x: baseTemp_user, y: 0});
 
+                let isMD = activeType === 'md' ? 'highlight-col' : ''; let isDF = activeType === 'tvddf' ? 'highlight-col' : ''; let isSS = activeType === 'tvdss' ? 'highlight-col' : '';
                 let htmlString = "";
                 parsedRows.forEach(r => {
                     let mdStr = r.md !== null ? r.md.toFixed(0) : ""; let dfStr = r.tvddf !== null ? r.tvddf.toFixed(0) : ""; let ssStr = r.tvdss !== null ? r.tvdss.toFixed(0) : "";
