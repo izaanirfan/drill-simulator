@@ -156,7 +156,7 @@
     <div class="upload-box">
         <div>
             <strong>Intelligent Subsurface Import</strong><br>
-            <span style="font-size: 0.85em; color: #555;">Upload an Excel (.xlsx) file. We will hunt for MD, TVDDF, and TVDSS columns dynamically.</span>
+            <span style="font-size: 0.85em; color: #555;">Upload an Excel (.xlsx) file. We will hunt for columns and auto-detect units (m/ft).</span>
         </div>
         
         <div class="upload-controls">
@@ -176,6 +176,15 @@
                 <select id="importUnit" class="case-select">
                     <option value="psi">Pressure (psi / bar)</option>
                     <option value="ppg">Density (ppg / sg)</option>
+                </select>
+            </div>
+
+            <div>
+                Import Depth As: 
+                <select id="importDepthUnit" class="case-select">
+                    <option value="auto">Auto-Detect</option>
+                    <option value="m">Meters (m)</option>
+                    <option value="ft">Feet (ft)</option>
                 </select>
             </div>
         </div>
@@ -354,7 +363,7 @@ function addSubsurfaceRow(md="", tvddf="", tvdss="", pp="", pp_psi="", fp="", fp
     applyGeothermal(); 
 }
 
-// ================= EXCEL IMPORT ENGINE (HIGH PERFORMANCE IN-MEMORY) =================
+// ================= EXCEL IMPORT ENGINE (AUTO-UNIT DETECTION) =================
 function handleFileUpload(event) {
     const file = event.target.files[0];
     if (!file) return;
@@ -436,6 +445,49 @@ function handleFileUpload(event) {
                 else { alert("Could not find any Depth columns."); document.getElementById("ppfgBody").innerHTML = ""; return; }
             }
 
+            // AUTO-DETECT IMPORT DEPTH UNIT ('m' or 'ft')
+            let userDepthPref = document.getElementById("importDepthUnit").value;
+            let finalImportDepthUnit = "ft"; // Default assumption
+            
+            if (userDepthPref !== "auto") {
+                finalImportDepthUnit = userDepthPref;
+            } else {
+                let depthHeaderStrings = [];
+                if (map.md !== -1) depthHeaderStrings.push(flattenedHeaders[map.md]);
+                if (map.tvddf !== -1) depthHeaderStrings.push(flattenedHeaders[map.tvddf]);
+                if (map.tvdss !== -1) depthHeaderStrings.push(flattenedHeaders[map.tvdss]);
+                
+                let combinedStr = depthHeaderStrings.join(" ").toLowerCase();
+                
+                // Extremely robust regex for meters: whole word 'm', 'meter', 'm-tvd', '[m]', '(m)'
+                let hasM = /(?:^|\s|\b)m(?:-|\s|\b|$)|meter|\[m\]|\(m\)/i.test(combinedStr);
+                let hasFt = /\bft\b|feet|\[ft\]|\(ft\)/i.test(combinedStr);
+                
+                if (hasM && !hasFt) {
+                    finalImportDepthUnit = "m";
+                } else if (hasFt && !hasM) {
+                    finalImportDepthUnit = "ft";
+                } else {
+                    let userChoice = prompt("Could not automatically detect if the imported depth is in Meters (m) or Feet (ft).\n\nPlease enter 'm' for meters or 'ft' for feet:", "m");
+                    if (userChoice && userChoice.toLowerCase().trim() === 'm') {
+                        finalImportDepthUnit = "m";
+                    } else {
+                        finalImportDepthUnit = "ft"; // fallback
+                    }
+                }
+            }
+
+            // Function to convert raw imported depth into the user's GLOBAL UI setting
+            function standardizeDepthUnit(val) {
+                if (val === null || isNaN(val)) return null;
+                if (finalImportDepthUnit === currentUnits.length) return val; // No conversion needed
+                
+                // Convert to UI Preference
+                if (finalImportDepthUnit === "m" && currentUnits.length === "ft") return val * 3.28084;
+                if (finalImportDepthUnit === "ft" && currentUnits.length === "m") return val / 3.28084;
+                return val;
+            }
+
             if (map.tvddf !== -1) document.getElementById("calcDepthType").value = "tvddf";
             else if (map.tvdss !== -1) document.getElementById("calcDepthType").value = "tvdss";
             else if (map.md !== -1) document.getElementById("calcDepthType").value = "md";
@@ -447,13 +499,13 @@ function handleFileUpload(event) {
                 let row = rawData[i];
                 if (!row) continue;
 
-                // Safely grab the driving depth column. If it's not a number, skip this row (bypasses headers automatically)
                 let drivingDepthIdx = map[activeType];
                 if(drivingDepthIdx === -1 || row[drivingDepthIdx] === undefined || isNaN(parseFloat(row[drivingDepthIdx]))) continue;
 
-                let md = map.md !== -1 ? parseSafe(row[map.md]) : null;
-                let tvddf = map.tvddf !== -1 ? parseSafe(row[map.tvddf]) : null;
-                let tvdss = map.tvdss !== -1 ? parseSafe(row[map.tvdss]) : null;
+                // Extract and IMMEDIATELY convert to global UI Unit
+                let md = map.md !== -1 ? standardizeDepthUnit(parseSafe(row[map.md])) : null;
+                let tvddf = map.tvddf !== -1 ? standardizeDepthUnit(parseSafe(row[map.tvddf])) : null;
+                let tvdss = map.tvdss !== -1 ? standardizeDepthUnit(parseSafe(row[map.tvdss])) : null;
 
                 parsedRows.push({
                     md: md, tvddf: tvddf, tvdss: tvdss,
@@ -483,7 +535,10 @@ function handleFileUpload(event) {
                 let topForPlot = prevDepth;
                 prevDepth = activeBot;
 
-                let bot_ft = toBaseLength(activeBot);
+                // activeBot is ALREADY in the UI Global Unit (e.g., meters)
+                // So we must temporarily convert it to strictly Feet for the 0.051948 math to work
+                let bot_ft = toBaseLength(activeBot); 
+                
                 if (bot_ft > 0) {
                     if (r.pp === null && r.pp_psi !== null) r.pp = fromBaseDens(toBasePress(r.pp_psi) / (bot_ft * c));
                     if (r.pp_psi === null && r.pp !== null) r.pp_psi = fromBasePress(toBaseDens(r.pp) * bot_ft * c);
@@ -497,7 +552,6 @@ function handleFileUpload(event) {
 
                 if (useGrad) r.temp = baseTemp_user + (activeBot / 100) * grad_user;
 
-                // Build Chart Data directly from array
                 if(r.pp !== null && !isNaN(r.pp)) { ppData.push({x: r.pp, y: topForPlot}); ppData.push({x: r.pp, y: activeBot}); }
                 if(r.fp !== null && !isNaN(r.fp)) { fpData.push({x: r.fp, y: topForPlot}); fpData.push({x: r.fp, y: activeBot}); }
                 if(r.obg !== null && !isNaN(r.obg)) { obgData.push({x: r.obg, y: topForPlot}); obgData.push({x: r.obg, y: activeBot}); }
@@ -544,11 +598,13 @@ function handleFileUpload(event) {
             highlightActiveDepth();
             drawSubsurfaceChartDirect(ppData, fpData, obgData, tempData); 
 
-            let report = `✅ Import Successful (${parsedRows.length} rows processed in memory).\n\nMapped Depths:\n`;
+            let report = `✅ Import Successful (${parsedRows.length} rows processed).\n\nMapped Depths:\n`;
             if (map.md !== -1) report += `• MD Found\n`;
             if (map.tvddf !== -1) report += `• TVDDF Found\n`;
             if (map.tvdss !== -1) report += `• TVDSS Found\n`;
             
+            report += `\nRaw Data Depth Unit Detected As: ${finalImportDepthUnit.toUpperCase()}\n`;
+
             report += `\nMapped Physics:\n`;
             if(unitPref === 'psi'){
                 report += `• Pore Pressure: ${map.pp_psi !== -1 ? 'Found (PSI)' : 'NOT FOUND'}\n`;
