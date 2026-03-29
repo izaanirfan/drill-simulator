@@ -34,7 +34,7 @@
         
         .highlight-col { background-color: #e8f5e9 !important; }
         
-        /* Scooter Box styling moved to Left */
+        /* Scooter Box styling */
         #scooterLine { position: absolute; height: 2px; background: #eab308; cursor: ns-resize; display: none; z-index: 10; box-shadow: 0px 0px 5px rgba(0,0,0,0.3); }
         #scooterLine::before { content: "↔"; position: absolute; left: -15px; top: -8px; font-size: 14px; color: #eab308; font-weight: bold; transform: rotate(90deg); }
         #scooterBox { position: absolute; left: 10px; top: -35px; background: rgba(255,255,255,0.95); border: 1px solid #999; padding: 5px 10px; border-radius: 4px; box-shadow: 0px 2px 5px rgba(0,0,0,0.2); display: flex; align-items: center; gap: 10px; cursor: default; pointer-events: auto; }
@@ -748,17 +748,32 @@ function replotChart(){
     else if (scaleMode === "adjustable") { let ohLength = yMaxBase - shoeDepthBase; yMinBase = Math.max(0, shoeDepthBase - ohLength); }
     
     let yMinUser = fromBaseLength(yMinBase); let yMaxUser = fromBaseLength(yMaxBase);
-    let shoeDepthUser = fromBaseLength(shoeDepthBase); // Convert for safe comparison
+    let shoeDepthUser = fromBaseLength(shoeDepthBase);
 
     let ppfgProfile = getPPFGProfile(); let ppData = [], fpData = [], obgData = [];
     
     for (let i = 0; i < ppfgProfile.bottom.length; i++) {
         let top = ppfgProfile.top[i]; let bot = ppfgProfile.bottom[i];
-        if (bot <= shoeDepthUser) continue;  // Correct User-Unit Comparison
+        if (bot <= shoeDepthUser) continue; 
         let drawTop = Math.max(top, shoeDepthUser); 
         if(!isNaN(ppfgProfile.pp[i])) { ppData.push({x: ppfgProfile.pp[i], y: drawTop}); ppData.push({x: ppfgProfile.pp[i], y: bot}); }
         if(!isNaN(ppfgProfile.fp[i])) { fpData.push({x: ppfgProfile.fp[i], y: drawTop}); fpData.push({x: ppfgProfile.fp[i], y: bot}); }
         if(!isNaN(ppfgProfile.obg[i])) { obgData.push({x: ppfgProfile.obg[i], y: drawTop}); obgData.push({x: ppfgProfile.obg[i], y: bot}); }
+    }
+
+    // Dynamic X-Axis Scaling for Open Hole focus
+    let xMinUser = undefined; let xMaxUser = undefined;
+    if (scaleMode === "adjustable" || scaleMode === "open_hole") {
+        let allX = [];
+        [ecdData, esdData, ppData, fpData, obgData].forEach(dataset => {
+            dataset.forEach(pt => { if (pt.y >= yMinUser && pt.y <= yMaxUser) allX.push(pt.x); });
+        });
+        if (allX.length > 0) {
+            let minX = Math.min(...allX); let maxX = Math.max(...allX);
+            let u = currentUnits.density; let tick = u === "ppg" ? 0.5 : (u === "sg" ? 0.05 : 50);
+            xMinUser = Math.max(0, Math.floor(minX / tick) * tick - tick);
+            xMaxUser = Math.ceil(maxX / tick) * tick + tick;
+        }
     }
 
     chartInstance = new Chart(ctx,{
@@ -775,7 +790,7 @@ function replotChart(){
         options:{
             animation: false, maintainAspectRatio: false,
             scales:{
-                x:{ title:{display:true, text:`Density (${currentUnits.density})`, font: {weight: 'bold'}}, grid: { color: '#e5e7eb' } },
+                x:{ min: xMinUser, max: xMaxUser, title:{display:true, text:`Density (${currentUnits.density})`, font: {weight: 'bold'}}, grid: { color: '#e5e7eb' } },
                 y:{ min: yMinUser, max: yMaxUser, reverse:true, title:{display:true, text:`Measured Depth (${currentUnits.length})`, font: {weight: 'bold'}}, grid: { color: '#e5e7eb' } }
             }, plugins: { legend: { position: 'top' } }
         }
