@@ -11,9 +11,9 @@
         .active { display: block; }
         input { width: 80px; padding: 4px; }
         input:disabled, [contenteditable="false"] { background-color: #ddd; color: #666; }
-        table { border-collapse: collapse; margin-top: 10px; width: 100%; max-width: 800px; }
+        table { border-collapse: collapse; margin-top: 10px; width: 100%; max-width: 1000px; font-size: 0.9em; }
         th, td { padding: 8px; text-align: left; border: 1px solid #ccc; }
-        button { margin-top: 10px; padding: 8px 15px; cursor: pointer; border-radius: 4px; border: 1px solid #ccc; background: #eee; }
+        button { margin-top: 10px; padding: 8px 15px; cursor: pointer; border-radius: 4px; border: 1px solid #ccc; background: #eee; font-weight: bold; }
         button:hover { background: #ddd; }
         .nav-btn { padding: 10px 15px; font-weight: bold; border: none; background: #ddd; border-radius: 4px 4px 0 0; cursor: pointer; }
         .nav-btn.active-nav { background: #4CAF50; color: white; }
@@ -26,10 +26,11 @@
         .controls-row { display: flex; gap: 15px; align-items: center; background: #f9f9f9; padding: 15px; border: 1px solid #ddd; border-radius: 5px; flex-wrap: wrap; }
         
         /* Upload Box */
-        .upload-box { border: 2px dashed #4CAF50; padding: 15px; text-align: center; background: #f0fdf4; border-radius: 5px; margin-bottom: 15px; max-width: 800px; }
+        .upload-box { border: 2px dashed #4CAF50; padding: 15px; text-align: center; background: #f0fdf4; border-radius: 5px; margin-bottom: 15px; max-width: 1000px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
         .upload-box input[type="file"] { display: none; }
-        .upload-btn { background: #4CAF50; color: white; border: none; padding: 8px 15px; cursor: pointer; border-radius: 4px; font-weight: bold; display: inline-block; margin-top: 5px; }
+        .upload-btn { background: #4CAF50; color: white; border: none; padding: 10px 20px; cursor: pointer; border-radius: 4px; font-weight: bold; display: inline-block; }
         .upload-btn:hover { background: #45a049; }
+        .case-select { padding: 5px; font-weight: bold; border-radius: 4px; border: 1px solid #ccc; }
     </style>
 </head>
 
@@ -73,13 +74,13 @@
         <div><label>Surface Temp (<span class="lbl-temp">°F</span>):</label><br><input id="surface_temp" class="val-temp" value="80" onchange="applyGeothermal()"></div>
         <div>
             <label>Chart Depth Scale:</label><br>
-            <select id="chartScale" onchange="replotChart()">
+            <select id="chartScale" onchange="replotChart()" style="padding: 4px;">
                 <option value="auto">Adjustable (Surface to TD)</option>
                 <option value="open_hole">Open Hole Only (Shoe to TD)</option>
             </select>
         </div>
         <div style="margin-left: auto;">
-            <button onclick="runSimulation()" style="background-color: #4CAF50; color: white; border: none; font-size: 16px; font-weight: bold;">Run Simulation</button>
+            <button onclick="runSimulation()" style="background-color: #4CAF50; color: white; border: none; font-size: 16px;">Run Simulation</button>
         </div>
     </div>
 
@@ -149,8 +150,20 @@
 <div id="subsurface" class="tab">
     
     <div class="upload-box">
-        <strong>Intelligent PPFG Import</strong><br>
-        <span style="font-size: 0.85em; color: #555;">Upload an Excel (.xlsx) or CSV file. We will automatically map the columns, sort the depths, and calculate missing parameters based on your current unit settings.</span><br>
+        <div>
+            <strong>Intelligent Subsurface Import</strong><br>
+            <span style="font-size: 0.85em; color: #555;">Upload an Excel (.xlsx) file. We will flatten merged headers and map columns dynamically.</span>
+        </div>
+        <div>
+            Target Import Case: 
+            <select id="importCase" class="case-select">
+                <option value="mid">Mid Case (Default)</option>
+                <option value="low">Low Case</option>
+                <option value="high">High Case</option>
+                <option value="base">Base Case</option>
+                <option value=".*">Any/Not Specified</option>
+            </select>
+        </div>
         <label class="upload-btn">
             Choose Excel/CSV File
             <input type="file" id="excelUpload" accept=".xlsx, .xls, .csv" onchange="handleFileUpload(event)">
@@ -158,7 +171,7 @@
     </div>
 
     <div style="display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap;">
-        <div style="flex: 1; min-width: 600px;">
+        <div style="flex: 1; min-width: 700px;">
             <h3>Subsurface Profile</h3>
             <div class="controls-row" style="padding: 10px; margin-bottom: 10px;">
                 <label><input type="checkbox" id="use_geo_grad" onchange="applyGeothermal()"> Use Geothermal Gradient Formula</label>
@@ -169,13 +182,15 @@
             
             <table id="ppfgTable">
                 <thead>
-                    <tr>
-                        <th>Top MD (<span class="lbl-length">ft</span>)</th>
-                        <th>Bottom MD (<span class="lbl-length">ft</span>)</th>
-                        <th>Pore Press (<span class="lbl-density">ppg</span>)</th>
-                        <th>Pore Press (<span class="lbl-press">psi</span>)</th>
-                        <th>Frac Press (<span class="lbl-density">ppg</span>)</th>
-                        <th>Frac Press (<span class="lbl-press">psi</span>)</th>
+                    <tr style="background-color: #f4f7f6;">
+                        <th>Top (<span class="lbl-length">ft</span>)</th>
+                        <th>Bot (<span class="lbl-length">ft</span>)</th>
+                        <th>PP (<span class="lbl-density">ppg</span>)</th>
+                        <th>PP (<span class="lbl-press">psi</span>)</th>
+                        <th>FG (<span class="lbl-density">ppg</span>)</th>
+                        <th>FG (<span class="lbl-press">psi</span>)</th>
+                        <th>OBG (<span class="lbl-density">ppg</span>)</th>
+                        <th>OBG (<span class="lbl-press">psi</span>)</th>
                         <th>Temp (<span class="lbl-temp">°F</span>)</th>
                     </tr>
                 </thead>
@@ -187,6 +202,8 @@
                         <td contenteditable class="val-press" onkeyup="calcPPFG(this, 'pp_press')">1324.7</td>
                         <td contenteditable class="val-density" onkeyup="calcPPFG(this, 'fp_dens')">12.0</td>
                         <td contenteditable class="val-press" onkeyup="calcPPFG(this, 'fp_press')">1870.1</td>
+                        <td contenteditable class="val-density" onkeyup="calcPPFG(this, 'obg_dens')">14.0</td>
+                        <td contenteditable class="val-press" onkeyup="calcPPFG(this, 'obg_press')">2181.8</td>
                         <td contenteditable class="val-temp" onkeyup="updateSubsurfaceChart()">125</td>
                     </tr>
                     <tr>
@@ -196,11 +213,13 @@
                         <td contenteditable class="val-press" onkeyup="calcPPFG(this, 'pp_press')">4779.2</td>
                         <td contenteditable class="val-density" onkeyup="calcPPFG(this, 'fp_dens')">14.5</td>
                         <td contenteditable class="val-press" onkeyup="calcPPFG(this, 'fp_press')">7532.5</td>
+                        <td contenteditable class="val-density" onkeyup="calcPPFG(this, 'obg_dens')">18.5</td>
+                        <td contenteditable class="val-press" onkeyup="calcPPFG(this, 'obg_press')">9610.4</td>
                         <td contenteditable class="val-temp" onkeyup="updateSubsurfaceChart()">230</td>
                     </tr>
                 </tbody>
             </table>
-            <button onclick="addSubsurfaceRow()">Add Row manually</button>
+            <button onclick="addSubsurfaceRow()">Add Row</button>
         </div>
         
         <div class="chart-box" style="flex: 1; min-width: 400px; min-height: 400px;">
@@ -246,108 +265,185 @@ function addTrajectoryRow(){
     row.innerHTML = `<td contenteditable class="val-length"></td><td contenteditable></td><td contenteditable></td>`;
 }
 
-function addSubsurfaceRow(top="", bot="", pp="", pp_psi="", fp="", fp_psi="", temp=""){
+function addSubsurfaceRow(top="", bot="", pp="", pp_psi="", fp="", fp_psi="", obg="", obg_psi="", temp=""){
     const tbody = document.getElementById("ppfgBody");
     const row = tbody.insertRow();
-    row.innerHTML = `<td contenteditable class="val-length">${top}</td><td contenteditable class="val-length" onkeyup="triggerPPFGCalc(this)">${bot}</td><td contenteditable class="val-density" onkeyup="calcPPFG(this, 'pp_dens')">${pp}</td><td contenteditable class="val-press" onkeyup="calcPPFG(this, 'pp_press')">${pp_psi}</td><td contenteditable class="val-density" onkeyup="calcPPFG(this, 'fp_dens')">${fp}</td><td contenteditable class="val-press" onkeyup="calcPPFG(this, 'fp_press')">${fp_psi}</td><td contenteditable class="val-temp" onkeyup="updateSubsurfaceChart()">${temp}</td>`;
+    row.innerHTML = `
+        <td contenteditable class="val-length">${top}</td>
+        <td contenteditable class="val-length" onkeyup="triggerPPFGCalc(this)">${bot}</td>
+        <td contenteditable class="val-density" onkeyup="calcPPFG(this, 'pp_dens')">${pp}</td>
+        <td contenteditable class="val-press" onkeyup="calcPPFG(this, 'pp_press')">${pp_psi}</td>
+        <td contenteditable class="val-density" onkeyup="calcPPFG(this, 'fp_dens')">${fp}</td>
+        <td contenteditable class="val-press" onkeyup="calcPPFG(this, 'fp_press')">${fp_psi}</td>
+        <td contenteditable class="val-density" onkeyup="calcPPFG(this, 'obg_dens')">${obg}</td>
+        <td contenteditable class="val-press" onkeyup="calcPPFG(this, 'obg_press')">${obg_psi}</td>
+        <td contenteditable class="val-temp" onkeyup="updateSubsurfaceChart()">${temp}</td>`;
     applyGeothermal(); 
 }
 
-// ================= EXCEL IMPORT ENGINE (SHEETJS) =================
+// ================= EXCEL IMPORT ENGINE (HIGH PERFORMANCE BATCHING) =================
 function handleFileUpload(event) {
     const file = event.target.files[0];
     if (!file) return;
 
+    // Show loading state so user knows it's processing
+    document.getElementById("ppfgBody").innerHTML = `<tr><td colspan="9" style="text-align:center; padding: 20px;"><b>Processing thousands of rows... Please wait.</b></td></tr>`;
+
     const reader = new FileReader();
     reader.onload = function(e) {
-        const data = new Uint8Array(e.target.result);
-        const workbook = XLSX.read(data, {type: 'array'});
-        const firstSheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[firstSheetName];
-        
-        // Convert to array of arrays
-        const rawData = XLSX.utils.sheet_to_json(worksheet, {header: 1});
-        if (rawData.length < 2) { alert("File appears to be empty or missing headers."); return; }
-
-        const headers = rawData[0].map(h => String(h).toLowerCase());
-        
-        // Fuzzy Matching Algorithm
-        let map = { depth: -1, top: -1, bot: -1, pp: -1, pp_psi: -1, fp: -1, fp_psi: -1, temp: -1 };
-        
-        headers.forEach((h, i) => {
-            if (/top/i.test(h)) map.top = i;
-            else if (/bot|end/i.test(h)) map.bot = i;
-            else if (/depth|md/i.test(h) && map.depth === -1) map.depth = i;
+        // Use setTimeout to allow the browser to render the "Processing..." message before freezing CPU
+        setTimeout(() => {
+            const data = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(data, {type: 'array'});
+            const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+            const rawData = XLSX.utils.sheet_to_json(worksheet, {header: 1});
             
-            if (/pore|pp|form.*press/i.test(h)) {
-                if (/psi/i.test(h)) map.pp_psi = i; else map.pp = i;
+            if (rawData.length < 2) { alert("File appears to be empty."); return; }
+
+            let numCols = 0;
+            rawData.slice(0, 15).forEach(r => { if(r.length > numCols) numCols = r.length; });
+
+            // 1. Flatten Merged Headers
+            let headerMatrix = [];
+            for(let r=0; r < Math.min(15, rawData.length); r++) {
+                let rowVals = [];
+                let lastVal = "";
+                for(let c=0; c < numCols; c++) {
+                    let cell = rawData[r][c];
+                    if (cell !== undefined && cell !== null && String(cell).trim() !== "") {
+                        lastVal = String(cell).toLowerCase().trim();
+                    }
+                    rowVals.push(lastVal);
+                }
+                headerMatrix.push(rowVals);
             }
-            if (/frac|fg|fp/i.test(h)) {
-                if (/psi/i.test(h)) map.fp_psi = i; else map.fp = i;
+
+            // 2. Combine rows vertically per column
+            let flattenedHeaders = [];
+            for(let c=0; c < numCols; c++) {
+                let colHeaderParts = [];
+                for(let r=0; r < headerMatrix.length; r++) {
+                    let val = headerMatrix[r][c];
+                    if(val && !colHeaderParts.includes(val)) { colHeaderParts.push(val); }
+                }
+                flattenedHeaders.push(colHeaderParts.join(" | "));
             }
-            if (/temp/i.test(h)) map.temp = i;
-        });
 
-        // Determine primary depth column if top/bottom not explicitly found
-        let dCol = map.bot !== -1 ? map.bot : (map.depth !== -1 ? map.depth : map.top);
-        if (dCol === -1) { alert("Could not find a 'Depth', 'Top', or 'Bottom' column."); return; }
+            // 3. Fuzzy Matcher
+            let map = { depth: -1, top: -1, bot: -1, pp: -1, pp_psi: -1, fp: -1, fp_psi: -1, obg: -1, obg_psi: -1, temp: -1 };
+            let casePref = document.getElementById("importCase").value;
+            let caseRegex = new RegExp(casePref, 'i');
 
-        let parsedRows = [];
-        let prevDepth = 0;
+            flattenedHeaders.forEach((h, i) => {
+                let isTargetCase = casePref === '.*' ? true : caseRegex.test(h);
+                let hasNoCase = !/low|mid|high/i.test(h);
+                let caseMatch = isTargetCase || hasNoCase;
 
-        for (let i = 1; i < rawData.length; i++) {
-            let row = rawData[i];
-            if (!row || row.length === 0 || row[dCol] === undefined) continue;
+                if (/top/i.test(h) && map.top === -1) map.top = i;
+                else if (/bot|end/i.test(h) && map.bot === -1) map.bot = i;
+                else if (/depth|md|tvd/i.test(h) && map.depth === -1) map.depth = i;
 
-            let currentDepth = parseFloat(row[dCol]);
-            let topD = map.top !== -1 ? parseFloat(row[map.top]) : prevDepth;
-            let botD = map.bot !== -1 ? parseFloat(row[map.bot]) : currentDepth;
+                if (/pore|pp|form.*press/i.test(h) && caseMatch) {
+                    if (/psi/i.test(h)) map.pp_psi = i; else map.pp = i;
+                }
+                if (/frac|fg|fp/i.test(h) && caseMatch) {
+                    if (/psi/i.test(h)) map.fp_psi = i; else map.fp = i;
+                }
+                if (/obg|overburden/i.test(h) && caseMatch) {
+                    if (/psi/i.test(h)) map.obg_psi = i; else map.obg = i;
+                }
+                if (/temp/i.test(h)) map.temp = i;
+            });
 
-            let pp = map.pp !== -1 ? parseFloat(row[map.pp]) : "";
-            let pp_psi = map.pp_psi !== -1 ? parseFloat(row[map.pp_psi]) : "";
-            let fp = map.fp !== -1 ? parseFloat(row[map.fp]) : "";
-            let fp_psi = map.fp_psi !== -1 ? parseFloat(row[map.fp_psi]) : "";
-            let temp = map.temp !== -1 ? parseFloat(row[map.temp]) : "";
+            let dCol = map.bot !== -1 ? map.bot : (map.depth !== -1 ? map.depth : map.top);
+            if (dCol === -1) { 
+                alert("Could not find a Depth/MD column."); 
+                document.getElementById("ppfgBody").innerHTML = "";
+                return; 
+            }
 
-            parsedRows.push({ top: topD, bot: botD, pp: pp, pp_psi: pp_psi, fp: fp, fp_psi: fp_psi, temp: temp });
-            prevDepth = botD;
-        }
+            let parsedRows = [];
+            let prevDepth = 0;
 
-        // Sort by bottom depth
-        parsedRows.sort((a, b) => a.bot - b.bot);
+            // 4. Parse Data into Memory
+            for (let i = 2; i < rawData.length; i++) {
+                let row = rawData[i];
+                if (!row || row[dCol] === undefined || isNaN(parseFloat(row[dCol]))) continue;
 
-        // Generate Import Report
-        let report = `✅ Import Successful.\n\nMapped Columns:\n`;
-        report += `• Depth: '${headers[dCol]}'\n`;
-        if(map.pp !== -1 || map.pp_psi !== -1) report += `• Pore Pressure: Found\n`; else report += `⚠️ Pore Pressure: NOT FOUND\n`;
-        if(map.fp !== -1 || map.fp_psi !== -1) report += `• Frac Gradient: Found\n`; else report += `⚠️ Frac Gradient: NOT FOUND\n`;
-        if(map.temp !== -1) report += `• Temperature: Found\n`; else report += `⚠️ Temperature: NOT FOUND\n`;
-        report += `\nAssuming imported values match your current global unit settings.`;
-        
-        alert(report);
+                let currentDepth = parseFloat(row[dCol]);
+                let topD = map.top !== -1 && !isNaN(parseFloat(row[map.top])) ? parseFloat(row[map.top]) : prevDepth;
+                let botD = map.bot !== -1 && !isNaN(parseFloat(row[map.bot])) ? parseFloat(row[map.bot]) : currentDepth;
 
-        // Clear existing table and inject new data
-        document.getElementById("ppfgBody").innerHTML = "";
-        parsedRows.forEach(r => {
-            addSubsurfaceRow(
-                r.top || 0, r.bot || 0, 
-                r.pp || "", r.pp_psi || "", 
-                r.fp || "", r.fp_psi || "", 
-                r.temp || ""
-            );
-        });
+                parsedRows.push({
+                    top: topD, bot: botD,
+                    pp: map.pp !== -1 ? parseFloat(row[map.pp]) : null, 
+                    pp_psi: map.pp_psi !== -1 ? parseFloat(row[map.pp_psi]) : null,
+                    fp: map.fp !== -1 ? parseFloat(row[map.fp]) : null, 
+                    fp_psi: map.fp_psi !== -1 ? parseFloat(row[map.fp_psi]) : null,
+                    obg: map.obg !== -1 ? parseFloat(row[map.obg]) : null, 
+                    obg_psi: map.obg_psi !== -1 ? parseFloat(row[map.obg_psi]) : null,
+                    temp: map.temp !== -1 ? parseFloat(row[map.temp]) : null
+                });
+                prevDepth = botD;
+            }
 
-        // Force calculations to fill in blanks (ppg to psi, or psi to ppg)
-        let tbody = document.getElementById("ppfgBody");
-        Array.from(tbody.rows).forEach(row => {
-            if(row.cells[2].innerText && !row.cells[3].innerText) calcPPFG(row.cells[2], 'pp_dens');
-            if(row.cells[3].innerText && !row.cells[2].innerText) calcPPFG(row.cells[3], 'pp_press');
-            if(row.cells[4].innerText && !row.cells[5].innerText) calcPPFG(row.cells[4], 'fp_dens');
-            if(row.cells[5].innerText && !row.cells[4].innerText) calcPPFG(row.cells[5], 'fp_press');
-        });
+            parsedRows.sort((a, b) => a.bot - b.bot);
 
-        updateSubsurfaceChart();
-        document.getElementById("excelUpload").value = ""; // Reset file input
+            // 5. High-Speed JS Calculation (Fill in missing psi/ppg in memory)
+            const c = 0.051948;
+            parsedRows.forEach(r => {
+                let bot_ft = toBaseLength(r.bot);
+                if (bot_ft > 0) {
+                    if (r.pp !== null && r.pp_psi === null) r.pp_psi = fromBasePress(toBaseDens(r.pp) * bot_ft * c);
+                    if (r.pp_psi !== null && r.pp === null) r.pp = fromBaseDens(toBasePress(r.pp_psi) / (bot_ft * c));
+                    if (r.fp !== null && r.fp_psi === null) r.fp_psi = fromBasePress(toBaseDens(r.fp) * bot_ft * c);
+                    if (r.fp_psi !== null && r.fp === null) r.fp = fromBaseDens(toBasePress(r.fp_psi) / (bot_ft * c));
+                    if (r.obg !== null && r.obg_psi === null) r.obg_psi = fromBasePress(toBaseDens(r.obg) * bot_ft * c);
+                    if (r.obg_psi !== null && r.obg === null) r.obg = fromBaseDens(toBasePress(r.obg_psi) / (bot_ft * c));
+                }
+            });
+
+            // 6. Bulk DOM String Construction
+            let htmlString = "";
+            parsedRows.forEach(r => {
+                let ppStr = r.pp !== null ? r.pp.toFixed(3) : "";
+                let ppPsiStr = r.pp_psi !== null ? r.pp_psi.toFixed(1) : "";
+                let fpStr = r.fp !== null ? r.fp.toFixed(3) : "";
+                let fpPsiStr = r.fp_psi !== null ? r.fp_psi.toFixed(1) : "";
+                let obgStr = r.obg !== null ? r.obg.toFixed(3) : "";
+                let obgPsiStr = r.obg_psi !== null ? r.obg_psi.toFixed(1) : "";
+                let tempStr = r.temp !== null ? r.temp.toFixed(1) : "";
+
+                htmlString += `
+                    <tr>
+                        <td contenteditable class="val-length">${r.top}</td>
+                        <td contenteditable class="val-length" onkeyup="triggerPPFGCalc(this)">${r.bot}</td>
+                        <td contenteditable class="val-density" onkeyup="calcPPFG(this, 'pp_dens')">${ppStr}</td>
+                        <td contenteditable class="val-press" onkeyup="calcPPFG(this, 'pp_press')">${ppPsiStr}</td>
+                        <td contenteditable class="val-density" onkeyup="calcPPFG(this, 'fp_dens')">${fpStr}</td>
+                        <td contenteditable class="val-press" onkeyup="calcPPFG(this, 'fp_press')">${fpPsiStr}</td>
+                        <td contenteditable class="val-density" onkeyup="calcPPFG(this, 'obg_dens')">${obgStr}</td>
+                        <td contenteditable class="val-press" onkeyup="calcPPFG(this, 'obg_press')">${obgPsiStr}</td>
+                        <td contenteditable class="val-temp" onkeyup="updateSubsurfaceChart()">${tempStr}</td>
+                    </tr>`;
+            });
+
+            // 7. Inject into DOM EXACTLY ONCE
+            document.getElementById("ppfgBody").innerHTML = htmlString;
+
+            applyGeothermal();
+            updateSubsurfaceChart();
+
+            let report = `✅ Import Successful (${parsedRows.length} rows processed).\n\nMapped Columns:\n`;
+            report += `• Depth: Found\n`;
+            report += `• Pore Pressure: ${map.pp !== -1 || map.pp_psi !== -1 ? 'Found' : 'NOT FOUND'}\n`;
+            report += `• Frac Gradient: ${map.fp !== -1 || map.fp_psi !== -1 ? 'Found' : 'NOT FOUND'}\n`;
+            report += `• Overburden: ${map.obg !== -1 || map.obg_psi !== -1 ? 'Found' : 'NOT FOUND'}\n`;
+            
+            setTimeout(() => alert(report), 100);
+            document.getElementById("excelUpload").value = ""; 
+
+        }, 50); 
     };
     reader.readAsArrayBuffer(file);
 }
@@ -397,11 +493,12 @@ function fromBaseDens(v)   { return converters.density.fromBase(v, currentUnits.
 function fromBasePress(v)  { return converters.press.fromBase(v, currentUnits.press); }
 
 
-// ================= SUBSURFACE LOGIC (PPFG & TEMP) =================
+// ================= SUBSURFACE LOGIC (PPFG, OBG & TEMP) =================
 function triggerPPFGCalc(depthCell) {
     let row = depthCell.closest("tr");
     calcPPFG(row.cells[2], 'pp_dens');
     calcPPFG(row.cells[4], 'fp_dens');
+    calcPPFG(row.cells[6], 'obg_dens');
     applyGeothermal();
 }
 
@@ -413,17 +510,23 @@ function calcPPFG(inputCell, type) {
     let c = 0.051948;
     
     if (type === 'pp_dens') {
-        let dens_ppg = toBaseDens(parseFloat(inputCell.innerText) || 0);
-        row.cells[3].innerText = fromBasePress(dens_ppg * bottomMD_ft * c).toFixed(1);
+        let d = toBaseDens(parseFloat(inputCell.innerText) || 0);
+        row.cells[3].innerText = fromBasePress(d * bottomMD_ft * c).toFixed(1);
     } else if (type === 'pp_press') {
-        let press_psi = toBasePress(parseFloat(inputCell.innerText) || 0);
-        row.cells[2].innerText = fromBaseDens(press_psi / (bottomMD_ft * c)).toFixed(3);
+        let p = toBasePress(parseFloat(inputCell.innerText) || 0);
+        row.cells[2].innerText = fromBaseDens(p / (bottomMD_ft * c)).toFixed(3);
     } else if (type === 'fp_dens') {
-        let dens_ppg = toBaseDens(parseFloat(inputCell.innerText) || 0);
-        row.cells[5].innerText = fromBasePress(dens_ppg * bottomMD_ft * c).toFixed(1);
+        let d = toBaseDens(parseFloat(inputCell.innerText) || 0);
+        row.cells[5].innerText = fromBasePress(d * bottomMD_ft * c).toFixed(1);
     } else if (type === 'fp_press') {
-        let press_psi = toBasePress(parseFloat(inputCell.innerText) || 0);
-        row.cells[4].innerText = fromBaseDens(press_psi / (bottomMD_ft * c)).toFixed(3);
+        let p = toBasePress(parseFloat(inputCell.innerText) || 0);
+        row.cells[4].innerText = fromBaseDens(p / (bottomMD_ft * c)).toFixed(3);
+    } else if (type === 'obg_dens') {
+        let d = toBaseDens(parseFloat(inputCell.innerText) || 0);
+        row.cells[7].innerText = fromBasePress(d * bottomMD_ft * c).toFixed(1);
+    } else if (type === 'obg_press') {
+        let p = toBasePress(parseFloat(inputCell.innerText) || 0);
+        row.cells[6].innerText = fromBaseDens(p / (bottomMD_ft * c)).toFixed(3);
     }
     updateSubsurfaceChart();
 }
@@ -436,7 +539,7 @@ function applyGeothermal() {
     let grad_user = parseFloat(document.getElementById("geo_grad").value) || 0; 
 
     for (let i = 0; i < rows.length; i++) {
-        let tempCell = rows[i].cells[6];
+        let tempCell = rows[i].cells[8];
         if (useGrad) {
             tempCell.contentEditable = "false";
             let depth_user = parseFloat(rows[i].cells[1].innerText) || 0;
@@ -452,13 +555,14 @@ function applyGeothermal() {
 
 function getPPFGProfile() {
     let rows = document.getElementById("ppfgBody").rows;
-    let data = { top: [], bottom: [], pp: [], fp: [], temp: [] };
+    let data = { top: [], bottom: [], pp: [], fp: [], obg: [], temp: [] };
     for (let i = 0; i < rows.length; i++) {
         data.top.push(parseFloat(rows[i].cells[0].innerText) || 0);
         data.bottom.push(parseFloat(rows[i].cells[1].innerText) || 0);
-        data.pp.push(parseFloat(rows[i].cells[2].innerText)); // Can be NaN
+        data.pp.push(parseFloat(rows[i].cells[2].innerText)); 
         data.fp.push(parseFloat(rows[i].cells[4].innerText));
-        data.temp.push(parseFloat(rows[i].cells[6].innerText));
+        data.obg.push(parseFloat(rows[i].cells[6].innerText));
+        data.temp.push(parseFloat(rows[i].cells[8].innerText));
     }
     return data;
 }
@@ -469,11 +573,12 @@ function updateSubsurfaceChart() {
     if (subChartInstance) subChartInstance.destroy();
 
     let profile = getPPFGProfile();
-    let ppData = [], fpData = [], tempData = [];
+    let ppData = [], fpData = [], obgData = [], tempData = [];
 
     for (let i = 0; i < profile.bottom.length; i++) {
         if(!isNaN(profile.pp[i])) { ppData.push({x: profile.pp[i], y: profile.top[i]}); ppData.push({x: profile.pp[i], y: profile.bottom[i]}); }
         if(!isNaN(profile.fp[i])) { fpData.push({x: profile.fp[i], y: profile.top[i]}); fpData.push({x: profile.fp[i], y: profile.bottom[i]}); }
+        if(!isNaN(profile.obg[i])) { obgData.push({x: profile.obg[i], y: profile.top[i]}); obgData.push({x: profile.obg[i], y: profile.bottom[i]}); }
         if(!isNaN(profile.temp[i])){ tempData.push({x: profile.temp[i], y: profile.bottom[i]}); }
     }
     
@@ -484,17 +589,18 @@ function updateSubsurfaceChart() {
         type: "scatter",
         data: {
             datasets: [
-                {label: `Pore Press (${currentUnits.density})`, data: ppData, showLine: true, borderColor: "#777", borderDash: [5,5], pointRadius: 0, xAxisID: 'x'},
-                {label: `Frac Press (${currentUnits.density})`, data: fpData, showLine: true, borderColor: "#b45309", borderDash: [5,5], pointRadius: 0, xAxisID: 'x'},
-                {label: `Temperature (°${currentUnits.temp})`, data: tempData, showLine: true, borderColor: "#eab308", backgroundColor: "#eab308", xAxisID: 'x2'}
+                {label: `Pore Press`, data: ppData, showLine: true, borderColor: "#777", borderDash: [5,5], pointRadius: 0, xAxisID: 'x'},
+                {label: `Frac Press`, data: fpData, showLine: true, borderColor: "#b45309", borderDash: [5,5], pointRadius: 0, xAxisID: 'x'},
+                {label: `Overburden`, data: obgData, showLine: true, borderColor: "#000", pointRadius: 0, xAxisID: 'x'},
+                {label: `Temp`, data: tempData, showLine: true, borderColor: "#eab308", backgroundColor: "#eab308", xAxisID: 'x2'}
             ]
         },
         options: {
             maintainAspectRatio: false,
             scales: {
                 x: { title: {display: true, text: `Density (${currentUnits.density})`}, position: 'bottom' },
-                x2: { title: {display: true, text: `Temperature (°${currentUnits.temp})`}, position: 'top', grid: {drawOnChartArea: false} },
-                y: { reverse: true, title: {display: true, text: `Measured Depth (${currentUnits.length})`} }
+                x2: { title: {display: true, text: `Temp (°${currentUnits.temp})`}, position: 'top', grid: {drawOnChartArea: false} },
+                y: { reverse: true, title: {display: true, text: `Depth (${currentUnits.length})`} }
             }
         }
     });
@@ -639,10 +745,11 @@ function replotChart(){
     const esdData = profile.depth.map((d,i) => ({x: fromBaseDens(profile.esd[i]), y: fromBaseLength(d)}));
 
     let ppfgProfile = getPPFGProfile();
-    let ppData = [], fpData = [];
+    let ppData = [], fpData = [], obgData = [];
     for (let i = 0; i < ppfgProfile.bottom.length; i++) {
         if(!isNaN(ppfgProfile.pp[i])) { ppData.push({x: ppfgProfile.pp[i], y: ppfgProfile.top[i]}); ppData.push({x: ppfgProfile.pp[i], y: ppfgProfile.bottom[i]}); }
         if(!isNaN(ppfgProfile.fp[i])) { fpData.push({x: ppfgProfile.fp[i], y: ppfgProfile.top[i]}); fpData.push({x: ppfgProfile.fp[i], y: ppfgProfile.bottom[i]}); }
+        if(!isNaN(ppfgProfile.obg[i])) { obgData.push({x: ppfgProfile.obg[i], y: ppfgProfile.top[i]}); obgData.push({x: ppfgProfile.obg[i], y: ppfgProfile.bottom[i]}); }
     }
 
     let scaleMode = document.getElementById("chartScale").value;
@@ -660,7 +767,8 @@ function replotChart(){
                 {label:`ECD (${currentUnits.density})`, data:ecdData, showLine:true, borderColor: "#ef4444", backgroundColor: "#ef4444", pointRadius: 1},
                 {label:`ESD (${currentUnits.density})`, data:esdData, showLine:true, borderColor: "#3b82f6", backgroundColor: "#3b82f6", pointRadius: 1},
                 {label:`Pore Press`, data:ppData, showLine:true, borderColor: "#737373", borderDash: [5,5], pointRadius: 0},
-                {label:`Frac Press`, data:fpData, showLine:true, borderColor: "#b45309", borderDash: [5,5], pointRadius: 0}
+                {label:`Frac Press`, data:fpData, showLine:true, borderColor: "#b45309", borderDash: [5,5], pointRadius: 0},
+                {label:`Overburden`, data:obgData, showLine:true, borderColor: "#000", pointRadius: 0}
             ]
         },
         options:{
