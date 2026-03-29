@@ -25,7 +25,6 @@
         .dashboard-container { display: flex; gap: 15px; align-items: stretch; margin-top: 15px; width: 100%; }
         .schematic-box { width: 120px; background: #f4f7f6; border: 1px solid #ccc; display: flex; justify-content: center; position: relative; }
         
-        /* 3-Chart Grid System */
         .charts-wrapper { flex-grow: 1; display: flex; gap: 5px; position: relative; background: #fff; border: 1px solid #ccc; padding: 10px; min-height: 600px; overflow: hidden;}
         .chart-col { flex: 1; position: relative; }
         
@@ -38,15 +37,12 @@
         .case-select { padding: 5px; font-weight: bold; border-radius: 4px; border: 1px solid #ccc; }
         .highlight-col { background-color: #e8f5e9 !important; }
         
-        /* Universal Scooter Line */
         #scooterLine { position: absolute; height: 2px; background: #eab308; cursor: ns-resize; display: none; z-index: 20; box-shadow: 0px 0px 5px rgba(0,0,0,0.3); pointer-events: none; left: 10px; right: 10px;}
         #scooterLine::before { content: "↔"; position: absolute; left: -10px; top: -8px; font-size: 14px; color: #eab308; font-weight: bold; transform: rotate(90deg); }
         
-        /* Enhanced Scooter Box */
         #scooterBox { position: absolute; left: 10px; top: -45px; background: rgba(255,255,255,0.95); border: 1px solid #999; padding: 5px 15px; border-radius: 4px; box-shadow: 0px 2px 10px rgba(0,0,0,0.2); display: flex; align-items: center; gap: 15px; cursor: default; pointer-events: auto; }
         .scooter-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: x 15px; font-size: 0.85em; line-height: 1.3; }
         
-        /* Dark Mode Gauges Dashboard */
         .dash-panel { display: flex; gap: 15px; background: #334155; padding: 15px; border-radius: 8px; margin-top: 15px; align-items: stretch; justify-content: center; }
         .dash-card { flex: 1; max-width: 300px; background: #1e293b; border: 1px solid #475569; border-radius: 6px; padding: 15px; display: flex; flex-direction: column; align-items: center; position: relative; }
         .dash-card.active-anchor { border-color: #4ade80; box-shadow: 0 0 10px rgba(74, 222, 128, 0.2); }
@@ -67,6 +63,10 @@
         
         .results-bar { background-color: #f1f5f9; padding: 12px; border-radius: 5px; border: 1px solid #cbd5e1; margin-top: 15px; display: flex; gap: 20px; align-items: center; font-size: 0.95em; color: #333; }
         .warning-bar { display: none; background-color: #fffbeb; color: #b45309; padding: 10px; border-radius: 5px; border: 1px solid #fde68a; margin-top: 10px; font-weight: bold; text-align: center; }
+        
+        .mud-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .mud-panel { background: #f8fafc; border: 1px solid #e2e8f0; padding: 15px; border-radius: 6px; }
+        .mud-input-row { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 0.9em; }
     </style>
 </head>
 
@@ -79,7 +79,7 @@
     <button class="nav-btn" onclick="showTab('well', this)">Well Design</button>
     <button class="nav-btn" onclick="showTab('trajectory', this)">Trajectory</button>
     <button class="nav-btn" onclick="showTab('bha', this)">BHA</button>
-    <button class="nav-btn" onclick="showTab('mud', this)">Mud</button>
+    <button class="nav-btn" onclick="showTab('mud', this)">Mud Engine</button>
     <button class="nav-btn" onclick="showTab('subsurface', this)">Subsurface</button>
     <button class="nav-btn" onclick="showTab('units', this)" style="float: right; background-color: #555; color: white;">Units ⚙️</button>
 </div>
@@ -101,7 +101,7 @@
     <div class="controls-row">
         <div><label>Flowrate (<span class="lbl-flow">gpm</span>):</label><br><input id="flowrate" class="val-flow" value="400" onkeyup="triggerWellDesignChange()"></div>
         <div><label>Depth (<span class="lbl-length">ft</span>):</label><br><input id="depth" class="val-length" value="10000" onkeyup="triggerWellDesignChange()"></div>
-        <div><label>Surface Temp (<span class="lbl-temp">°F</span>):</label><br><input id="surface_temp" class="val-temp" value="80" onchange="applyGeothermal()"></div>
+        <div><label>Surface Temp (<span class="lbl-temp">°F</span>):</label><br><input id="surface_temp" class="val-temp" value="80" onchange="triggerWellDesignChange()"></div>
         <div><label>Bit TFA (in²):</label><br><input id="bit_tfa" value="0.994" style="width: 55px;" onkeyup="triggerWellDesignChange()"></div>
         
         <div style="border-left: 2px solid #ddd; padding-left: 15px;">
@@ -187,9 +187,7 @@
         <span style="color: #64748b;">Ready to run simulation...</span>
     </div>
     
-    <div id="targetWarning" class="warning-bar">
-        ⚠️ Target EMW cannot be achieved. Simulating using Min SBP.
-    </div>
+    <div id="targetWarning" class="warning-bar"></div>
     
     <div class="dash-panel">
         <div class="dash-card">
@@ -285,6 +283,27 @@
                 </tr>
             </table>
             <button onclick="addWellRow()">Add Row</button>
+            
+            <div style="margin-top: 25px; padding: 15px; background: #eef2ff; border-radius: 6px; border: 1px solid #bfdbfe; max-width: 600px;">
+                <h4 style="margin-top: 0; color: #1e3a8a;">Global Thermal Boundary Properties</h4>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; font-size: 0.85em;">
+                    <div>
+                        <b>Casing / Liner</b><br>
+                        Cond (BTU/hr-ft-F): <input id="k_casing" value="25.0" style="width: 50px;" onkeyup="triggerWellDesignChange()"><br>
+                        Cp (BTU/lb-F): <input id="cp_casing" value="0.12" style="width: 50px;" onkeyup="triggerWellDesignChange()">
+                    </div>
+                    <div>
+                        <b>Cement</b><br>
+                        Cond (BTU/hr-ft-F): <input id="k_cement" value="0.5" style="width: 50px;" onkeyup="triggerWellDesignChange()"><br>
+                        Cp (BTU/lb-F): <input id="cp_cement" value="0.2" style="width: 50px;" onkeyup="triggerWellDesignChange()">
+                    </div>
+                    <div>
+                        <b>Formation / Rock</b><br>
+                        Cond (BTU/hr-ft-F): <input id="k_form" value="1.3" style="width: 50px;" onkeyup="triggerWellDesignChange()"><br>
+                        Cp (BTU/lb-F): <input id="cp_form" value="0.2" style="width: 50px;" onkeyup="triggerWellDesignChange()">
+                    </div>
+                </div>
+            </div>
         </div>
         <div style="background: #f4f7f6; padding: 10px; border: 1px solid #ccc;"><h4 style="margin-top: 0; text-align: center;">Schematic</h4><canvas id="wellCanvasDesign" width="200" height="400"></canvas></div>
     </div>
@@ -333,11 +352,42 @@
 </div>
 
 <div id="mud" class="tab">
-    <h3>Fluid Properties</h3>
-    MW (<span class="lbl-density">ppg</span>): <input id="mw" class="val-density" value="10"><br><br>
-    <i>Fann Viscometer Readings:</i><br>
-    600: <input id="f600" value="60"> | 300: <input id="f300" value="40"> | 200: <input id="f200" value="30"><br><br>
-    100: <input id="f100" value="20"> | 6: <input id="f6" value="10"> | 3: <input id="f3" value="5">
+    <div class="mud-grid">
+        <div class="mud-panel">
+            <h3 style="margin-top:0;">Volumetric Phase Calculator</h3>
+            <div class="mud-input-row"><b>Composite MW (<span class="lbl-density">ppg</span>):</b> <input id="mw" class="val-density" value="12.0" onkeyup="updateMudProperties()" style="font-weight:bold;"></div>
+            <div class="mud-input-row"><b>Oil / Water Ratio (OWR):</b> 
+                <div>
+                    <input id="owr_oil" value="80" onkeyup="updateOwrWater()" style="width: 35px;"> / <input id="owr_wat" value="20" disabled style="width: 35px; border: none; background: transparent;">
+                </div>
+            </div>
+            <hr style="border: 0; border-top: 1px solid #cbd5e1; margin: 15px 0;">
+            <div class="mud-input-row">Base Oil Dens (<span class="lbl-density">ppg</span>): <input id="oil_dens" class="val-density" value="6.7" onkeyup="updateMudProperties()"></div>
+            <div class="mud-input-row">Water Dens (<span class="lbl-density">ppg</span>): <input id="wat_dens" class="val-density" value="8.33" onkeyup="updateMudProperties()"></div>
+            <div class="mud-input-row">Solids Dens (<span class="lbl-density">ppg</span>): <input id="sol_dens" class="val-density" value="22.0" onkeyup="updateMudProperties()"></div>
+            
+            <div style="margin-top: 15px; padding: 10px; background: #e0f2fe; border-radius: 4px; border: 1px solid #bae6fd;">
+                <div class="mud-input-row" style="color: #0369a1; font-weight: bold;">Calculated Solids % : <span id="solids_perc" style="font-size: 1.2em;">0.0</span> %</div>
+                <div class="mud-input-row" style="color: #0f172a; margin-top: 10px;">Mud Cp (BTU/lb-F): <input id="mud_cp" value="0.45" disabled style="background: transparent; border: none; font-weight: bold; text-align: right; width: 60px;"></div>
+                <div class="mud-input-row" style="color: #0f172a;">Mud Cond (BTU/hr-ft-F): <input id="mud_k" value="0.35" disabled style="background: transparent; border: none; font-weight: bold; text-align: right; width: 60px;"></div>
+            </div>
+        </div>
+
+        <div class="mud-panel">
+            <h3 style="margin-top:0;">Rheology (Fann Readings)</h3>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; text-align: right; max-width: 250px;">
+                <div>600 RPM: <input id="f600" value="60" onkeyup="drawRheologyChart(); triggerWellDesignChange();"></div>
+                <div>300 RPM: <input id="f300" value="40" onkeyup="drawRheologyChart(); triggerWellDesignChange();"></div>
+                <div>200 RPM: <input id="f200" value="30" onkeyup="drawRheologyChart(); triggerWellDesignChange();"></div>
+                <div>100 RPM: <input id="f100" value="20" onkeyup="drawRheologyChart(); triggerWellDesignChange();"></div>
+                <div>6 RPM: <input id="f6" value="10" onkeyup="drawRheologyChart(); triggerWellDesignChange();"></div>
+                <div>3 RPM: <input id="f3" value="5" onkeyup="drawRheologyChart(); triggerWellDesignChange();"></div>
+            </div>
+            <div style="margin-top: 15px; height: 200px;">
+                <canvas id="rheologyChart"></canvas>
+            </div>
+        </div>
+    </div>
 </div>
 
 <div id="subsurface" class="tab">
@@ -385,22 +435,90 @@ let chartDebounceTimer = null;
 let wellChangeTimer = null;
 let currentUnits = { length: "ft", diam: "in", density: "ppg", press: "psi", flow: "gpm", temp: "F" };
 
-// ================= GLOBAL MATH =================
-function interpolateAtDepth(targetDepth, prof) {
-    let ecd = 0, esd = 0, temp = 0;
-    for (let i=0; i<prof.depth.length-1; i++) {
-        if (targetDepth >= prof.depth[i] && targetDepth <= prof.depth[i+1]) {
-            let ratio = (targetDepth - prof.depth[i]) / (prof.depth[i+1] - prof.depth[i]);
-            ecd = prof.ecd[i] + ratio * (prof.ecd[i+1] - prof.ecd[i]);
-            esd = prof.esd[i] + ratio * (prof.esd[i+1] - prof.esd[i]);
-            if(prof.temp) temp = prof.temp[i] + ratio * (prof.temp[i+1] - prof.temp[i]);
-            return {ecd: ecd, esd: esd, temp: temp};
+// ================= MUD & RHEOLOGY =================
+function updateOwrWater() {
+    let oil = parseFloat(document.getElementById('owr_oil').value) || 0;
+    if (oil > 100) oil = 100;
+    if (oil < 0) oil = 0;
+    document.getElementById('owr_wat').value = (100 - oil).toFixed(0);
+    updateMudProperties();
+}
+
+function updateMudProperties() {
+    let mwUser = parseFloat(document.getElementById('mw').value) || 12;
+    let oilDensUser = parseFloat(document.getElementById('oil_dens').value) || 6.7;
+    let watDensUser = parseFloat(document.getElementById('wat_dens').value) || 8.33;
+    let solDensUser = parseFloat(document.getElementById('sol_dens').value) || 22.0;
+    
+    let mw = converters.density.toBase(mwUser, currentUnits.density);
+    let oDens = converters.density.toBase(oilDensUser, currentUnits.density);
+    let wDens = converters.density.toBase(watDensUser, currentUnits.density);
+    let sDens = converters.density.toBase(solDensUser, currentUnits.density);
+
+    let o_frac = (parseFloat(document.getElementById('owr_oil').value) || 80) / 100.0;
+    let w_frac = 1.0 - o_frac;
+    let liqDens = (o_frac * oDens) + (w_frac * wDens);
+
+    let v_solids = (mw - liqDens) / (sDens - liqDens);
+    if(v_solids < 0) v_solids = 0;
+    if(v_solids > 1) v_solids = 1;
+
+    let v_oil = o_frac * (1 - v_solids);
+    let v_wat = w_frac * (1 - v_solids);
+
+    document.getElementById('solids_perc').innerText = (v_solids * 100).toFixed(1);
+
+    let cp_mud = ((v_oil * oDens * 0.5) + (v_wat * wDens * 1.0) + (v_solids * sDens * 0.2)) / mw;
+    document.getElementById('mud_cp').value = cp_mud.toFixed(3);
+
+    let k_mud = (v_oil * 0.08) + (v_wat * 0.35) + (v_solids * 1.5);
+    document.getElementById('mud_k').value = k_mud.toFixed(3);
+
+    drawRheologyChart();
+    triggerWellDesignChange();
+}
+
+function drawRheologyChart() {
+    const ctx = document.getElementById("rheologyChart");
+    if(window.rheoChart) window.rheoChart.destroy();
+
+    let f600 = parseFloat(document.getElementById("f600").value)||0;
+    let f300 = parseFloat(document.getElementById("f300").value)||0;
+    let f200 = parseFloat(document.getElementById("f200").value)||0;
+    let f100 = parseFloat(document.getElementById("f100").value)||0;
+    let f6 = parseFloat(document.getElementById("f6").value)||0;
+    let f3 = parseFloat(document.getElementById("f3").value)||0;
+
+    let dataPoints = [
+        {x: 3 * 1.702, y: f3 * 1.066},
+        {x: 6 * 1.702, y: f6 * 1.066},
+        {x: 100 * 1.702, y: f100 * 1.066},
+        {x: 200 * 1.702, y: f200 * 1.066},
+        {x: 300 * 1.702, y: f300 * 1.066},
+        {x: 600 * 1.702, y: f600 * 1.066}
+    ];
+
+    window.rheoChart = new Chart(ctx, {
+        type: 'scatter',
+        data: {
+            datasets: [{
+                label: 'Shear Stress vs Shear Rate',
+                data: dataPoints,
+                borderColor: '#0284c7',
+                backgroundColor: '#0284c7',
+                showLine: true,
+                tension: 0.3
+            }]
+        },
+        options: {
+            maintainAspectRatio: false,
+            scales: {
+                x: { display: true, title: {display: false}, grid: { color: '#e5e7eb' } },
+                y: { display: true, title: {display: false}, grid: { color: '#e5e7eb' } }
+            },
+            plugins: { legend: { display: true, position: 'bottom', labels: { boxWidth: 12, font: {size: 10} } } }
         }
-    }
-    if (prof.depth.length > 0 && targetDepth >= prof.depth[prof.depth.length-1]) {
-        return {ecd: prof.ecd[prof.ecd.length-1], esd: prof.esd[prof.esd.length-1], temp: prof.temp ? prof.temp[prof.temp.length-1] : 0};
-    }
-    return {ecd: 0, esd: 0, temp: 0};
+    });
 }
 
 // ================= UI CONTROLS & DASHBOARD =================
@@ -460,7 +578,7 @@ function updateTargetLabel() {
     triggerWellDesignChange();
 }
 
-function updateDashboard(spp, sbp, anchorDep, anchorPress, anchorEcd, modeType, annLoss) {
+function updateDashboard(spp, sbp, anchorDep, anchorPress, anchorEcd, modeType, annLoss, zfSbp) {
     let maxSbpUser = Number(document.getElementById("max_sbp").value) || 2000;
     let maxSpp = 6000;
     let maxPress = 10000;
@@ -498,6 +616,9 @@ function updateDashboard(spp, sbp, anchorDep, anchorPress, anchorEcd, modeType, 
     if(anchDep) anchDep.innerText = anchorDep.toFixed(0);
     
     document.getElementById("dashAnnLoss").innerText = annLoss.toFixed(0);
+    
+    let dashZF = document.getElementById("dashZeroFlowSbp");
+    if(dashZF) dashZF.innerText = zfSbp.toFixed(0);
 
     let modeText = modeType === "conv" ? "Conventional" : (modeType === "sbp" ? "Surface SBP" : "Target Downhole");
     let status = document.getElementById("dashSbpStatus");
@@ -524,48 +645,29 @@ function updateDashboard(spp, sbp, anchorDep, anchorPress, anchorEcd, modeType, 
 }
 
 // ================= UTILS & DOM DELEGATION =================
-function parseSafe(val) {
-    if (val === undefined || val === null || String(val).trim() === "") return null;
-    let parsed = parseFloat(String(val).replace(/,/g, ''));
-    return isNaN(parsed) ? null : parsed;
-}
-function getCalcDepthCol() {
-    let type = document.getElementById("calcDepthType").value;
-    return type === "md" ? 1 : type === "tvddf" ? 2 : 3;
-}
+function getCalcDepthCol() { return document.getElementById("calcDepthType").value === "md" ? 1 : document.getElementById("calcDepthType").value === "tvddf" ? 2 : 3; }
 function highlightActiveDepth() {
-    let colIndex = getCalcDepthCol();
-    let table = document.getElementById("ppfgTable");
-    table.classList.remove("active-col-1", "active-col-2", "active-col-3");
-    table.classList.add("active-col-" + colIndex);
+    let colIndex = getCalcDepthCol(); let table = document.getElementById("ppfgTable");
+    table.classList.remove("active-col-1", "active-col-2", "active-col-3"); table.classList.add("active-col-" + colIndex);
 }
 
 function handleTableKeyup(e) {
-    let td = e.target;
-    if (td.tagName !== 'TD') return;
-    let cellIndex = td.cellIndex;
-    
+    let td = e.target; if (td.tagName !== 'TD') return; let cellIndex = td.cellIndex;
     if (cellIndex >= 1 && cellIndex <= 3) triggerPPFGCalc(td);
-    else if (cellIndex === 4) calcPPFG(td, 'pp_dens');
-    else if (cellIndex === 5) calcPPFG(td, 'pp_press');
-    else if (cellIndex === 6) calcPPFG(td, 'fp_dens');
-    else if (cellIndex === 7) calcPPFG(td, 'fp_press');
-    else if (cellIndex === 8) calcPPFG(td, 'obg_dens');
-    else if (cellIndex === 9) calcPPFG(td, 'obg_press');
+    else if (cellIndex === 4) calcPPFG(td, 'pp_dens'); else if (cellIndex === 5) calcPPFG(td, 'pp_press');
+    else if (cellIndex === 6) calcPPFG(td, 'fp_dens'); else if (cellIndex === 7) calcPPFG(td, 'fp_press');
+    else if (cellIndex === 8) calcPPFG(td, 'obg_dens'); else if (cellIndex === 9) calcPPFG(td, 'obg_press');
     else if (cellIndex === 10) { clearTimeout(chartDebounceTimer); chartDebounceTimer = setTimeout(replotChart, 400); }
 }
 
 function switchCalcDepth() {
-    let col = getCalcDepthCol(); let tbody = document.getElementById("ppfgBody"); let prevDepth = 0;
-    highlightActiveDepth();
+    let col = getCalcDepthCol(); let tbody = document.getElementById("ppfgBody"); let prevDepth = 0; highlightActiveDepth();
     for (let i = 0; i < tbody.rows.length; i++) {
         let row = tbody.rows[i]; row.cells[0].textContent = prevDepth.toFixed(0);
-        let botDepth = parseFloat(row.cells[col].textContent);
-        if (!isNaN(botDepth)) prevDepth = botDepth;
+        let botDepth = parseFloat(row.cells[col].textContent); if (!isNaN(botDepth)) prevDepth = botDepth;
         calcPPFG(row.cells[4], 'pp_dens', true); calcPPFG(row.cells[6], 'fp_dens', true); calcPPFG(row.cells[8], 'obg_dens', true);
     }
-    applyGeothermal(true); 
-    clearTimeout(chartDebounceTimer); chartDebounceTimer = setTimeout(replotChart, 400);
+    applyGeothermal(true); clearTimeout(chartDebounceTimer); chartDebounceTimer = setTimeout(replotChart, 400);
 }
 
 function showTab(tab, btn) {
@@ -574,560 +676,23 @@ function showTab(tab, btn) {
     document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active-nav"));
     btn.classList.add("active-nav");
     updateSchematics();
+    if(tab === 'mud') updateMudProperties();
     if(tab === 'simulation') { toggleScooter(); }
 }
 
-function calcBhaCumLength() {
-    let tbody = document.getElementById("bhaBody");
-    if (!tbody) return;
-    let cum = 0;
-    for (let i = tbody.rows.length - 1; i >= 0; i--) {
-        let lenInput = tbody.rows[i].cells[5].querySelector("input");
-        let cumInput = tbody.rows[i].cells[6].querySelector("input");
-        if(lenInput && cumInput) {
-            let l = parseFloat(lenInput.value.replace(/,/g, '')) || 0;
-            cum += l;
-            cumInput.value = cum.toFixed(1);
-        }
+function handleChartHover(e) {
+    if(isDraggingScooter || !chartDensityInstance) return;
+    let yAxis = chartDensityInstance.scales.y; let rect = e.currentTarget.getBoundingClientRect(); let pixelY = e.clientY - rect.top;
+    if (pixelY >= yAxis.top && pixelY <= yAxis.bottom) {
+        scooterLine.style.display = 'block'; scooterLine.style.top = pixelY + 'px';
+        let userDepth = yAxis.getValueForPixel(pixelY);
+        document.getElementById('scooterDepthInput').value = userDepth.toFixed(0);
+        updateScooterValues(toBaseLength(userDepth));
     }
 }
+function hideScooter() { if(!isDraggingScooter && !document.getElementById('showScooter').checked) scooterLine.style.display = 'none'; }
+function showScooter() { if(document.getElementById('showScooter').checked && chartDensityInstance) scooterLine.style.display = 'block'; }
 
-function triggerWellDesignChange() {
-    enforceOpenHoleTop();
-    calcBhaCumLength();
-    updateSchematics();
-    if (lastSimResult) { clearTimeout(wellChangeTimer); wellChangeTimer = setTimeout(runSimulation, 500); }
-}
-
-function enforceOpenHoleTop() {
-    let table = document.getElementById("wellTable");
-    if (!table) return; let rows = table.rows;
-    for (let i = 1; i < rows.length; i++) {
-        let typeSelect = rows[i].cells[0].querySelector("select");
-        if (!typeSelect) continue;
-        let type = typeSelect.value; let topCell = rows[i].cells[2];
-        if (type === "open hole") {
-            topCell.setAttribute("contenteditable", "false"); topCell.style.backgroundColor = "#ddd"; topCell.style.color = "#666";
-            if (i > 1) { let prevBotCell = rows[i-1].cells[3]; if (topCell.textContent !== prevBotCell.textContent) topCell.textContent = prevBotCell.textContent; }
-        } else {
-            topCell.setAttribute("contenteditable", "true"); topCell.style.backgroundColor = ""; topCell.style.color = "";
-        }
-    }
-}
-
-function toggleOD(select){
-    const row = select.parentElement.parentElement;
-    const odInput = row.cells[4].querySelector("input");
-    if(select.value === "open hole"){ odInput.disabled = true; odInput.value = ""; } else { odInput.disabled = false; }
-    triggerWellDesignChange();
-}
-function addWellRow(){
-    const table = document.getElementById("wellTable"); const row = table.insertRow();
-    row.innerHTML = `<td><select onchange="toggleOD(this)"><option value="casing">Casing</option><option value="liner">Liner</option><option value="open hole">Open Hole</option></select></td><td contenteditable>New Section</td><td contenteditable class="val-length"></td><td contenteditable class="val-length"></td><td><input class="val-diam"></td><td><input class="val-diam"></td>`;
-}
-function addTrajectoryRow(){
-    const table = document.getElementById("trajectoryTable"); const row = table.insertRow();
-    row.innerHTML = `<td contenteditable class="val-length"></td><td contenteditable></td><td contenteditable></td>`;
-}
-function addBhaRow(){
-    const tbody = document.getElementById("bhaBody"); const row = tbody.insertRow();
-    row.innerHTML = `<td contenteditable>New Item</td><td><select><option>Pipe</option><option>HWDP</option><option>Collar</option><option>MWD</option><option>Underreamer</option><option>Circ Sub</option><option>Stabilizer</option><option>Crossover</option><option>Bit</option><option>Other</option></select></td><td><input class="val-diam"></td><td><input class="val-diam"></td><td><input class="val-diam"></td><td><input class="val-length" onkeyup="triggerWellDesignChange()"></td><td><input class="val-length" disabled></td>`;
-    triggerWellDesignChange();
-}
-function addSubsurfaceRow(top="", md="", tvddf="", tvdss="", pp="", pp_psi="", fp="", fp_psi="", obg="", obg_psi="", temp=""){
-    const tbody = document.getElementById("ppfgBody"); const row = tbody.insertRow();
-    let isMD = getCalcDepthCol() === 1 ? 'highlight-col' : ''; let isDF = getCalcDepthCol() === 2 ? 'highlight-col' : ''; let isSS = getCalcDepthCol() === 3 ? 'highlight-col' : '';
-    row.innerHTML = `<td contenteditable="false" class="val-length">${top}</td><td contenteditable class="val-length ${isMD}" onkeyup="triggerPPFGCalc(this)">${md}</td><td contenteditable class="val-length ${isDF}" onkeyup="triggerPPFGCalc(this)">${tvddf}</td><td contenteditable class="val-length ${isSS}" onkeyup="triggerPPFGCalc(this)">${tvdss}</td><td contenteditable class="val-density" onkeyup="calcPPFG(this, 'pp_dens')">${pp}</td><td contenteditable class="val-press" onkeyup="calcPPFG(this, 'pp_press')">${pp_psi}</td><td contenteditable class="val-density" onkeyup="calcPPFG(this, 'fp_dens')">${fp}</td><td contenteditable class="val-press" onkeyup="calcPPFG(this, 'fp_press')">${fp_psi}</td><td contenteditable class="val-density" onkeyup="calcPPFG(this, 'obg_dens')">${obg}</td><td contenteditable class="val-press" onkeyup="calcPPFG(this, 'obg_press')">${obg_psi}</td><td contenteditable class="val-temp">${temp}</td>`;
-    let prevDepth = 0; let col = getCalcDepthCol();
-    for(let i=0; i<tbody.rows.length; i++) { tbody.rows[i].cells[0].textContent = prevDepth.toFixed(0); let botDepth = parseFloat(tbody.rows[i].cells[col].textContent); if(!isNaN(botDepth)) prevDepth = botDepth; }
-    applyGeothermal(); 
-}
-
-// ================= EXCEL/PDF PARSING (BHA) =================
-async function extractTextFromPDF(pdfData) {
-    const pdf = await pdfjsLib.getDocument({data: pdfData}).promise;
-    let allRows = [];
-    for (let i = 1; i <= pdf.numPages; i++) {
-        const page = await pdf.getPage(i);
-        const textContent = await page.getTextContent();
-        let yMap = new Map();
-        textContent.items.forEach(item => {
-            let str = item.str.trim(); if(!str) return;
-            let y = Math.round(item.transform[5] / 5) * 5; 
-            if (!yMap.has(y)) yMap.set(y, []);
-            yMap.get(y).push(item);
-        });
-        let yKeys = Array.from(yMap.keys()).sort((a,b) => b - a); 
-        yKeys.forEach(y => {
-            let lineItems = yMap.get(y).sort((a,b) => a.transform[4] - b.transform[4]);
-            let merged = [];
-            if (lineItems.length > 0) {
-                let currentStr = lineItems[0].str; let currentX = lineItems[0].transform[4]; let currentEndX = currentX + lineItems[0].width;
-                for (let j = 1; j < lineItems.length; j++) {
-                    let item = lineItems[j];
-                    if (item.transform[4] - currentEndX < 20) { currentStr += " " + item.str; currentEndX = item.transform[4] + item.width; } 
-                    else { merged.push({str: currentStr.trim(), x: currentX}); currentStr = item.str; currentX = item.transform[4]; currentEndX = currentX + item.width; }
-                }
-                merged.push({str: currentStr.trim(), x: currentX});
-            }
-            allRows.push(merged);
-        });
-    }
-    let xCoords = [];
-    allRows.forEach(row => { row.forEach(item => { let found = xCoords.find(x => Math.abs(x - item.x) < 30); if (!found) xCoords.push(item.x); }); });
-    xCoords.sort((a,b) => a - b);
-    let table = [];
-    allRows.forEach(row => {
-        let tableRow = new Array(xCoords.length).fill("");
-        row.forEach(item => { let colIdx = xCoords.findIndex(x => Math.abs(x - item.x) < 30); if(colIdx !== -1) tableRow[colIdx] = (tableRow[colIdx] + " " + item.str).trim(); });
-        if(tableRow.some(cell => cell !== "")) table.push(tableRow);
-    });
-    return table;
-}
-
-function askUnitIfNeeded(detectedDiam, detectedLen) {
-    let finalDiam = detectedDiam; let finalLen = detectedLen;
-    if(!finalDiam) {
-        let resp = prompt("Could not detect Diameter unit in BHA file. Enter 'in' or 'mm':", currentUnits.diam);
-        finalDiam = resp ? resp.toLowerCase().trim() : currentUnits.diam;
-    }
-    if(!finalLen) {
-        let resp = prompt("Could not detect Length unit in BHA file. Enter 'ft' or 'm':", currentUnits.length);
-        finalLen = resp ? resp.toLowerCase().trim() : currentUnits.length;
-    }
-    return {diam: finalDiam, len: finalLen};
-}
-
-async function handleBhaUpload(event) {
-    const file = event.target.files[0];
-    if (!file) return;
-    document.getElementById("bhaBody").innerHTML = `<tr><td colspan="7" style="text-align:center;"><b>Parsing BHA File... Please wait.</b></td></tr>`;
-    try {
-        let rawData = [];
-        if (file.name.toLowerCase().endsWith('.pdf')) {
-            const arrayBuffer = await file.arrayBuffer();
-            rawData = await extractTextFromPDF(new Uint8Array(arrayBuffer));
-        } else {
-            const arrayBuffer = await file.arrayBuffer();
-            const workbook = XLSX.read(new Uint8Array(arrayBuffer), {type: 'array'});
-            rawData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], {header: 1});
-        }
-        if (!rawData || rawData.length < 2) { alert("File empty or unreadable."); document.getElementById("bhaBody").innerHTML = ""; return; }
-
-        let numCols = 0; rawData.slice(0, 30).forEach(r => { if(r && r.length > numCols) numCols = r.length; });
-        let headerMatrix = [];
-        for(let r=0; r < Math.min(30, rawData.length); r++) {
-            let rowVals = []; let lastVal = "";
-            for(let c=0; c < numCols; c++) {
-                let cell = (rawData[r] && rawData[r][c] !== undefined) ? rawData[r][c] : null;
-                if (cell !== null && String(cell).trim() !== "") lastVal = String(cell).toLowerCase().trim();
-                rowVals.push(lastVal);
-            }
-            headerMatrix.push(rowVals);
-        }
-
-        let flattenedHeaders = []; let detectedDiam = null; let detectedLen = null;
-        for(let c=0; c < numCols; c++) {
-            let colHeaderParts = [];
-            for(let r=0; r < headerMatrix.length; r++) { let val = headerMatrix[r][c]; if(val && !colHeaderParts.includes(val)) colHeaderParts.push(val); }
-            let fullHeader = colHeaderParts.join(" | "); flattenedHeaders.push(fullHeader);
-            if (/(in|inch|inches|mm|milimeter)/i.test(fullHeader)) detectedDiam = /mm/i.test(fullHeader) ? 'mm' : 'in';
-            if (/(ft|feet|m|meter)/i.test(fullHeader) && !/item|name|desc/i.test(fullHeader)) detectedLen = /m|meter/i.test(fullHeader) ? 'm' : 'ft';
-        }
-
-        let map = { name: -1, type: -1, od: -1, id: -1, maxOd: -1, len: -1 };
-        flattenedHeaders.forEach((h, i) => {
-            if (/name|item|desc|component/i.test(h)) map.name = i;
-            else if (/type|class/i.test(h)) map.type = i;
-            else if (/\bod\b|outer.*d/i.test(h) && !/max|conn|tj/i.test(h)) map.od = i;
-            else if (/\bid\b|inner.*d/i.test(h)) map.id = i;
-            else if (/max.*od|conn.*od|tj.*od|gauge/i.test(h)) map.maxOd = i;
-            else if (/len|length/i.test(h)) map.len = i;
-        });
-
-        if (map.od === -1 || map.len === -1) { 
-            alert(`Could not cleanly detect OD and Length columns.`); document.getElementById("bhaBody").innerHTML = ""; return; 
-        }
-
-        let units = askUnitIfNeeded(detectedDiam, detectedLen);
-        let parsedRows = []; let lastValidName = "Component";
-
-        for (let i = 0; i < rawData.length; i++) {
-            let row = rawData[i];
-            if (!row || row[map.len] === undefined) continue;
-            let rawLen = parseFloat(String(row[map.len]).replace(/,/g,'')); if (isNaN(rawLen)) continue;
-
-            let nm = map.name !== -1 && row[map.name] ? String(row[map.name]).trim() : "";
-            if (nm === "" && lastValidName !== "") nm = lastValidName; else if (nm !== "") lastValidName = nm;
-            let tyStr = map.type !== -1 && row[map.type] ? String(row[map.type]).toLowerCase() : "";
-            let searchStr = (tyStr + " " + nm).toLowerCase();
-            
-            let tyOpt = "Other";
-            if (/pipe|dp/i.test(searchStr)) tyOpt = "Pipe";
-            if (/hwdp|heavy/i.test(searchStr)) tyOpt = "HWDP";
-            if (/collar|dc/i.test(searchStr)) tyOpt = "Collar";
-            if (/mwd|lwd|tele|dir|motor|rss/i.test(searchStr)) tyOpt = "MWD";
-            if (/ream|ur|underream/i.test(searchStr)) tyOpt = "Underreamer";
-            if (/circ|bypass|pbl/i.test(searchStr)) tyOpt = "Circ Sub";
-            if (/stab/i.test(searchStr)) tyOpt = "Stabilizer";
-            if (/xo|cross|x-over|xover|x\/o/i.test(searchStr)) tyOpt = "Crossover";
-            if (/bit|pdc|tricone/i.test(searchStr)) tyOpt = "Bit"; 
-
-            let rawOd = map.od !== -1 ? parseFloat(String(row[map.od]).replace(/,/g,'')) || 0 : 0;
-            let rawId = map.id !== -1 ? parseFloat(String(row[map.id]).replace(/,/g,'')) || 0 : 0;
-            let rawMod = map.maxOd !== -1 ? parseFloat(String(row[map.maxOd]).replace(/,/g,'')) || rawOd : rawOd;
-            parsedRows.push({ nm: nm, tyOpt: tyOpt, rawOd: rawOd, rawId: rawId, rawMod: rawMod, rawLen: rawLen });
-        }
-
-        if (parsedRows.length > 0) {
-            let firstIsBit = /bit/i.test(parsedRows[0].tyOpt) || /bit/i.test(parsedRows[0].nm);
-            let lastIsBit = /bit/i.test(parsedRows[parsedRows.length-1].tyOpt) || /bit/i.test(parsedRows[parsedRows.length-1].nm);
-            if (firstIsBit && !lastIsBit) parsedRows.reverse();
-        }
-
-        let htmlString = "";
-        parsedRows.forEach(r => {
-            let baseOd = converters.diam.toBase(r.rawOd, units.diam); let baseId = converters.diam.toBase(r.rawId, units.diam);
-            let baseMod = converters.diam.toBase(r.rawMod, units.diam); let baseLen = converters.length.toBase(r.rawLen, units.len);
-            let uiOd = converters.diam.fromBase(baseOd, currentUnits.diam).toFixed(3); let uiId = converters.diam.fromBase(baseId, currentUnits.diam).toFixed(3);
-            let uiMod = converters.diam.fromBase(baseMod, currentUnits.diam).toFixed(3); let uiLen = converters.length.fromBase(baseLen, currentUnits.length).toFixed(1);
-            htmlString += `<tr><td contenteditable>${r.nm}</td><td><select><option ${r.tyOpt==='Pipe'?'selected':''}>Pipe</option><option ${r.tyOpt==='HWDP'?'selected':''}>HWDP</option><option ${r.tyOpt==='Collar'?'selected':''}>Collar</option><option ${r.tyOpt==='MWD'?'selected':''}>MWD</option><option ${r.tyOpt==='Underreamer'?'selected':''}>Underreamer</option><option ${r.tyOpt==='Circ Sub'?'selected':''}>Circ Sub</option><option ${r.tyOpt==='Stabilizer'?'selected':''}>Stabilizer</option><option ${r.tyOpt==='Crossover'?'selected':''}>Crossover</option><option ${r.tyOpt==='Bit'?'selected':''}>Bit</option><option ${r.tyOpt==='Other'?'selected':''}>Other</option></select></td><td><input class="val-diam" value="${uiOd}"></td><td><input class="val-diam" value="${uiId}"></td><td><input class="val-diam" value="${uiMod}"></td><td><input class="val-length" value="${uiLen}" onkeyup="triggerWellDesignChange()"></td><td><input class="val-length" disabled></td></tr>`;
-        });
-        document.getElementById("bhaBody").innerHTML = htmlString; triggerWellDesignChange(); document.getElementById("bhaUpload").value = "";
-    } catch (err) { console.error(err); alert("Error processing BHA file: " + err.message); document.getElementById("bhaBody").innerHTML = ""; }
-}
-
-// ================= EXCEL PARSING (SUBSURFACE BULK) =================
-function handleFileUpload(event) {
-    const file = event.target.files[0];
-    if (!file) return;
-    document.getElementById("ppfgBody").innerHTML = `<tr><td colspan="11" style="text-align:center; padding: 20px;"><b>Processing... Please wait.</b></td></tr>`;
-    const reader = new FileReader();
-    reader.onload = function(e) {
-        setTimeout(() => {
-            try {
-                const data = new Uint8Array(e.target.result); const workbook = XLSX.read(data, {type: 'array'});
-                const rawData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], {header: 1, defval: ""});
-                const cleanData = rawData.filter(r => r && r.length > 0 && r.some(c => String(c).trim() !== ""));
-                if (cleanData.length < 2) { alert("File appears to be empty."); document.getElementById("ppfgBody").innerHTML = ""; return; }
-
-                let numCols = 0; cleanData.slice(0, 20).forEach(r => { if(r.length > numCols) numCols = r.length; }); numCols = Math.min(numCols, 100); 
-                let headerMatrix = [];
-                for(let r=0; r < Math.min(15, cleanData.length); r++) {
-                    let rowVals = []; let lastVal = "";
-                    for(let c=0; c < numCols; c++) {
-                        let cell = cleanData[r][c];
-                        if (cell !== undefined && cell !== null && String(cell).trim() !== "") lastVal = String(cell).toLowerCase().trim();
-                        rowVals.push(lastVal);
-                    }
-                    headerMatrix.push(rowVals);
-                }
-
-                let flattenedHeaders = []; let detectedDepthUnit = null; 
-                for(let c=0; c < numCols; c++) {
-                    let colHeaderParts = [];
-                    for(let r=0; r < headerMatrix.length; r++) { let val = headerMatrix[r][c]; if(val && !colHeaderParts.includes(val)) colHeaderParts.push(val); }
-                    let fullHeader = colHeaderParts.join(" | "); flattenedHeaders.push(fullHeader);
-                    if (/(tvddf|tvd.*df|tvd|md|tvdss)/i.test(fullHeader)) {
-                        if (/\bm\b|meter/i.test(fullHeader) || /m-tvd/i.test(fullHeader)) detectedDepthUnit = 'm';
-                        if (/\bft\b|feet/i.test(fullHeader)) detectedDepthUnit = 'ft';
-                    }
-                }
-
-                let map = { md: -1, tvddf: -1, tvdss: -1, pp: -1, pp_psi: -1, fp: -1, fp_psi: -1, obg: -1, obg_psi: -1, temp: -1 };
-                let casePref = document.getElementById("importCase").value; let caseRegex = new RegExp(casePref, 'i');
-                let unitPref = document.getElementById("importUnit").value; 
-                let importDepthUnit = document.getElementById("importDepthUnit").value;
-                if (importDepthUnit === 'auto') importDepthUnit = detectedDepthUnit || 'ft';
-
-                flattenedHeaders.forEach((h, i) => {
-                    let isTargetCase = casePref === '.*' ? true : caseRegex.test(h);
-                    let hasNoCase = !/low|mid|high/i.test(h); let caseMatch = isTargetCase || hasNoCase;
-                    if (/tvdss|tvd.*ss/i.test(h) && map.tvdss === -1) map.tvdss = i;
-                    else if (/(tvddf|tvd.*df|tvd)/i.test(h) && !/ss/i.test(h) && map.tvddf === -1) map.tvddf = i;
-                    else if (/md|measured/i.test(h) && map.md === -1) map.md = i;
-
-                    let isWrongUnit = (unitPref === 'ppg' && /psi|bar|pa/i.test(h)) || (unitPref === 'psi' && /ppg|sg|kg/i.test(h));
-                    if (caseMatch && !isWrongUnit) {
-                        if (/pore|pp|form.*press/i.test(h)) { if (unitPref === 'ppg' && map.pp === -1) map.pp = i; else if (unitPref === 'psi' && map.pp_psi === -1) map.pp_psi = i; }
-                        if (/frac|fg|fp/i.test(h)) { if (unitPref === 'ppg' && map.fp === -1) map.fp = i; else if (unitPref === 'psi' && map.fp_psi === -1) map.fp_psi = i; }
-                        if (/obg|overburden/i.test(h)) { if (unitPref === 'ppg' && map.obg === -1) map.obg = i; else if (unitPref === 'psi' && map.obg_psi === -1) map.obg_psi = i; }
-                    }
-                    if (/temp/i.test(h) && map.temp === -1) map.temp = i;
-                });
-
-                if (map.md === -1 && map.tvddf === -1 && map.tvdss === -1) {
-                    let fallback = flattenedHeaders.findIndex(h => /depth|bot/i.test(h));
-                    if (fallback !== -1) map.tvddf = fallback; else { alert("Could not find any Depth columns."); document.getElementById("ppfgBody").innerHTML = ""; return; }
-                }
-
-                if (map.tvddf !== -1) document.getElementById("calcDepthType").value = "tvddf";
-                else if (map.tvdss !== -1) document.getElementById("calcDepthType").value = "tvdss";
-                else if (map.md !== -1) document.getElementById("calcDepthType").value = "md";
-
-                let activeType = document.getElementById("calcDepthType").value; let targetUIUnit = currentUnits.length;
-                function conformDepth(val) {
-                    if (val === null) return null;
-                    if (importDepthUnit === 'm' && targetUIUnit === 'ft') return val * 3.28084;
-                    if (importDepthUnit === 'ft' && targetUIUnit === 'm') return val / 3.28084;
-                    return val;
-                }
-
-                let parsedRows = [];
-                for (let i = 2; i < cleanData.length; i++) {
-                    let row = cleanData[i]; if (!row) continue;
-                    let mdRaw = map.md !== -1 ? parseSafe(row[map.md]) : null;
-                    let tvddfRaw = map.tvddf !== -1 ? parseSafe(row[map.tvddf]) : null;
-                    let tvdssRaw = map.tvdss !== -1 ? parseSafe(row[map.tvdss]) : null;
-                    if (mdRaw === null && tvddfRaw === null && tvdssRaw === null) continue;
-                    parsedRows.push({ md: conformDepth(mdRaw), tvddf: conformDepth(tvddfRaw), tvdss: conformDepth(tvdssRaw), pp: map.pp !== -1 ? parseSafe(row[map.pp]) : null, pp_psi: map.pp_psi !== -1 ? parseSafe(row[map.pp_psi]) : null, fp: map.fp !== -1 ? parseSafe(row[map.fp]) : null, fp_psi: map.fp_psi !== -1 ? parseSafe(row[map.fp_psi]) : null, obg: map.obg !== -1 ? parseSafe(row[map.obg]) : null, obg_psi: map.obg_psi !== -1 ? parseSafe(row[map.obg_psi]) : null, temp: map.temp !== -1 ? parseSafe(row[map.temp]) : null });
-                }
-                parsedRows.sort((a, b) => (a[activeType] || 0) - (b[activeType] || 0));
-
-                const c = 0.051948; let prevDepth = 0;
-                let useGrad = document.getElementById("use_geo_grad").checked; let grad_user = parseFloat(document.getElementById("geo_grad").value) || 0; let baseTemp_user = parseFloat(document.getElementById("surface_temp").value) || 80;
-                let ppData = [], fpData = [], obgData = [], tempData = [];
-
-                parsedRows.forEach(r => {
-                    let activeBot = r[activeType] !== null ? r[activeType] : 0;
-                    r.top = prevDepth; prevDepth = activeBot;
-                    let bot_ft = toBaseLength(activeBot); 
-                    if (bot_ft > 0) {
-                        if (r.pp === null && r.pp_psi !== null) r.pp = fromBaseDens(toBasePress(r.pp_psi) / (bot_ft * c));
-                        if (r.pp_psi === null && r.pp !== null) r.pp_psi = fromBasePress(toBaseDens(r.pp) * bot_ft * c);
-                        if (r.fp === null && r.fp_psi !== null) r.fp = fromBaseDens(toBasePress(r.fp_psi) / (bot_ft * c));
-                        if (r.fp_psi === null && r.fp !== null) r.fp_psi = fromBasePress(toBaseDens(r.fp) * bot_ft * c);
-                        if (r.obg === null && r.obg_psi !== null) r.obg = fromBaseDens(toBasePress(r.obg_psi) / (bot_ft * c));
-                        if (r.obg_psi === null && r.obg !== null) r.obg_psi = fromBasePress(toBaseDens(r.obg) * bot_ft * c);
-                    }
-                    if (useGrad) r.temp = baseTemp_user + (activeBot / 100) * grad_user;
-                });
-
-                let htmlString = "";
-                parsedRows.forEach(r => {
-                    let mdStr = r.md !== null ? r.md.toFixed(0) : ""; let dfStr = r.tvddf !== null ? r.tvddf.toFixed(0) : ""; let ssStr = r.tvdss !== null ? r.tvdss.toFixed(0) : "";
-                    let ppStr = r.pp !== null ? r.pp.toFixed(3) : ""; let ppPsiStr = r.pp_psi !== null ? r.pp_psi.toFixed(1) : "";
-                    let fpStr = r.fp !== null ? r.fp.toFixed(3) : ""; let fpPsiStr = r.fp_psi !== null ? r.fp_psi.toFixed(1) : "";
-                    let obgStr = r.obg !== null ? r.obg.toFixed(3) : ""; let obgPsiStr = r.obg_psi !== null ? r.obg_psi.toFixed(1) : "";
-                    let tempStr = r.temp !== null ? r.temp.toFixed(1) : "";
-
-                    htmlString += `<tr><td contenteditable="false">${r.top.toFixed(0)}</td><td contenteditable>${mdStr}</td><td contenteditable>${dfStr}</td><td contenteditable>${ssStr}</td><td contenteditable>${ppStr}</td><td contenteditable>${ppPsiStr}</td><td contenteditable>${fpStr}</td><td contenteditable>${fpPsiStr}</td><td contenteditable>${obgStr}</td><td contenteditable>${obgPsiStr}</td><td contenteditable>${tempStr}</td></tr>`;
-                });
-
-                document.getElementById("ppfgBody").innerHTML = htmlString; highlightActiveDepth(); 
-                clearTimeout(chartDebounceTimer); chartDebounceTimer = setTimeout(replotChart, 400);
-                document.getElementById("excelUpload").value = ""; 
-            } catch (err) { console.error(err); alert("Error processing Subsurface file: " + err.message); document.getElementById("ppfgBody").innerHTML = ""; }
-        }, 100); 
-    };
-    reader.readAsArrayBuffer(file);
-}
-
-// ================= UNITS =================
-const converters = {
-    length: { toBase: (v, u) => u === "m" ? v * 3.28084 : v,  fromBase: (v, u) => u === "m" ? v / 3.28084 : v },
-    diam:   { toBase: (v, u) => u === "mm" ? v / 25.4 : v,    fromBase: (v, u) => u === "mm" ? v * 25.4 : v },
-    density:{ toBase: (v, u) => u === "sg" ? v * 8.33 : (u === "kg/m3" ? v / 119.826 : v), fromBase: (v, u) => u === "sg" ? v / 8.33 : (u === "kg/m3" ? v * 119.826 : v) },
-    press:  { toBase: (v, u) => u === "bar" ? v * 14.5038 : (u === "kPa" ? v * 0.145038 : v), fromBase: (v, u) => u === "bar" ? v / 14.5038 : (u === "kPa" ? v / 0.145038 : v) },
-    flow:   { toBase: (v, u) => u === "lpm" ? v * 0.264172 : v, fromBase: (v, u) => u === "lpm" ? v / 0.264172 : v },
-    temp:   { toBase: (v, u) => u === "C" ? (v * 9/5) + 32 : v, fromBase: (v, u) => u === "C" ? (v - 32) * 5/9 : v }
-};
-function changeUnit(category, selectElement) {
-    const newUnit = selectElement.value; const oldUnit = currentUnits[category]; if (oldUnit === newUnit) return;
-    
-    document.querySelectorAll(`.val-${category}`).forEach(el => {
-        let isInput = el.tagName === 'INPUT'; let valStr = isInput ? el.value : el.textContent;
-        if (valStr.trim() !== "") {
-            let val = parseFloat(valStr.replace(/,/g,''));
-            if (!isNaN(val)) { let baseVal = converters[category].toBase(val, oldUnit); let newVal = converters[category].fromBase(baseVal, newUnit); if (isInput) el.value = newVal.toFixed(3); else el.textContent = newVal.toFixed(3); }
-        }
-    });
-
-    let colMap = { 'length': [0,1,2,3], 'density': [4,6,8], 'press': [5,7,9], 'temp': [10] };
-    let cols = colMap[category];
-    if (cols) {
-        let rows = document.getElementById("ppfgBody").rows;
-        for(let i=0; i<rows.length; i++) {
-            cols.forEach(c => {
-                let td = rows[i].cells[c]; if(!td) return;
-                let valStr = td.textContent;
-                if (valStr.trim() !== "") {
-                    let val = parseFloat(valStr.replace(/,/g,''));
-                    if (!isNaN(val)) { td.textContent = converters[category].fromBase(converters[category].toBase(val, oldUnit), newUnit).toFixed(3); }
-                }
-            });
-        }
-    }
-
-    document.querySelectorAll(`.lbl-${category}`).forEach(el => el.textContent = category === "temp" ? "°" + newUnit : newUnit);
-    currentUnits[category] = newUnit;
-    if (lastSimResult) replotChart(); updateSchematics();
-}
-function toBaseLength(v) { return converters.length.toBase(v, currentUnits.length); } function toBaseDiam(v)   { return converters.diam.toBase(v, currentUnits.diam); }
-function toBaseDens(v)   { return converters.density.toBase(v, currentUnits.density); } function toBasePress(v)  { return converters.press.toBase(v, currentUnits.press); }
-function fromBaseLength(v) { return converters.length.fromBase(v, currentUnits.length); } function fromBaseDens(v)   { return converters.density.fromBase(v, currentUnits.density); } function fromBasePress(v)  { return converters.press.fromBase(v, currentUnits.press); }
-
-// ================= SUBSURFACE CALCS =================
-function triggerPPFGCalc(depthCell) {
-    let tbody = document.getElementById("ppfgBody"); let col = getCalcDepthCol(); let prevDepth = 0;
-    for(let i=0; i<tbody.rows.length; i++) { tbody.rows[i].cells[0].textContent = prevDepth.toFixed(0); let botDepth = parseFloat(tbody.rows[i].cells[col].textContent); if(!isNaN(botDepth)) prevDepth = botDepth; }
-    let row = depthCell.closest("tr"); calcPPFG(row.cells[4], 'pp_dens', true); calcPPFG(row.cells[6], 'fp_dens', true); calcPPFG(row.cells[8], 'obg_dens', true);
-    applyGeothermal(true); clearTimeout(chartDebounceTimer); chartDebounceTimer = setTimeout(replotChart, 400);
-}
-function calcPPFG(inputCell, type, skipChart=false) {
-    let row = inputCell.closest("tr"); let col = getCalcDepthCol(); let bottomMD_ft = toBaseLength(parseFloat(row.cells[col].textContent.replace(/,/g,'')) || 0);
-    if (bottomMD_ft <= 0) return; let c = 0.051948;
-    let parseCell = (td) => parseFloat(td.textContent.replace(/,/g,''));
-
-    if (type === 'pp_dens') { let d = parseCell(row.cells[4]); if(!isNaN(d)) row.cells[5].textContent = fromBasePress(toBaseDens(d) * bottomMD_ft * c).toFixed(1); else row.cells[5].textContent = "";}
-    else if (type === 'pp_press') { let p = parseCell(row.cells[5]); if(!isNaN(p)) row.cells[4].textContent = fromBaseDens(toBasePress(p) / (bottomMD_ft * c)).toFixed(3); else row.cells[4].textContent = ""; }
-    else if (type === 'fp_dens') { let d = parseCell(row.cells[6]); if(!isNaN(d)) row.cells[7].textContent = fromBasePress(toBaseDens(d) * bottomMD_ft * c).toFixed(1); else row.cells[7].textContent = ""; }
-    else if (type === 'fp_press') { let p = parseCell(row.cells[7]); if(!isNaN(p)) row.cells[6].textContent = fromBaseDens(toBasePress(p) / (bottomMD_ft * c)).toFixed(3); else row.cells[6].textContent = ""; }
-    else if (type === 'obg_dens') { let d = parseCell(row.cells[8]); if(!isNaN(d)) row.cells[9].textContent = fromBasePress(toBaseDens(d) * bottomMD_ft * c).toFixed(1); else row.cells[9].textContent = ""; }
-    else if (type === 'obg_press') { let p = parseCell(row.cells[9]); if(!isNaN(p)) row.cells[8].textContent = fromBaseDens(toBasePress(p) / (bottomMD_ft * c)).toFixed(3); else row.cells[8].textContent = ""; }
-    if(!skipChart) { clearTimeout(chartDebounceTimer); chartDebounceTimer = setTimeout(replotChart, 400); }
-}
-function applyGeothermal(skipChart=false) {
-    let useGrad = document.getElementById("use_geo_grad").checked; document.getElementById("grad_inputs").style.display = useGrad ? "inline-block" : "none";
-    let rows = document.getElementById("ppfgBody").rows; let grad_user = parseFloat(document.getElementById("geo_grad").value) || 0; let col = getCalcDepthCol();
-    for (let i = 0; i < rows.length; i++) {
-        let tempCell = rows[i].cells[10];
-        if (useGrad) {
-            tempCell.contentEditable = "false"; let depth_user = parseFloat(rows[i].cells[col].textContent.replace(/,/g,'')) || 0; let baseTemp_user = parseFloat(document.getElementById("surface_temp").value) || 80;
-            tempCell.textContent = (baseTemp_user + (depth_user / 100) * grad_user).toFixed(1);
-        } else { tempCell.contentEditable = "true"; }
-    }
-    if(!skipChart) { clearTimeout(chartDebounceTimer); chartDebounceTimer = setTimeout(replotChart, 400); }
-}
-
-function getPPFGProfile() {
-    let rows = document.getElementById("ppfgBody").rows; let col = getCalcDepthCol(); let data = { top: [], bottom: [], pp: [], fp: [], obg: [], temp: [] };
-    let parseCell = (td) => parseFloat(td.textContent.replace(/,/g,''));
-    for (let i = 0; i < rows.length; i++) {
-        let r = rows[i].cells;
-        data.top.push(parseCell(r[0]) || 0); data.bottom.push(parseCell(r[col]) || 0); 
-        data.pp.push(parseCell(r[4])); data.fp.push(parseCell(r[6])); data.obg.push(parseCell(r[8])); data.temp.push(parseCell(r[10]));
-    }
-    return data;
-}
-
-// ================= SCHEMATICS =================
-function getWellSectionsForDrawing() {
-    let well_sections = []; let rows = document.getElementById("wellTable").rows;
-    for (let i = 1; i < rows.length; i++) {
-        let c = rows[i].cells; let type = c[0].children[0].value;
-        well_sections.push({ type: type, top: toBaseLength(Number(c[2].textContent)), bottom: toBaseLength(Number(c[3].textContent)), od: toBaseDiam(Number(c[4].querySelector("input").value || 20)), id: toBaseDiam(Number(c[5].querySelector("input").value || 8.5)) });
-    }
-    return well_sections;
-}
-function getBHAForDrawing() {
-    let bha = []; let rows = document.getElementById("bhaTable").rows;
-    for (let i = 1; i < rows.length; i++) {
-        let c = rows[i].cells; 
-        let odInp = c[2].querySelector("input"); let idInp = c[3].querySelector("input"); let lenInp = c[5].querySelector("input");
-        if(!odInp || !lenInp) continue;
-        bha.push({ name: c[0].textContent, od: toBaseDiam(parseFloat(odInp.value.replace(/,/g,'')) || 0), id: toBaseDiam(parseFloat(idInp.value.replace(/,/g,'')) || 0), lengthBase: toBaseLength(parseFloat(lenInp.value.replace(/,/g,'')) || 0) });
-    }
-    return bha;
-}
-
-function drawWellCanvas(canvasId, yMinBase, yMaxBase, drawString=false) {
-    const canvas = document.getElementById(canvasId); if(!canvas) return;
-    const ctx = canvas.getContext('2d'); const w = canvas.width; const h = canvas.height; ctx.clearRect(0, 0, w, h);
-    if(yMaxBase <= 0) return;
-    const sections = getWellSectionsForDrawing(); if(sections.length === 0) return;
-    let maxOD = Math.max(...sections.map(s => s.od));
-    
-    let drawAreaH = h - 30; let yOffset = 15; const centerX = w / 2;
-
-    sections.forEach((sec, idx) => {
-        if (sec.bottom <= yMinBase || sec.top >= yMaxBase) return;
-        let drawTop = Math.max(sec.top, yMinBase); let drawBottom = Math.min(sec.bottom, yMaxBase);
-        let y1 = ((drawTop - yMinBase) / (yMaxBase - yMinBase)) * drawAreaH + yOffset;
-        let y2 = ((drawBottom - yMinBase) / (yMaxBase - yMinBase)) * drawAreaH + yOffset;
-        let secH = y2 - y1; let secW = (sec.id / maxOD) * (w * 0.4); let x = centerX - secW / 2;
-
-        if (sec.type === "open hole") {
-            ctx.fillStyle = "#d4c5b9"; ctx.fillRect(x, y1, secW, secH); ctx.strokeStyle = "#8c7b6c"; ctx.strokeRect(x, y1, secW, secH);
-        } else {
-            ctx.fillStyle = "#555"; ctx.fillRect(x, y1, secW, secH); let idW = secW * 0.75; let idX = centerX - idW / 2;
-            ctx.fillStyle = "#f4f7f6"; ctx.fillRect(idX, y1, idW, secH);
-        }
-        
-        ctx.fillStyle = "#555"; ctx.font = "bold 11px sans-serif"; ctx.textAlign = "left";
-        let isShoe = sec.type !== "open hole" && (idx === sections.length - 1 || sections[idx+1].type === "open hole");
-        let isTD = idx === sections.length - 1;
-        let textX = centerX + (secW / 2) + 10; let textY = y2 + 4; if (textY > h - 2) textY = y2 - 4; 
-
-        if (isShoe && sec.bottom <= yMaxBase && sec.bottom >= yMinBase) {
-            ctx.fillText(`${fromBaseLength(sec.bottom).toFixed(0)}`, textX, textY);
-            ctx.beginPath(); ctx.moveTo(centerX + (secW/2) + 2, y2); ctx.lineTo(textX - 2, y2); ctx.stroke();
-        }
-        if (isTD && sec.type === "open hole" && sec.bottom <= yMaxBase && sec.bottom >= yMinBase) {
-            ctx.fillText(`${fromBaseLength(sec.bottom).toFixed(0)}`, textX, textY);
-            ctx.beginPath(); ctx.moveTo(centerX + (secW/2) + 2, y2); ctx.lineTo(textX - 2, y2); ctx.stroke();
-        }
-    });
-
-    if (drawString) {
-        let bha = getBHAForDrawing(); let currentBot = yMaxBase;
-        for(let i = bha.length - 1; i >= 0; i--) {
-            let comp = bha[i]; let top = currentBot - comp.lengthBase; let bot = currentBot; currentBot = top;
-            if (bot <= yMinBase || top >= yMaxBase) continue;
-            let drawTop = Math.max(top, yMinBase); let drawBot = Math.min(bot, yMaxBase);
-            let y1 = ((drawTop - yMinBase) / (yMaxBase - yMinBase)) * drawAreaH + yOffset;
-            let y2 = ((drawBot - yMinBase) / (yMaxBase - yMinBase)) * drawAreaH + yOffset;
-            let secH = y2 - y1; let secW = (comp.od / maxOD) * (w * 0.4); let x = centerX - secW / 2;
-            ctx.fillStyle = "#1e3a8a"; ctx.fillRect(x, y1, secW, secH); 
-            let idW = (comp.id / maxOD) * (w * 0.4); let idX = centerX - idW / 2;
-            ctx.fillStyle = "#bfdbfe"; ctx.fillRect(idX, y1, idW, secH); 
-        }
-    }
-}
-
-function drawBHACanvas() {
-    const canvas = document.getElementById("bhaCanvasDesign"); if(!canvas) return;
-    const ctx = canvas.getContext('2d'); const w = canvas.width; const h = canvas.height; ctx.clearRect(0, 0, w, h);
-    let bha = getBHAForDrawing(); if(bha.length === 0) return;
-    let totalLen = bha.reduce((sum, comp) => sum + comp.lengthBase, 0); if(totalLen <= 0) return;
-    let maxOD = Math.max(...bha.map(c => c.od));
-    let drawAreaH = h - 30; let yOffset = 15; let currentTop = 0; const centerX = w / 2;
-
-    bha.forEach(comp => {
-        let y1 = (currentTop / totalLen) * drawAreaH + yOffset;
-        let y2 = ((currentTop + comp.lengthBase) / totalLen) * drawAreaH + yOffset;
-        let secH = y2 - y1; let secW = (comp.od / maxOD) * (w * 0.5); let x = centerX - secW / 2;
-        ctx.fillStyle = "#1e3a8a"; ctx.fillRect(x, y1, secW, secH);
-        let idW = (comp.id / maxOD) * (w * 0.5); let idX = centerX - idW / 2;
-        ctx.fillStyle = "#bfdbfe"; ctx.fillRect(idX, y1, idW, secH);
-        currentTop += comp.lengthBase;
-    });
-}
-
-function updateSchematics() {
-    let maxDepthBase = toBaseLength(Number(document.getElementById("depth").value) || 10000);
-    drawWellCanvas("wellCanvasDesign", 0, maxDepthBase, false);
-    drawBHACanvas();
-
-    let scaleMode = document.getElementById("chartScale") ? document.getElementById("chartScale").value : "auto";
-    let minDepthBase = 0;
-    let sections = getWellSectionsForDrawing(); let openHoles = sections.filter(s => s.type === "open hole");
-    let shoeDepthBase = openHoles.length > 0 ? openHoles[0].top : maxDepthBase;
-    
-    if (scaleMode === "open_hole") { minDepthBase = shoeDepthBase; } 
-    else if (scaleMode === "adjustable") { let ohLength = maxDepthBase - shoeDepthBase; minDepthBase = Math.max(0, shoeDepthBase - ohLength); }
-    
-    drawWellCanvas("wellCanvasSim", minDepthBase, maxDepthBase, true); 
-    
-    if (lastSimResult && document.getElementById('showScooter').checked) {
-        let oldVal = document.getElementById('scooterDepthInput').value;
-        initScooter();
-        if (oldVal) {
-             document.getElementById('scooterDepthInput').value = oldVal;
-             updateScooterFromInput();
-        }
-    }
-}
 
 // ================= SIMULATION LOGIC =================
 function buildPayload(){
@@ -1143,22 +708,44 @@ function buildPayload(){
         bha.push({ name: c[0].textContent, od: converters.diam.toBase(parseFloat(c[2].children[0].value.replace(/,/g,''))||0, currentUnits.diam), id: converters.diam.toBase(parseFloat(c[3].children[0].value.replace(/,/g,''))||0, currentUnits.diam), length: converters.length.toBase(parseFloat(c[5].children[0].value.replace(/,/g,''))||0, currentUnits.length) });
     }
 
-    let ppfg = getPPFGProfile(); let validTemps = ppfg.temp.filter(t => !isNaN(t));
-    let defaultSurfTemp = parseFloat(document.getElementById("surface_temp").value) || 80;
-    let maxTempUser = validTemps.length > 0 ? validTemps[validTemps.length-1] : defaultSurfTemp; 
-
     let actualFlow = Number(document.getElementById("flowrate").value);
-    if (actualFlow <= 0) actualFlow = 0.0001; 
+    
+    let mainMode = document.getElementById("mainMode").value;
+    let mpdMode = document.getElementById("mpdMode").value;
+    let anchorType = document.getElementById("anchorType").value;
+    let zfMode = document.getElementById("zeroFlowMode").value;
 
     return {
         flowrate: converters.flow.toBase(actualFlow, currentUnits.flow),
         depth: toBaseLength(Number(document.getElementById("depth").value)),
-        sbp: 0, 
-        hole_diameter: 8.5, mpd_mode: "SBP", gradient_mode: "static",
-        fluid: { mw: converters.density.toBase(Number(document.getElementById("mw").value), currentUnits.density), fann_600: Number(document.getElementById("f600").value), fann_300: Number(document.getElementById("f300").value), fann_200: Number(document.getElementById("f200").value), fann_100: Number(document.getElementById("f100").value), fann_6: Number(document.getElementById("f6").value), fann_3: Number(document.getElementById("f3").value) },
-        temperature: { surface_temp: converters.temp.toBase(defaultSurfTemp, currentUnits.temp), bhct: converters.temp.toBase(maxTempUser, currentUnits.temp), geothermal_grad: 1.5, beta: 0.0003 },
-        trajectory: trajectory, well_sections: well_sections, bha: bha,
-        cuttings: { rop: converters.length.toBase(50, currentUnits.length), size: converters.diam.toBase(0.2, currentUnits.diam), density: converters.density.toBase(22.1, currentUnits.density), rpm: 120 }
+        sbp: converters.press.toBase(Number(document.getElementById("sbp").value), currentUnits.press),
+        main_mode: mainMode,
+        mpd_mode: mpdMode,
+        anchor_type: anchorType,
+        anchor_fixed_val: toBaseLength(Number(document.getElementById("anchorFixedVal").value)),
+        target_type: document.getElementById("targetType").value,
+        target_val: Number(document.getElementById("targetVal").value),
+        min_sbp: converters.press.toBase(Number(document.getElementById("min_sbp").value) || 0, currentUnits.press),
+        max_sbp: converters.press.toBase(Number(document.getElementById("max_sbp").value) || 2000, currentUnits.press),
+        zero_flow_mode: zfMode,
+        zero_flow_time: Number(document.getElementById("zeroFlowTime").value) || 0,
+        bit_tfa: Number(document.getElementById("bit_tfa").value) || 1.0,
+        fluid: { 
+            mw: converters.density.toBase(Number(document.getElementById("mw").value), currentUnits.density), 
+            fann_600: Number(document.getElementById("f600").value), fann_300: Number(document.getElementById("f300").value), fann_200: Number(document.getElementById("f200").value), fann_100: Number(document.getElementById("f100").value), fann_6: Number(document.getElementById("f6").value), fann_3: Number(document.getElementById("f3").value) 
+        },
+        temperature: { 
+            surface_temp: converters.temp.toBase(Number(document.getElementById("surface_temp").value), currentUnits.temp), 
+            geothermal_grad: parseFloat(document.getElementById("geo_grad")?.value) || 1.5,
+            beta: 0.0003, 
+            k_casing: parseFloat(document.getElementById("k_casing")?.value) || 25.0, 
+            cp_casing: parseFloat(document.getElementById("cp_casing")?.value) || 0.12, 
+            k_cement: parseFloat(document.getElementById("k_cement")?.value) || 0.5, 
+            cp_cement: parseFloat(document.getElementById("cp_cement")?.value) || 0.2, 
+            k_form: parseFloat(document.getElementById("k_form")?.value) || 1.3, 
+            cp_form: parseFloat(document.getElementById("cp_form")?.value) || 0.2 
+        },
+        trajectory: trajectory, well_sections: well_sections, bha: bha
     };
 }
 
@@ -1170,101 +757,25 @@ async function runSimulation(){
     resultBar.innerHTML = `<span style="color: #3b82f6;"><b>Running Simulation...</b></span>`;
     resultBar.style.backgroundColor = "#eff6ff"; resultBar.style.border = "1px solid #bfdbfe";
 
-    let mainMode = document.getElementById("mainMode").value;
-    let mpdMode = document.getElementById("mpdMode").value;
     let payload = buildPayload();
-    let displayMode = "conv";
 
     try {
-        let finalResult;
-        let targetAchieved = true;
-        
-        if (mainMode === "conventional") {
-            payload.sbp = 0;
-            displayMode = "conv";
-            let res = await fetch("/simulate", { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(payload) });
-            finalResult = await res.json();
-            if (finalResult.error) throw new Error(finalResult.error);
-        } 
-        else if (mpdMode === "sbp") {
-            payload.sbp = converters.press.toBase(Number(document.getElementById("sbp").value), currentUnits.press);
-            displayMode = "sbp";
-            let res = await fetch("/simulate", { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(payload) });
-            finalResult = await res.json();
-            if (finalResult.error) throw new Error(finalResult.error);
-        }
-        else if (mpdMode === "downhole") {
-            displayMode = "dh";
-            payload.sbp = 0;
-            let res1 = await fetch("/simulate", { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(payload) });
-            if (!res1.ok) throw new Error("Server error Pass 1");
-            let data1 = await res1.json();
-            if (data1.error) throw new Error(data1.error);
-
-            let anchorType = document.getElementById("anchorType").value;
-            let anchorDepthBase = 0;
-            if (anchorType === 'bh') {
-                anchorDepthBase = payload.depth;
-            } else if (anchorType === 'shoe') {
-                let sections = getWellSectionsForDrawing(); let openHoles = sections.filter(s => s.type === "open hole");
-                anchorDepthBase = openHoles.length > 0 ? openHoles[0].top : payload.depth;
-            } else {
-                anchorDepthBase = toBaseLength(Number(document.getElementById("anchorFixedVal").value));
-            }
-
-            let baseEcdAtAnchor = interpolateAtDepth(anchorDepthBase, data1.profile).ecd;
-            
-            let targetType = document.getElementById("targetType").value;
-            let targetValUser = Number(document.getElementById("targetVal").value);
-            let targetPressBase = 0;
-            if (targetType === "density") {
-                targetPressBase = converters.density.toBase(targetValUser, currentUnits.density) * anchorDepthBase * 0.051948;
-            } else {
-                targetPressBase = converters.press.toBase(targetValUser, currentUnits.press);
-            }
-
-            let baseDynamicPress = baseEcdAtAnchor * anchorDepthBase * 0.051948;
-            let requiredSbpPsi = targetPressBase - baseDynamicPress;
-            
-            let minSbpPsi = converters.press.toBase(Number(document.getElementById("min_sbp").value) || 0, currentUnits.press);
-            let maxSbpPsi = converters.press.toBase(Number(document.getElementById("max_sbp").value) || 2000, currentUnits.press);
-
-            if (requiredSbpPsi < minSbpPsi) {
-                requiredSbpPsi = minSbpPsi;
-                targetAchieved = false;
-                warningDiv.innerText = `⚠️ Target EMW cannot be achieved (Requires SBP < Min SBP). Simulating using Min SBP (${document.getElementById("min_sbp").value} ${currentUnits.press}).`;
-            } else if (requiredSbpPsi > maxSbpPsi) {
-                requiredSbpPsi = maxSbpPsi;
-                targetAchieved = false;
-                warningDiv.innerText = `⚠️ Target EMW cannot be achieved (Requires SBP > Max SBP). Simulating using Max SBP (${document.getElementById("max_sbp").value} ${currentUnits.press}).`;
-            }
-            
-            if (!targetAchieved) warningDiv.style.display = "block";
-            
-            payload.sbp = requiredSbpPsi;
-            let res2 = await fetch("/simulate", { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(payload) });
-            finalResult = await res2.json();
-            if (finalResult.error) throw new Error(finalResult.error);
-        }
+        let res = await fetch("/simulate", { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(payload) });
+        let finalResult = await res.json();
+        if (finalResult.error) throw new Error(finalResult.error);
 
         lastSimResult = finalResult;
         
         let displayEcd = fromBaseDens(finalResult.summary.ecd_bottom).toFixed(3);
         let displayLoss = fromBasePress(finalResult.summary.total_annular_loss_psi).toFixed(1);
-        let appliedSbp = fromBasePress(payload.sbp).toFixed(1);
+        let appliedSbp = fromBasePress(finalResult.summary.applied_sbp).toFixed(1);
+        let displaySpp = fromBasePress(finalResult.summary.spp).toFixed(1);
+        let zfSbp = fromBasePress(finalResult.summary.zf_req_sbp);
 
-        let backendSpp = finalResult.summary.spp || finalResult.summary.standpipe_pressure || finalResult.summary.pump_pressure_psi;
-        if (backendSpp === undefined) {
-            let mw = converters.density.toBase(Number(document.getElementById("mw").value), currentUnits.density);
-            let flow = converters.flow.toBase(Number(document.getElementById("flowrate").value), currentUnits.flow);
-            if (flow < 0.1) flow = 0; 
-            let tfa = Number(document.getElementById("bit_tfa").value) || 1.0;
-            let pBit = (flow > 0) ? (mw * flow * flow) / (10858 * tfa * tfa) : 0;
-            let pAnn = finalResult.summary.total_annular_loss_psi || 0;
-            let pPipe = pAnn * 2.5; 
-            backendSpp = pBit + pAnn + pPipe;
+        if (finalResult.summary.target_warning) {
+            warningDiv.innerText = finalResult.summary.target_warning;
+            warningDiv.style.display = "block";
         }
-        let displaySpp = fromBasePress(backendSpp).toFixed(1);
 
         resultBar.innerHTML = `✅ <b style="color: #166534;">Success</b> &nbsp;&nbsp;|&nbsp;&nbsp; 
             EMW Dyn Bottom: <b style="color: #ef4444;">${displayEcd}</b> ${currentUnits.density} &nbsp;&nbsp;|&nbsp;&nbsp; 
@@ -1272,22 +783,34 @@ async function runSimulation(){
         resultBar.style.backgroundColor = "#f0fdf4";
         resultBar.style.border = "1px solid #bbf7d0";
 
+        // Anchor Depth lookup
         let anchorDepthUser = fromBaseLength(payload.depth); 
-        if (displayMode === "dh") {
-            let anchorType = document.getElementById("anchorType").value;
-            if (anchorType === 'shoe') {
+        let displayMode = payload.main_mode === "conventional" ? "conv" : payload.mpd_mode;
+        if (displayMode === "downhole") {
+            if (payload.anchor_type === 'shoe') {
                 let sections = getWellSectionsForDrawing(); let openHoles = sections.filter(s => s.type === "open hole");
                 anchorDepthUser = fromBaseLength(openHoles.length > 0 ? openHoles[0].top : payload.depth);
-            } else if (anchorType === 'fixed') {
-                anchorDepthUser = Number(document.getElementById("anchorFixedVal").value);
+            } else if (payload.anchor_type === 'fixed') {
+                anchorDepthUser = fromBaseLength(payload.anchor_fixed_val);
             }
         }
+        
+        // Find exact stats at anchor via local interpolation
         let anchorDepthBase = toBaseLength(anchorDepthUser);
-        let anchorStats = interpolateAtDepth(anchorDepthBase, finalResult.profile);
-        let anchorPressUser = fromBasePress(anchorStats.ecd * anchorDepthBase * 0.051948);
-        let anchorEcdUser = fromBaseDens(anchorStats.ecd);
+        let anchorEcdBase = 0; let anchorPressBase = 0;
+        for (let i=0; i<finalResult.profile.depth.length-1; i++) {
+            if (anchorDepthBase >= finalResult.profile.depth[i] && anchorDepthBase <= finalResult.profile.depth[i+1]) {
+                let ratio = (anchorDepthBase - finalResult.profile.depth[i]) / (finalResult.profile.depth[i+1] - finalResult.profile.depth[i]);
+                anchorEcdBase = finalResult.profile.ecd[i] + ratio * (finalResult.profile.ecd[i+1] - finalResult.profile.ecd[i]);
+                break;
+            }
+        }
+        if (anchorDepthBase >= finalResult.profile.depth[finalResult.profile.depth.length-1]) anchorEcdBase = finalResult.profile.ecd[finalResult.profile.ecd.length-1];
+        
+        let anchorPressUser = fromBasePress(anchorEcdBase * anchorDepthBase * 0.051948);
+        let anchorEcdUser = fromBaseDens(anchorEcdBase);
 
-        updateDashboard(parseFloat(displaySpp), parseFloat(appliedSbp), anchorDepthUser, anchorPressUser, anchorEcdUser, displayMode, parseFloat(displayLoss));
+        updateDashboard(parseFloat(displaySpp), parseFloat(appliedSbp), anchorDepthUser, anchorPressUser, anchorEcdUser, displayMode, parseFloat(displayLoss), zfSbp);
         replotChart();
 
     } catch (error) { 
@@ -1311,74 +834,14 @@ function replotChart(){
     if(chartTempInstance) chartTempInstance.destroy();
 
     const ecdData = profile.depth.map((d,i) => ({x: fromBaseDens(profile.ecd[i]), y: fromBaseLength(d)}));
-
-    // Zero Flow Geothermal Math Setup
-    let mw_base = converters.density.toBase(Number(document.getElementById("mw").value), currentUnits.density);
-    let surf_t_base = converters.temp.toBase(Number(document.getElementById("surface_temp").value), currentUnits.temp);
-    let grad_user = parseFloat(document.getElementById("geo_grad").value) || 1.5;
+    const esdData = profile.depth.map((d,i) => ({x: fromBaseDens(profile.esd[i]), y: fromBaseLength(d)}));
+    const zfData = profile.depth.map((d,i) => ({x: fromBaseDens(profile.zf_emw[i]), y: fromBaseLength(d)}));
     
-    let geoLine = document.getElementById("zeroFlowMode") ? document.getElementById("zeroFlowMode").value : "immediate";
-    let zfTime = geoLine === "insitu" ? (parseFloat(document.getElementById("zeroFlowTime").value) || 12) : 0;
-    let thermalFactor = 1 - Math.exp(-zfTime / 10.0);
+    const ecdPressData = profile.depth.map((d,i) => ({x: fromBasePress(profile.ecd[i] * 0.051948 * d), y: fromBaseLength(d)}));
+    const zfPressData = profile.depth.map((d,i) => ({x: fromBasePress(profile.zf_emw[i] * 0.051948 * d), y: fromBaseLength(d)}));
     
-    let d_td = profile.depth[profile.depth.length-1];
-    let cbhp_dyn = profile.ecd[profile.depth.length-1] * 0.051948 * d_td;
-    let esd_circ_td = profile.esd[profile.depth.length-1];
-    let t_geo_td = surf_t_base + (d_td / 100) * grad_user;
-    let t_avg_geo_td = (surf_t_base + t_geo_td) / 2;
-    let esd_geo_td = mw_base * (1 - 0.0003 * (t_avg_geo_td - surf_t_base));
-    let rho_t_td = esd_circ_td + (esd_geo_td - esd_circ_td) * thermalFactor;
-    
-    let new_sbp_t = cbhp_dyn - (rho_t_td * 0.051948 * d_td);
-    if(new_sbp_t < 0) new_sbp_t = 0;
-
-    let esdData = [];
-    let zfData = [];
-    
-    // Arrays for Pressure Chart
-    let ecdPressData = [];
-    let esdPressData = [];
-    let zfPressData = [];
-
-    // Arrays for Temperature Chart
-    let staticTempData = [];
-    let dynTempData = [];
-
-    for (let i = 0; i < profile.depth.length; i++) {
-        let d = profile.depth[i];
-        
-        let t_geo = surf_t_base + (d / 100) * grad_user;
-        staticTempData.push({x: fromBasePress(t_geo), y: fromBaseLength(d)}); // using press converter function identically as it just scales if temp
-        
-        // Backend now returns dynamic temp array, fallback to geo if missing
-        let t_dyn = profile.temp ? profile.temp[i] : t_geo;
-        dynTempData.push({x: fromBasePress(t_dyn), y: fromBaseLength(d)});
-
-        if (d === 0) continue;
-
-        let esd_circ = profile.esd[i];
-        let t_avg_geo = (surf_t_base + t_geo) / 2;
-        let esd_geo = mw_base * (1 - 0.0003 * (t_avg_geo - surf_t_base));
-        
-        esdData.push({x: fromBaseDens(esd_geo), y: fromBaseLength(d)});
-        esdPressData.push({x: fromBasePress(esd_geo * 0.051948 * d), y: fromBaseLength(d)});
-        
-        let rho_t = esd_circ + (esd_geo - esd_circ) * thermalFactor;
-        let hydro_t = rho_t * 0.051948 * d;
-        let zf_emw = (new_sbp_t + hydro_t) / (0.051948 * d);
-        if (d > 100) {
-            zfData.push({x: fromBaseDens(zf_emw), y: fromBaseLength(d)});
-            zfPressData.push({x: fromBasePress(zf_emw * 0.051948 * d), y: fromBaseLength(d)});
-        }
-        
-        ecdPressData.push({x: fromBasePress(profile.ecd[i] * 0.051948 * d), y: fromBaseLength(d)});
-    }
-    
-    staticTempData[0].x = fromBasePress(surf_t_base);
-    dynTempData[0].x = fromBasePress(surf_t_base);
-
-    let dashZF = document.getElementById("dashZeroFlowSbp");
-    if(dashZF) dashZF.innerText = fromBasePress(new_sbp_t).toFixed(0);
+    const staticTempData = profile.depth.map((d,i) => ({x: converters.temp.fromBase(profile.t_geo[i], currentUnits.temp), y: fromBaseLength(d)}));
+    const dynTempData = profile.depth.map((d,i) => ({x: converters.temp.fromBase(profile.temp[i], currentUnits.temp), y: fromBaseLength(d)}));
 
     let maxDepthBase = toBaseLength(Number(document.getElementById("depth").value));
     let scaleMode = document.getElementById("chartScale").value;
@@ -1401,7 +864,6 @@ function replotChart(){
         let top = ppfgProfile.top[i]; let bot = ppfgProfile.bottom[i];
         if (bot <= shoeDepthUser) continue; 
         let drawTop = Math.max(top, shoeDepthUser); 
-        
         let depthBaseTop = toBaseLength(drawTop);
         let depthBaseBot = toBaseLength(bot);
 
@@ -1439,7 +901,6 @@ function replotChart(){
         }
     }
     
-    // Shared chart options
     const commonOptions = {
         animation: false, maintainAspectRatio: false,
         scales: {
@@ -1449,7 +910,6 @@ function replotChart(){
         layout: { padding: {left: 0, right: 10} }
     };
     
-    // Custom option for the first chart to show Y-Axis
     const densityOptions = JSON.parse(JSON.stringify(commonOptions));
     densityOptions.scales.y.display = true;
     densityOptions.scales.y.title = {display:true, text:`Measured Depth (${currentUnits.length})`, font: {weight: 'bold'}};
@@ -1547,46 +1007,36 @@ function updateScooterFromInput() {
 }
 
 function updateScooterValues(depthBase) {
+    if(!lastSimResult) return;
     let prof = lastSimResult.profile; 
     let ecd = "-", esd = "-", tempDyn = "-", pdyn = "-", zfEcd = "-";
     
-    let stats = interpolateAtDepth(depthBase, prof);
-    if(stats.ecd > 0) {
-        ecd = fromBaseDens(stats.ecd).toFixed(3);
-        esd = fromBaseDens(stats.esd).toFixed(3);
-        tempDyn = stats.temp.toFixed(1);
-        pdyn = fromBasePress(stats.ecd * 0.051948 * depthBase).toFixed(0);
+    let depthUser = fromBaseLength(depthBase);
+    
+    let idx = 0; let ratio = 0;
+    for (let i=0; i<prof.depth.length-1; i++) {
+        if (depthBase >= prof.depth[i] && depthBase <= prof.depth[i+1]) {
+            idx = i;
+            ratio = (depthBase - prof.depth[i]) / (prof.depth[i+1] - prof.depth[i]);
+            break;
+        }
     }
+    if (depthBase >= prof.depth[prof.depth.length-1]) { idx = prof.depth.length-1; ratio = 0; }
     
-    let mw_base = converters.density.toBase(Number(document.getElementById("mw").value), currentUnits.density);
-    let surf_t_base = converters.temp.toBase(Number(document.getElementById("surface_temp").value), currentUnits.temp);
-    let grad_user = parseFloat(document.getElementById("geo_grad").value) || 1.5;
-    let geoLine = document.getElementById("zeroFlowMode") ? document.getElementById("zeroFlowMode").value : "immediate";
-    let zfTime = geoLine === "insitu" ? (parseFloat(document.getElementById("zeroFlowTime").value) || 12) : 0;
-    let thermalFactor = 1 - Math.exp(-zfTime / 10.0);
-    
-    let d_td = prof.depth[prof.depth.length-1];
-    let cbhp_dyn = prof.ecd[prof.depth.length-1] * 0.051948 * d_td;
-    let esd_circ_td = prof.esd[prof.depth.length-1];
-    let t_geo_td = surf_t_base + (d_td / 100) * grad_user;
-    let t_avg_geo_td = (surf_t_base + t_geo_td) / 2;
-    let esd_geo_td = mw_base * (1 - 0.0003 * (t_avg_geo_td - surf_t_base));
-    let rho_t_td = esd_circ_td + (esd_geo_td - esd_circ_td) * thermalFactor;
-    
-    let new_sbp_t = cbhp_dyn - (rho_t_td * 0.051948 * d_td);
-    if(new_sbp_t < 0) new_sbp_t = 0;
-    
-    if (depthBase > 100 && stats.ecd > 0) {
-        let t_geo = surf_t_base + (depthBase / 100) * grad_user;
-        let t_avg_geo = (surf_t_base + t_geo) / 2;
-        let esd_geo = mw_base * (1 - 0.0003 * (t_avg_geo - surf_t_base));
-        let rho_t = stats.esd + (esd_geo - stats.esd) * thermalFactor;
-        let hydro_t = rho_t * 0.051948 * depthBase;
-        let zf_emw = (new_sbp_t + hydro_t) / (0.051948 * depthBase);
-        zfEcd = fromBaseDens(zf_emw).toFixed(3);
+    if(prof.ecd.length > 0) {
+        let ecdBase = prof.ecd[idx] + ratio * ((prof.ecd[idx+1]||prof.ecd[idx]) - prof.ecd[idx]);
+        let esdBase = prof.esd[idx] + ratio * ((prof.esd[idx+1]||prof.esd[idx]) - prof.esd[idx]);
+        let zfBase = prof.zf_emw[idx] + ratio * ((prof.zf_emw[idx+1]||prof.zf_emw[idx]) - prof.zf_emw[idx]);
+        let tempBase = prof.temp[idx] + ratio * ((prof.temp[idx+1]||prof.temp[idx]) - prof.temp[idx]);
+        
+        ecd = fromBaseDens(ecdBase).toFixed(3);
+        esd = fromBaseDens(esdBase).toFixed(3);
+        zfEcd = fromBaseDens(zfBase).toFixed(3);
+        tempDyn = converters.temp.fromBase(tempBase, currentUnits.temp).toFixed(1);
+        pdyn = fromBasePress(ecdBase * 0.051948 * depthBase).toFixed(0);
     }
 
-    let ppfg = getPPFGProfile(); let depthUser = fromBaseLength(depthBase);
+    let ppfg = getPPFGProfile(); 
     let pp = "-", fp = "-", obg = "-";
     for (let i=0; i<ppfg.bottom.length; i++) {
         if (depthUser >= ppfg.top[i] && depthUser <= ppfg.bottom[i]) {
@@ -1617,8 +1067,102 @@ window.onload = function() {
     highlightActiveDepth(); 
     calcBhaCumLength();
     updateSchematics(); 
+    updateMudProperties();
     debouncedUpdateSubsurfaceChart(); 
 };
+
+// ================= SCHEMATICS & VISUALIZATION =================
+function getWellSectionsForDrawing() {
+    let well_sections = []; let rows = document.getElementById("wellTable").rows;
+    for (let i = 1; i < rows.length; i++) {
+        let c = rows[i].cells; let type = c[0].children[0].value;
+        well_sections.push({ type: type, top: toBaseLength(Number(c[2].textContent)), bottom: toBaseLength(Number(c[3].textContent)), od: toBaseDiam(Number(c[4].querySelector("input").value || 20)), id: toBaseDiam(Number(c[5].querySelector("input").value || 8.5)) });
+    }
+    return well_sections;
+}
+function getBHAForDrawing() {
+    let bha = []; let rows = document.getElementById("bhaTable").rows;
+    for (let i = 1; i < rows.length; i++) {
+        let c = rows[i].cells; 
+        let odInp = c[2].querySelector("input"); let idInp = c[3].querySelector("input"); let lenInp = c[5].querySelector("input");
+        if(!odInp || !lenInp) continue;
+        bha.push({ name: c[0].textContent, od: toBaseDiam(parseFloat(odInp.value.replace(/,/g,'')) || 0), id: toBaseDiam(parseFloat(idInp.value.replace(/,/g,'')) || 0), lengthBase: toBaseLength(parseFloat(lenInp.value.replace(/,/g,'')) || 0) });
+    }
+    return bha;
+}
+
+function drawWellCanvas(canvasId, yMinBase, yMaxBase, drawString=false) {
+    const canvas = document.getElementById(canvasId); if(!canvas) return;
+    const ctx = canvas.getContext('2d'); const w = canvas.width; const h = canvas.height; ctx.clearRect(0, 0, w, h);
+    if(yMaxBase <= 0) return;
+    const sections = getWellSectionsForDrawing(); if(sections.length === 0) return;
+    let maxOD = Math.max(...sections.map(s => s.od));
+    
+    let drawAreaH = h - 30; let yOffset = 15; const centerX = w / 2;
+
+    sections.forEach((sec, idx) => {
+        if (sec.bottom <= yMinBase || sec.top >= yMaxBase) return;
+        let drawTop = Math.max(sec.top, yMinBase); let drawBottom = Math.min(sec.bottom, yMaxBase);
+        let y1 = ((drawTop - yMinBase) / (yMaxBase - yMinBase)) * drawAreaH + yOffset;
+        let y2 = ((drawBottom - yMinBase) / (yMaxBase - yMinBase)) * drawAreaH + yOffset;
+        let secH = y2 - y1; let secW = (sec.id / maxOD) * (w * 0.4); let x = centerX - secW / 2;
+
+        if (sec.type === "open hole") {
+            ctx.fillStyle = "#d4c5b9"; ctx.fillRect(x, y1, secW, secH); ctx.strokeStyle = "#8c7b6c"; ctx.strokeRect(x, y1, secW, secH);
+        } else {
+            ctx.fillStyle = "#555"; ctx.fillRect(x, y1, secW, secH); let idW = secW * 0.75; let idX = centerX - idW / 2;
+            ctx.fillStyle = "#f4f7f6"; ctx.fillRect(idX, y1, idW, secH);
+        }
+        
+        ctx.fillStyle = "#555"; ctx.font = "bold 11px sans-serif"; ctx.textAlign = "left";
+        let isShoe = sec.type !== "open hole" && (idx === sections.length - 1 || sections[idx+1].type === "open hole");
+        let isTD = idx === sections.length - 1;
+        let textX = centerX + (secW / 2) + 10; let textY = y2 + 4; if (textY > h - 2) textY = y2 - 4; 
+
+        if (isShoe && sec.bottom <= yMaxBase && sec.bottom >= yMinBase) {
+            ctx.fillText(`${fromBaseLength(sec.bottom).toFixed(0)}`, textX, textY);
+            ctx.beginPath(); ctx.moveTo(centerX + (secW/2) + 2, y2); ctx.lineTo(textX - 2, y2); ctx.stroke();
+        }
+        if (isTD && sec.type === "open hole" && sec.bottom <= yMaxBase && sec.bottom >= yMinBase) {
+            ctx.fillText(`${fromBaseLength(sec.bottom).toFixed(0)}`, textX, textY);
+            ctx.beginPath(); ctx.moveTo(centerX + (secW/2) + 2, y2); ctx.lineTo(textX - 2, y2); ctx.stroke();
+        }
+    });
+
+    if (drawString) {
+        let bha = getBHAForDrawing(); let currentBot = yMaxBase;
+        for(let i = bha.length - 1; i >= 0; i--) {
+            let comp = bha[i]; let top = currentBot - comp.lengthBase; let bot = currentBot; currentBot = top;
+            if (bot <= yMinBase || top >= yMaxBase) continue;
+            let drawTop = Math.max(top, yMinBase); let drawBot = Math.min(bot, yMaxBase);
+            let y1 = ((drawTop - yMinBase) / (yMaxBase - yMinBase)) * drawAreaH + yOffset;
+            let y2 = ((drawBot - yMinBase) / (yMaxBase - yMinBase)) * drawAreaH + yOffset;
+            let secH = y2 - y1; let secW = (comp.od / maxOD) * (w * 0.4); let x = centerX - secW / 2;
+            ctx.fillStyle = "#1e3a8a"; ctx.fillRect(x, y1, secW, secH); 
+            let idW = (comp.id / maxOD) * (w * 0.4); let idX = centerX - idW / 2;
+            ctx.fillStyle = "#bfdbfe"; ctx.fillRect(idX, y1, idW, secH); 
+        }
+    }
+}
+
+function drawBHACanvas() {
+    const canvas = document.getElementById("bhaCanvasDesign"); if(!canvas) return;
+    const ctx = canvas.getContext('2d'); const w = canvas.width; const h = canvas.height; ctx.clearRect(0, 0, w, h);
+    let bha = getBHAForDrawing(); if(bha.length === 0) return;
+    let totalLen = bha.reduce((sum, comp) => sum + comp.lengthBase, 0); if(totalLen <= 0) return;
+    let maxOD = Math.max(...bha.map(c => c.od));
+    let drawAreaH = h - 30; let yOffset = 15; let currentTop = 0; const centerX = w / 2;
+
+    bha.forEach(comp => {
+        let y1 = (currentTop / totalLen) * drawAreaH + yOffset;
+        let y2 = ((currentTop + comp.lengthBase) / totalLen) * drawAreaH + yOffset;
+        let secH = y2 - y1; let secW = (comp.od / maxOD) * (w * 0.5); let x = centerX - secW / 2;
+        ctx.fillStyle = "#1e3a8a"; ctx.fillRect(x, y1, secW, secH);
+        let idW = (comp.id / maxOD) * (w * 0.5); let idX = centerX - idW / 2;
+        ctx.fillStyle = "#bfdbfe"; ctx.fillRect(idX, y1, idW, secH);
+        currentTop += comp.lengthBase;
+    });
+}
 </script>
 </body>
 </html>
