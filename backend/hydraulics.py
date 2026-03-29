@@ -17,12 +17,16 @@ def hydraulic_diameter(Do_in, Di_in):
 # -----------------------------
 # BHA & WELL GEOMETRY
 # -----------------------------
-def build_bha_profile(bha, depth):
+def build_bha_profile(bha_list, depth):
     profile = []
     current_bottom = depth
-    for comp in reversed(bha):
-        top = max(current_bottom - comp.length, 0)
-        profile.append({"top": top, "bottom": current_bottom, "od": comp.od})
+    for comp in reversed(bha_list):
+        # Using dict access in case it's a standard parsed JSON dict
+        comp_len = float(comp.get("length", 0)) if isinstance(comp, dict) else comp.length
+        comp_od = float(comp.get("od", 5.0)) if isinstance(comp, dict) else comp.od
+        
+        top = max(current_bottom - comp_len, 0)
+        profile.append({"top": top, "bottom": current_bottom, "od": comp_od})
         current_bottom = top
     return profile
 
@@ -34,10 +38,19 @@ def get_pipe_od(profile, md):
 
 def get_annulus_id(sections, md):
     for sec in sections:
-        if sec.top_md <= md <= sec.end_md:
-            t = sec.type.lower()
-            return sec.hole_d if t == "open hole" else sec.casing_id
-    return sections[-1].hole_d
+        sec_top = float(sec.get("top_md", 0)) if isinstance(sec, dict) else sec.top_md
+        sec_bot = float(sec.get("end_md", 0)) if isinstance(sec, dict) else sec.end_md
+        sec_type = sec.get("type", "").lower() if isinstance(sec, dict) else sec.type.lower()
+        
+        if sec_top <= md <= sec_bot:
+            if sec_type == "open hole":
+                return float(sec.get("hole_d", 8.5) if isinstance(sec, dict) else sec.hole_d)
+            else:
+                return float(sec.get("casing_id", 8.5) if isinstance(sec, dict) else sec.casing_id)
+                
+    # Fallback to last section
+    last_sec = sections[-1]
+    return float(last_sec.get("hole_d", 8.5) if isinstance(last_sec, dict) else last_sec.hole_d)
 
 # -----------------------------
 # TVD INTERPOLATION
@@ -60,45 +73,84 @@ def get_tvd(trajectory_profile, md):
     return trajectory_profile[-1]["tvd"] if md >= trajectory_profile[-1]["md"] else md
 
 # -----------------------------
-# REFINED PRESSURE LOSS MODEL
+# TRUE HERSCHEL-BULKLEY PRESSURE LOSS MODEL
 # -----------------------------
-def calculate_annular_pressure_loss(mw, flowrate, Do, Di, mu_cp, length):
-    dh = Do - Di
-    v = (24.48 * flowrate) / (Do**2 - Di**2)
-    reynolds = (15.47 * mw * v * dh) / mu_cp
+def calculate_annular_pressure_loss(mw, flowrate, Do, Di, tau_y, K, n, length):
+    """
+    Calculates frictional pressure drop using the Highly Accurate 
+    Generalized Reynolds Number (Re_G) for Yield-Power Law fluids.
+    """
+    # ZERO FLOW BYPASS: Prevents mathematical crashes for static EMW calculations
+    if flowrate <= 0.1:
+        return 0.0
+        
+    dh = max(Do - Di, 0.1)
     
-    if reynolds < 2100:
-        f = 64 / reynolds 
+    # Annular velocity in ft/sec
+    v_ft_min = (24.48 * flowrate) / (Do**2 - Di**2)
+    v_ft_sec = v_ft_min / 60.0
+    
+    if v_ft_sec <= 0:
+        return 0.0
+
+    # Generalized Reynolds Number (Re_G) for Non-Newtonian Fluids
+    # 89100 is the standard API constant for oilfield units
+    re_g = (89100 * mw * (v_ft_sec ** (2 - n))) / (K * ((144 / dh) ** n))
+    re_g = max(re_g, 1.0) # Prevent zero division
+    
+    # Calculate Critical Reynolds Number (Point of turbulent transition)
+    re_critical = 3470 - (1370 * n)
+    
+    # Friction Factor Selection
+    if re_g < re_critical:
+        # LAMINAR FLOW REGIME
+        f = 24.0 / re_g 
     else:
-        f = 0.3164 / (reynolds**0.25) 
+        # TURBULENT FLOW REGIME (Dodge-Metzner empirical correlation)
+        a = (math.log10(n) + 3.93) / 50.0
+        b = (1.75 - math.log10(n)) / 7.0
+        f = a / (re_g ** b)
     
-    dp_field = (f * length * mw * v**2) / (92000 * dh)
-    return max(dp_field, 0)
+    # Final Pressure Drop for this segment
+    dp_psi = (f * length * mw * (v_ft_sec**2)) / (25.81 * dh)
+    
+    return max(dp_psi, 0.0)
 
 # -----------------------------
 # MAIN SIMULATION
 # -----------------------------
 def run_simulation(data):
     try:
-        Q = float(data.flowrate or 400)
-        total_depth = max(float(data.depth or 10000), 100)
-        mw = float(data.fluid.mw or 10)
-        sbp = float(data.sbp or 0.0) 
+        # Standardized dictionary access to prevent 500 errors from missing JSON fields
+        Q = float(data.get('flowrate', 400))
+        total_depth = max(float(data.get('depth', 10000)), 100)
+        sbp = float(data.get('sbp', 0.0))
+        
+        fluid = data.get('fluid', {})
+        mw = float(fluid.get('mw', 10))
+        f600 = float(fluid.get('fann_600', 60))
+        f300 = float(fluid.get('fann_300', 40))
+        f200 = float(fluid.get('fann_200', 30))
+        f100 = float(fluid.get('fann_100', 20))
+        f6 = float(fluid.get('fann_6', 10))
+        f3 = float(fluid.get('fann_3', 5))
+        
         precision_const = 0.051948
 
         # 1. Use external rheology.py for HB Fit
-        fann_readings = [
-            data.fluid.fann_600, data.fluid.fann_300, data.fluid.fann_200, 
-            data.fluid.fann_100, data.fluid.fann_6, data.fluid.fann_3
-        ]
+        fann_readings = [f600, f300, f200, f100, f6, f3]
         tau_y, K, n = hb_fit(fann_readings)
         
+        # Protect fluid parameters from extreme math bounds
+        n = max(min(n, 1.0), 0.1)
+        K = max(K, 0.0001)
+        
         # 2. Build trajectory using trajectory.py
-        traj_profile = build_trajectory(data.trajectory)
-        bha_profile = build_bha_profile(data.bha, total_depth)
+        traj_profile = build_trajectory(data.get('trajectory', []))
+        bha_profile = build_bha_profile(data.get('bha', []), total_depth)
 
         depths, ecd_profile, esd_profile = [], [], []
-        cumulative_annular_loss = 0
+        cumulative_annular_loss = 0.0
         
         step = max(int(total_depth / 100), 50)
         md_points = list(range(step, int(total_depth) + step, step))
@@ -106,15 +158,11 @@ def run_simulation(data):
         for md in md_points:
             if md > total_depth: md = total_depth
 
-            Do = get_annulus_id(data.well_sections, md)
+            Do = get_annulus_id(data.get('well_sections', []), md)
             Di = get_pipe_od(bha_profile, md)
-            dh = hydraulic_diameter(Do, Di)
             
-            v_ftmin = (24.48 * Q) / (Do**2 - Di**2)
-            gamma = (1.6 * v_ftmin) / dh 
-            mu_cp = ((tau_y + K * (gamma**n)) / gamma) * 478.8 if gamma > 0.1 else 100
-            
-            dp = calculate_annular_pressure_loss(mw, Q, Do, Di, mu_cp, step)
+            # Calculate friction using the UPGRADED Herschel-Bulkley model
+            dp = calculate_annular_pressure_loss(mw, Q, Do, Di, tau_y, K, n, step)
             cumulative_annular_loss += dp
 
             # 3. Interpolate EXACT TVD for this step
@@ -127,10 +175,13 @@ def run_simulation(data):
             esd_base = mw + (sbp / (precision_const * tvd))
 
             # 5. Use temperature.py for transient temp correction
-            Tsurf = data.temperature.surface_temp
-            Tbh = data.temperature.bhct
+            temp_data = data.get('temperature', {})
+            Tsurf = float(temp_data.get('surface_temp', 80))
+            Tbh = float(temp_data.get('bhct', 150))
+            beta = float(temp_data.get('beta', 0.0003))
+            
             T_current = temp_transient(md, Tsurf, Tbh, total_depth)
-            temp_factor = 1 - data.temperature.beta * (T_current - Tsurf)
+            temp_factor = 1 - beta * (T_current - Tsurf)
 
             depths.append(md)
             ecd_profile.append(round(ecd_base * temp_factor, 3))
@@ -138,8 +189,8 @@ def run_simulation(data):
 
         return {
             "summary": {
-                "ecd_bottom": ecd_profile[-1],
-                "esd_bottom": esd_profile[-1],
+                "ecd_bottom": ecd_profile[-1] if ecd_profile else mw,
+                "esd_bottom": esd_profile[-1] if esd_profile else mw,
                 "total_annular_loss_psi": round(cumulative_annular_loss, 2)
             },
             "profile": {
