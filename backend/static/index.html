@@ -34,12 +34,8 @@
         .case-select { padding: 5px; font-weight: bold; border-radius: 4px; border: 1px solid #ccc; }
         .upload-controls { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; align-items: center;}
         
-        /* High-Performance CSS Column Highlighting */
-        table.active-col-1 td:nth-child(2), table.active-col-1 th:nth-child(2) { background-color: #e8f5e9; }
-        table.active-col-2 td:nth-child(3), table.active-col-2 th:nth-child(3) { background-color: #e8f5e9; }
-        table.active-col-3 td:nth-child(4), table.active-col-3 th:nth-child(4) { background-color: #e8f5e9; }
+        .highlight-col { background-color: #e8f5e9 !important; }
         
-        /* Scooter Box styling */
         #scooterLine { position: absolute; height: 2px; background: #eab308; cursor: ns-resize; display: none; z-index: 10; box-shadow: 0px 0px 5px rgba(0,0,0,0.3); }
         #scooterLine::before { content: "↔"; position: absolute; left: -15px; top: -8px; font-size: 14px; color: #eab308; font-weight: bold; transform: rotate(90deg); }
         #scooterBox { position: absolute; left: 10px; top: -35px; background: rgba(255,255,255,0.95); border: 1px solid #999; padding: 5px 10px; border-radius: 4px; box-shadow: 0px 2px 5px rgba(0,0,0,0.2); display: flex; align-items: center; gap: 10px; cursor: default; pointer-events: auto; }
@@ -162,7 +158,7 @@
 
 <div id="bha" class="tab">
     <div class="upload-box">
-        <div><strong>Import BHA Profile</strong><br><span style="font-size: 0.85em; color: #555;">Upload an Excel (.xlsx, .csv) or PDF (.pdf) file. Must contain Name, Type, OD, ID, Max OD, and Length.</span></div>
+        <div><strong>Import BHA Profile</strong><br><span style="font-size: 0.85em; color: #555;">Upload an Excel (.xlsx, .csv) or PDF (.pdf) file. Auto-detects top-to-bottom vs bottom-to-top formatting.</span></div>
         <label class="upload-btn">Choose Excel/PDF File<input type="file" id="bhaUpload" accept=".xlsx, .xls, .csv, .pdf" onchange="handleBhaUpload(event)"></label>
     </div>
     
@@ -176,12 +172,12 @@
                 <tbody id="bhaBody">
                     <tr>
                         <td contenteditable>Drill Pipe</td>
-                        <td><select><option selected>Pipe</option><option>HWDP</option><option>Collar</option><option>Bit</option><option>Other</option></select></td>
+                        <td><select><option selected>Pipe</option><option>HWDP</option><option>Collar</option><option>MWD</option><option>Underreamer</option><option>Circ Sub</option><option>Stabilizer</option><option>Crossover</option><option>Bit</option><option>Other</option></select></td>
                         <td><input class="val-diam" value="5"></td><td><input class="val-diam" value="4"></td><td><input class="val-diam" value="6.5"></td><td><input class="val-length" value="8000" onkeyup="triggerWellDesignChange()"></td>
                     </tr>
                     <tr>
                         <td contenteditable>Drill Collar</td>
-                        <td><select><option>Pipe</option><option>HWDP</option><option selected>Collar</option><option>Bit</option><option>Other</option></select></td>
+                        <td><select><option>Pipe</option><option>HWDP</option><option selected>Collar</option><option>MWD</option><option>Underreamer</option><option>Circ Sub</option><option>Stabilizer</option><option>Crossover</option><option>Bit</option><option>Other</option></select></td>
                         <td><input class="val-diam" value="6.5"></td><td><input class="val-diam" value="2.5"></td><td><input class="val-diam" value="6.5"></td><td><input class="val-length" value="2000" onkeyup="triggerWellDesignChange()"></td>
                     </tr>
                 </tbody>
@@ -247,7 +243,7 @@ let currentUnits = { length: "ft", diam: "in", density: "ppg", press: "psi", flo
 // ================= UTILS & PERFORMANCE DOM EVENT DELEGATION =================
 function parseSafe(val) {
     if (val === undefined || val === null || String(val).trim() === "") return null;
-    let parsed = parseFloat(String(val).replace(/,/g, '')); // Handles 1,000.5 safely
+    let parsed = parseFloat(String(val).replace(/,/g, ''));
     return isNaN(parsed) ? null : parsed;
 }
 function getCalcDepthCol() {
@@ -261,7 +257,6 @@ function highlightActiveDepth() {
     table.classList.add("active-col-" + colIndex);
 }
 
-// Zero-Lag Event Delegation for the massive PPFG Table
 function handleTableKeyup(e) {
     let td = e.target;
     if (td.tagName !== 'TD') return;
@@ -278,13 +273,10 @@ function handleTableKeyup(e) {
 }
 
 function switchCalcDepth() {
-    let col = getCalcDepthCol();
-    let tbody = document.getElementById("ppfgBody");
-    let prevDepth = 0;
+    let col = getCalcDepthCol(); let tbody = document.getElementById("ppfgBody"); let prevDepth = 0;
     highlightActiveDepth();
     for (let i = 0; i < tbody.rows.length; i++) {
-        let row = tbody.rows[i];
-        row.cells[0].textContent = prevDepth.toFixed(0);
+        let row = tbody.rows[i]; row.cells[0].textContent = prevDepth.toFixed(0);
         let botDepth = parseFloat(row.cells[col].textContent);
         if (!isNaN(botDepth)) prevDepth = botDepth;
         calcPPFG(row.cells[4], 'pp_dens', true); calcPPFG(row.cells[6], 'fp_dens', true); calcPPFG(row.cells[8], 'obg_dens', true);
@@ -306,10 +298,7 @@ function showTab(tab, btn) {
 function triggerWellDesignChange() {
     enforceOpenHoleTop();
     updateSchematics();
-    if (lastSimResult) {
-        clearTimeout(wellChangeTimer);
-        wellChangeTimer = setTimeout(replotChart, 500); 
-    }
+    if (lastSimResult) { clearTimeout(wellChangeTimer); wellChangeTimer = setTimeout(replotChart, 500); }
 }
 
 function enforceOpenHoleTop() {
@@ -335,23 +324,19 @@ function toggleOD(select){
     triggerWellDesignChange();
 }
 function addWellRow(){
-    const table = document.getElementById("wellTable");
-    const row = table.insertRow();
+    const table = document.getElementById("wellTable"); const row = table.insertRow();
     row.innerHTML = `<td><select onchange="toggleOD(this)"><option value="casing">Casing</option><option value="liner">Liner</option><option value="open hole">Open Hole</option></select></td><td contenteditable>New Section</td><td contenteditable class="val-length"></td><td contenteditable class="val-length"></td><td><input class="val-diam"></td><td><input class="val-diam"></td>`;
 }
 function addTrajectoryRow(){
-    const table = document.getElementById("trajectoryTable");
-    const row = table.insertRow();
+    const table = document.getElementById("trajectoryTable"); const row = table.insertRow();
     row.innerHTML = `<td contenteditable class="val-length"></td><td contenteditable></td><td contenteditable></td>`;
 }
 function addBhaRow(){
-    const tbody = document.getElementById("bhaBody");
-    const row = tbody.insertRow();
-    row.innerHTML = `<td contenteditable>New Item</td><td><select><option>Pipe</option><option>HWDP</option><option>Collar</option><option>Bit</option><option>Other</option></select></td><td><input class="val-diam"></td><td><input class="val-diam"></td><td><input class="val-diam"></td><td><input class="val-length" onkeyup="triggerWellDesignChange()"></td>`;
+    const tbody = document.getElementById("bhaBody"); const row = tbody.insertRow();
+    row.innerHTML = `<td contenteditable>New Item</td><td><select><option>Pipe</option><option>HWDP</option><option>Collar</option><option>MWD</option><option>Underreamer</option><option>Circ Sub</option><option>Stabilizer</option><option>Crossover</option><option>Bit</option><option>Other</option></select></td><td><input class="val-diam"></td><td><input class="val-diam"></td><td><input class="val-diam"></td><td><input class="val-length" onkeyup="triggerWellDesignChange()"></td>`;
 }
 function addSubsurfaceRow(top="", md="", tvddf="", tvdss="", pp="", pp_psi="", fp="", fp_psi="", obg="", obg_psi="", temp=""){
-    const tbody = document.getElementById("ppfgBody");
-    const row = tbody.insertRow();
+    const tbody = document.getElementById("ppfgBody"); const row = tbody.insertRow();
     row.innerHTML = `<td contenteditable="false">${top}</td><td contenteditable>${md}</td><td contenteditable>${tvddf}</td><td contenteditable>${tvdss}</td><td contenteditable>${pp}</td><td contenteditable>${pp_psi}</td><td contenteditable>${fp}</td><td contenteditable>${fp_psi}</td><td contenteditable>${obg}</td><td contenteditable>${obg_psi}</td><td contenteditable>${temp}</td>`;
     let prevDepth = 0; let col = getCalcDepthCol();
     for(let i=0; i<tbody.rows.length; i++) { tbody.rows[i].cells[0].textContent = prevDepth.toFixed(0); let botDepth = parseFloat(tbody.rows[i].cells[col].textContent); if(!isNaN(botDepth)) prevDepth = botDepth; }
@@ -383,11 +368,11 @@ async function extractTextFromPDF(pdfData) {
 function askUnitIfNeeded(detectedDiam, detectedLen) {
     let finalDiam = detectedDiam; let finalLen = detectedLen;
     if(!finalDiam) {
-        let resp = prompt("Could not detect Diameter unit in file. Enter 'in' or 'mm':", currentUnits.diam);
+        let resp = prompt("Could not detect Diameter unit in BHA file. Enter 'in' or 'mm':", currentUnits.diam);
         finalDiam = resp ? resp.toLowerCase().trim() : currentUnits.diam;
     }
     if(!finalLen) {
-        let resp = prompt("Could not detect Length unit in file. Enter 'ft' or 'm':", currentUnits.length);
+        let resp = prompt("Could not detect Length unit in BHA file. Enter 'ft' or 'm':", currentUnits.length);
         finalLen = resp ? resp.toLowerCase().trim() : currentUnits.length;
     }
     return {diam: finalDiam, len: finalLen};
@@ -417,7 +402,7 @@ async function handleBhaUpload(event) {
         let map = { name: -1, type: -1, od: -1, id: -1, maxOd: -1, len: -1 };
         let headerRowIndex = 0; let detectedDiam = null; let detectedLen = null;
 
-        for (let r=0; r < Math.min(20, rawData.length); r++) {
+        for (let r=0; r < Math.min(30, rawData.length); r++) {
             if(!rawData[r]) continue;
             let rowStrs = rawData[r].map(cell => String(cell).toLowerCase().trim());
             let matches = 0;
@@ -443,30 +428,52 @@ async function handleBhaUpload(event) {
         }
 
         let units = askUnitIfNeeded(detectedDiam, detectedLen);
-        let htmlString = "";
+        let parsedRows = [];
+        let lastValidName = "Component";
 
         for (let i = headerRowIndex + 1; i < rawData.length; i++) {
             let row = rawData[i];
             let rawLen = parseFloat(String(row[map.len]).replace(/,/g,''));
             if (!row || !row[map.len] || isNaN(rawLen)) continue;
 
-            let nm = map.name !== -1 && row[map.name] ? row[map.name] : "Component";
+            let nm = map.name !== -1 && row[map.name] ? String(row[map.name]).trim() : "";
+            if (nm === "" && lastValidName !== "") nm = lastValidName;
+            else if (nm !== "") lastValidName = nm;
+
             let tyStr = map.type !== -1 && row[map.type] ? String(row[map.type]).toLowerCase() : "";
+            let searchStr = (tyStr + " " + nm).toLowerCase();
             
             let tyOpt = "Other";
-            if (/pipe|dp/i.test(tyStr) || /pipe|dp/i.test(nm.toLowerCase())) tyOpt = "Pipe";
-            if (/hwdp|heavy/i.test(tyStr) || /hwdp|heavy/i.test(nm.toLowerCase())) tyOpt = "HWDP";
-            if (/collar|dc/i.test(tyStr) || /collar|dc/i.test(nm.toLowerCase())) tyOpt = "Collar";
-            if (/bit|pdc/i.test(tyStr) || /bit|pdc/i.test(nm.toLowerCase())) tyOpt = "Bit";
+            if (/pipe|dp/i.test(searchStr)) tyOpt = "Pipe";
+            if (/hwdp|heavy/i.test(searchStr)) tyOpt = "HWDP";
+            if (/collar|dc/i.test(searchStr)) tyOpt = "Collar";
+            if (/mwd|lwd|tele|dir|motor|rss/i.test(searchStr)) tyOpt = "MWD";
+            if (/ream|ur|underream/i.test(searchStr)) tyOpt = "Underreamer";
+            if (/circ|bypass|pbl/i.test(searchStr)) tyOpt = "Circ Sub";
+            if (/stab/i.test(searchStr)) tyOpt = "Stabilizer";
+            if (/xo|cross|x-over|xover|x\/o/i.test(searchStr)) tyOpt = "Crossover";
+            if (/bit|pdc|tricone/i.test(searchStr)) tyOpt = "Bit"; // Evaluated last to ensure Bit overrides everything
 
-            let rawOd = map.od !== -1 ? parseFloat(String(row[map.od]).replace(/,/g,'')) : 0;
-            let rawId = map.id !== -1 ? parseFloat(String(row[map.id]).replace(/,/g,'')) : 0;
-            let rawMod = map.maxOd !== -1 ? parseFloat(String(row[map.maxOd]).replace(/,/g,'')) : rawOd;
+            let rawOd = map.od !== -1 ? parseFloat(String(row[map.od]).replace(/,/g,'')) || 0 : 0;
+            let rawId = map.id !== -1 ? parseFloat(String(row[map.id]).replace(/,/g,'')) || 0 : 0;
+            let rawMod = map.maxOd !== -1 ? parseFloat(String(row[map.maxOd]).replace(/,/g,'')) || rawOd : rawOd;
 
-            let baseOd = converters.diam.toBase(rawOd, units.diam);
-            let baseId = converters.diam.toBase(rawId, units.diam);
-            let baseMod = converters.diam.toBase(rawMod, units.diam);
-            let baseLen = converters.length.toBase(rawLen, units.len);
+            parsedRows.push({ nm: nm, tyOpt: tyOpt, rawOd: rawOd, rawId: rawId, rawMod: rawMod, rawLen: rawLen });
+        }
+
+        // Intelligent Auto-Reverse for Bottom-to-Top Contractor Tallys
+        if (parsedRows.length > 0) {
+            let firstIsBit = /bit/i.test(parsedRows[0].tyOpt) || /bit/i.test(parsedRows[0].nm);
+            let lastIsBit = /bit/i.test(parsedRows[parsedRows.length-1].tyOpt) || /bit/i.test(parsedRows[parsedRows.length-1].nm);
+            if (firstIsBit && !lastIsBit) parsedRows.reverse();
+        }
+
+        let htmlString = "";
+        parsedRows.forEach(r => {
+            let baseOd = converters.diam.toBase(r.rawOd, units.diam);
+            let baseId = converters.diam.toBase(r.rawId, units.diam);
+            let baseMod = converters.diam.toBase(r.rawMod, units.diam);
+            let baseLen = converters.length.toBase(r.rawLen, units.len);
 
             let uiOd = converters.diam.fromBase(baseOd, currentUnits.diam).toFixed(3);
             let uiId = converters.diam.fromBase(baseId, currentUnits.diam).toFixed(3);
@@ -475,14 +482,14 @@ async function handleBhaUpload(event) {
 
             htmlString += `
                 <tr>
-                    <td contenteditable>${nm}</td>
-                    <td><select><option ${tyOpt==='Pipe'?'selected':''}>Pipe</option><option ${tyOpt==='HWDP'?'selected':''}>HWDP</option><option ${tyOpt==='Collar'?'selected':''}>Collar</option><option ${tyOpt==='Bit'?'selected':''}>Bit</option><option ${tyOpt==='Other'?'selected':''}>Other</option></select></td>
+                    <td contenteditable>${r.nm}</td>
+                    <td><select><option ${r.tyOpt==='Pipe'?'selected':''}>Pipe</option><option ${r.tyOpt==='HWDP'?'selected':''}>HWDP</option><option ${r.tyOpt==='Collar'?'selected':''}>Collar</option><option ${r.tyOpt==='MWD'?'selected':''}>MWD</option><option ${r.tyOpt==='Underreamer'?'selected':''}>Underreamer</option><option ${r.tyOpt==='Circ Sub'?'selected':''}>Circ Sub</option><option ${r.tyOpt==='Stabilizer'?'selected':''}>Stabilizer</option><option ${r.tyOpt==='Crossover'?'selected':''}>Crossover</option><option ${r.tyOpt==='Bit'?'selected':''}>Bit</option><option ${r.tyOpt==='Other'?'selected':''}>Other</option></select></td>
                     <td><input class="val-diam" value="${uiOd}"></td>
                     <td><input class="val-diam" value="${uiId}"></td>
                     <td><input class="val-diam" value="${uiMod}"></td>
                     <td><input class="val-length" value="${uiLen}" onkeyup="triggerWellDesignChange()"></td>
                 </tr>`;
-        }
+        });
 
         document.getElementById("bhaBody").innerHTML = htmlString;
         triggerWellDesignChange();
@@ -509,12 +516,11 @@ function handleFileUpload(event) {
                 const workbook = XLSX.read(data, {type: 'array'});
                 const rawData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], {header: 1, defval: ""});
                 
-                // Filter out totally empty rows right away
                 const cleanData = rawData.filter(r => r && r.length > 0 && r.some(c => String(c).trim() !== ""));
                 if (cleanData.length < 2) { alert("File appears to be empty."); document.getElementById("ppfgBody").innerHTML = ""; return; }
 
                 let numCols = 0; cleanData.slice(0, 20).forEach(r => { if(r.length > numCols) numCols = r.length; });
-                numCols = Math.min(numCols, 100); // Prevent format explosion
+                numCols = Math.min(numCols, 100); 
 
                 let headerMatrix = [];
                 for(let r=0; r < Math.min(15, cleanData.length); r++) {
@@ -615,7 +621,6 @@ function handleFileUpload(event) {
                 });
                 tempData.unshift({x: baseTemp_user, y: 0});
 
-                // High Speed String Concat - NO INLINE HANDLERS
                 let htmlString = "";
                 parsedRows.forEach(r => {
                     let mdStr = r.md !== null ? r.md.toFixed(0) : ""; let dfStr = r.tvddf !== null ? r.tvddf.toFixed(0) : ""; let ssStr = r.tvdss !== null ? r.tvdss.toFixed(0) : "";
@@ -637,7 +642,7 @@ function handleFileUpload(event) {
                 alert("Error processing Subsurface file: " + err.message);
                 document.getElementById("ppfgBody").innerHTML = "";
             }
-        }, 100); // Small delay to let loading UI paint
+        }, 100); 
     };
     reader.readAsArrayBuffer(file);
 }
@@ -654,7 +659,6 @@ const converters = {
 function changeUnit(category, selectElement) {
     const newUnit = selectElement.value; const oldUnit = currentUnits[category]; if (oldUnit === newUnit) return;
     
-    // Standalone inputs
     document.querySelectorAll(`.val-${category}`).forEach(el => {
         let isInput = el.tagName === 'INPUT'; let valStr = isInput ? el.value : el.textContent;
         if (valStr.trim() !== "") {
@@ -663,7 +667,6 @@ function changeUnit(category, selectElement) {
         }
     });
 
-    // Massive Table Fast Conversion by Column Index
     let colMap = { 'length': [0,1,2,3], 'density': [4,6,8], 'press': [5,7,9], 'temp': [10] };
     let cols = colMap[category];
     if (cols) {
@@ -760,7 +763,9 @@ function getBHAForDrawing() {
     let bha = []; let rows = document.getElementById("bhaTable").rows;
     for (let i = 1; i < rows.length; i++) {
         let c = rows[i].cells; 
-        bha.push({ name: c[0].textContent, od: toBaseDiam(Number(c[2].children[0].value)), id: toBaseDiam(Number(c[3].children[0].value)), lengthBase: toBaseLength(Number(c[5].children[0].value)) });
+        let odInp = c[2].querySelector("input"); let idInp = c[3].querySelector("input"); let lenInp = c[5].querySelector("input");
+        if(!odInp || !lenInp) continue;
+        bha.push({ name: c[0].textContent, od: toBaseDiam(parseFloat(odInp.value.replace(/,/g,'')) || 0), id: toBaseDiam(parseFloat(idInp.value.replace(/,/g,'')) || 0), lengthBase: toBaseLength(parseFloat(lenInp.value.replace(/,/g,'')) || 0) });
     }
     return bha;
 }
@@ -863,7 +868,6 @@ function updateSchematics() {
     }
 }
 
-
 // ================= SIMULATION LOGIC =================
 function buildPayload(){
     let well_sections = []; let rows = document.getElementById("wellTable").rows;
@@ -875,7 +879,7 @@ function buildPayload(){
 
     let bha = []; let bhaRows = document.getElementById("bhaTable").rows;
     for (let i = 1; i < bhaRows.length; i++) { let c = bhaRows[i].cells;
-        bha.push({ name: c[0].textContent, od: converters.diam.toBase(Number(c[2].children[0].value), currentUnits.diam), id: converters.diam.toBase(Number(c[3].children[0].value), currentUnits.diam), length: converters.length.toBase(Number(c[5].children[0].value), currentUnits.length) });
+        bha.push({ name: c[0].textContent, od: converters.diam.toBase(parseFloat(c[2].children[0].value.replace(/,/g,''))||0, currentUnits.diam), id: converters.diam.toBase(parseFloat(c[3].children[0].value.replace(/,/g,''))||0, currentUnits.diam), length: converters.length.toBase(parseFloat(c[5].children[0].value.replace(/,/g,''))||0, currentUnits.length) });
     }
 
     let ppfg = getPPFGProfile(); let validTemps = ppfg.temp.filter(t => !isNaN(t));
