@@ -70,7 +70,7 @@
 <div id="simulation" class="tab active">
     <div class="controls-row">
         <div><label>Flowrate (<span class="lbl-flow">gpm</span>):</label><br><input id="flowrate" class="val-flow" value="400"></div>
-        <div><label>Depth (<span class="lbl-length">ft</span>):</label><br><input id="depth" class="val-length" value="10000" onkeyup="updateSchematics()"></div>
+        <div><label>Depth (<span class="lbl-length">ft</span>):</label><br><input id="depth" class="val-length" value="10000" onkeyup="triggerWellDesignChange()"></div>
         <div><label>Surface SBP (<span class="lbl-press">psi</span>):</label><br><input id="sbp" class="val-press" value="0"></div>
         <div><label>Surface Temp (<span class="lbl-temp">°F</span>):</label><br><input id="surface_temp" class="val-temp" value="80" onchange="applyGeothermal()"></div>
         <div>
@@ -121,7 +121,7 @@
     <div style="display: flex; gap: 40px; align-items: flex-start;">
         <div>
             <h3>Well Design (Top → Bottom)</h3>
-            <table id="wellTable" onkeyup="updateSchematics()" onchange="updateSchematics()">
+            <table id="wellTable" onkeyup="triggerWellDesignChange()" onchange="triggerWellDesignChange()">
                 <tr><th>Type</th><th>Name</th><th>Top MD (<span class="lbl-length">ft</span>)</th><th>Bottom MD (<span class="lbl-length">ft</span>)</th><th>OD (<span class="lbl-diam">in</span>)</th><th>ID (<span class="lbl-diam">in</span>)</th></tr>
                 <tr>
                     <td><select onchange="toggleOD(this)"><option value="casing">Casing</option><option value="liner">Liner</option><option value="open hole">Open Hole</option></select></td>
@@ -164,7 +164,7 @@
     <div style="display: flex; gap: 40px; align-items: flex-start;">
         <div>
             <h3>Bottom Hole Assembly (Top → Bottom)</h3>
-            <table id="bhaTable" onkeyup="updateSchematics()" onchange="updateSchematics()">
+            <table id="bhaTable" onkeyup="triggerWellDesignChange()" onchange="triggerWellDesignChange()">
                 <thead>
                     <tr><th>Name</th><th>Type</th><th>OD (<span class="lbl-diam">in</span>)</th><th>ID (<span class="lbl-diam">in</span>)</th><th>Max OD (<span class="lbl-diam">in</span>)</th><th>Length (<span class="lbl-length">ft</span>)</th></tr>
                 </thead>
@@ -172,12 +172,12 @@
                     <tr>
                         <td contenteditable>Drill Pipe</td>
                         <td><select><option>Pipe</option><option>HWDP</option><option>Collar</option><option>Bit</option><option>Other</option></select></td>
-                        <td><input class="val-diam" value="5"></td><td><input class="val-diam" value="4"></td><td><input class="val-diam" value="6.5"></td><td><input class="val-length" value="8000" onkeyup="updateSchematics()"></td>
+                        <td><input class="val-diam" value="5"></td><td><input class="val-diam" value="4"></td><td><input class="val-diam" value="6.5"></td><td><input class="val-length" value="8000" onkeyup="triggerWellDesignChange()"></td>
                     </tr>
                     <tr>
                         <td contenteditable>Drill Collar</td>
                         <td><select><option>Pipe</option><option>HWDP</option><option selected>Collar</option><option>Bit</option><option>Other</option></select></td>
-                        <td><input class="val-diam" value="6.5"></td><td><input class="val-diam" value="2.5"></td><td><input class="val-diam" value="6.5"></td><td><input class="val-length" value="2000" onkeyup="updateSchematics()"></td>
+                        <td><input class="val-diam" value="6.5"></td><td><input class="val-diam" value="2.5"></td><td><input class="val-diam" value="6.5"></td><td><input class="val-length" value="2000" onkeyup="triggerWellDesignChange()"></td>
                     </tr>
                 </tbody>
             </table>
@@ -236,6 +236,7 @@ let chartInstance = null;
 let subChartInstance = null;
 let lastSimResult = null; 
 let chartDebounceTimer = null;
+let wellChangeTimer = null;
 let currentUnits = { length: "ft", diam: "in", density: "ppg", press: "psi", flow: "gpm", temp: "F" };
 
 // ================= UTILS =================
@@ -271,7 +272,7 @@ function switchCalcDepth() {
     applyGeothermal(true); debouncedUpdateSubsurfaceChart();
 }
 
-// ================= UI NAVIGATION =================
+// ================= UI NAVIGATION & TRIGGERS =================
 function showTab(tab, btn) {
     document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
     document.getElementById(tab).classList.add("active");
@@ -281,11 +282,20 @@ function showTab(tab, btn) {
     if(tab === 'subsurface') debouncedUpdateSubsurfaceChart();
     if(tab === 'simulation') { toggleScooter(); }
 }
+
+function triggerWellDesignChange() {
+    updateSchematics();
+    if (lastSimResult) {
+        clearTimeout(wellChangeTimer);
+        wellChangeTimer = setTimeout(replotChart, 500); 
+    }
+}
+
 function toggleOD(select){
     const row = select.parentElement.parentElement;
     const odInput = row.cells[4].querySelector("input");
     if(select.value === "open hole"){ odInput.disabled = true; odInput.value = ""; } else { odInput.disabled = false; }
-    updateSchematics();
+    triggerWellDesignChange();
 }
 function addWellRow(){
     const table = document.getElementById("wellTable");
@@ -300,7 +310,7 @@ function addTrajectoryRow(){
 function addBhaRow(){
     const tbody = document.getElementById("bhaBody");
     const row = tbody.insertRow();
-    row.innerHTML = `<td contenteditable>New Item</td><td><select><option>Pipe</option><option>HWDP</option><option>Collar</option><option>Bit</option><option>Other</option></select></td><td><input class="val-diam"></td><td><input class="val-diam"></td><td><input class="val-diam"></td><td><input class="val-length" onkeyup="updateSchematics()"></td>`;
+    row.innerHTML = `<td contenteditable>New Item</td><td><select><option>Pipe</option><option>HWDP</option><option>Collar</option><option>Bit</option><option>Other</option></select></td><td><input class="val-diam"></td><td><input class="val-diam"></td><td><input class="val-diam"></td><td><input class="val-length" onkeyup="triggerWellDesignChange()"></td>`;
 }
 function addSubsurfaceRow(top="", md="", tvddf="", tvdss="", pp="", pp_psi="", fp="", fp_psi="", obg="", obg_psi="", temp=""){
     const tbody = document.getElementById("ppfgBody");
@@ -349,9 +359,9 @@ function handleBhaUpload(event) {
             let mod = map.maxOd !== -1 ? (parseFloat(row[map.maxOd]) || od) : od;
             let len = parseFloat(row[map.len]) || 0;
 
-            tr.innerHTML = `<td contenteditable>${nm}</td><td><select><option ${ty.includes('Pipe')?'selected':''}>Pipe</option><option ${ty.includes('HWDP')?'selected':''}>HWDP</option><option ${ty.includes('Collar')?'selected':''}>Collar</option><option ${ty.includes('Bit')?'selected':''}>Bit</option><option>Other</option></select></td><td><input class="val-diam" value="${od}"></td><td><input class="val-diam" value="${id}"></td><td><input class="val-diam" value="${mod}"></td><td><input class="val-length" value="${len}" onkeyup="updateSchematics()"></td>`;
+            tr.innerHTML = `<td contenteditable>${nm}</td><td><select><option ${ty.includes('Pipe')?'selected':''}>Pipe</option><option ${ty.includes('HWDP')?'selected':''}>HWDP</option><option ${ty.includes('Collar')?'selected':''}>Collar</option><option ${ty.includes('Bit')?'selected':''}>Bit</option><option>Other</option></select></td><td><input class="val-diam" value="${od}"></td><td><input class="val-diam" value="${id}"></td><td><input class="val-diam" value="${mod}"></td><td><input class="val-length" value="${len}" onkeyup="triggerWellDesignChange()"></td>`;
         }
-        updateSchematics();
+        triggerWellDesignChange();
         document.getElementById("bhaUpload").value = "";
     };
     reader.readAsArrayBuffer(file);
@@ -596,7 +606,6 @@ function drawWellCanvas(canvasId, yMinBase, yMaxBase, drawString=false) {
     const sections = getWellSectionsForDrawing(); if(sections.length === 0) return;
     let maxOD = Math.max(...sections.map(s => s.od));
     
-    // Y Calculations with Padding to prevent text crop
     let drawAreaH = h - 30; let yOffset = 15;
 
     sections.forEach((sec, idx) => {
@@ -616,7 +625,7 @@ function drawWellCanvas(canvasId, yMinBase, yMaxBase, drawString=false) {
         ctx.fillStyle = "#555"; ctx.font = "bold 11px sans-serif"; ctx.textAlign = "right";
         let isShoe = sec.type !== "open hole" && (idx === sections.length - 1 || sections[idx+1].type === "open hole");
         let isTD = idx === sections.length - 1;
-        let textX = x - 5; let textY = y2 + 4; if (textY > h - 2) textY = y2 - 4; // Anti-Crop Logic
+        let textX = x - 5; let textY = y2 + 4; if (textY > h - 2) textY = y2 - 4; 
 
         if (isShoe && sec.bottom <= yMaxBase && sec.bottom >= yMinBase) {
             ctx.fillText(`${fromBaseLength(sec.bottom).toFixed(0)} (Shoe)`, textX, textY);
@@ -637,9 +646,9 @@ function drawWellCanvas(canvasId, yMinBase, yMaxBase, drawString=false) {
             let y1 = ((drawTop - yMinBase) / (yMaxBase - yMinBase)) * drawAreaH + yOffset;
             let y2 = ((drawBot - yMinBase) / (yMaxBase - yMinBase)) * drawAreaH + yOffset;
             let secH = y2 - y1; let secW = (comp.od / maxOD) * (w * 0.4); let x = (w - secW) / 2 + 30;
-            ctx.fillStyle = "#1e3a8a"; ctx.fillRect(x, y1, secW, secH); // Drillstring Body
+            ctx.fillStyle = "#1e3a8a"; ctx.fillRect(x, y1, secW, secH); 
             let idW = (comp.id / maxOD) * (w * 0.4); let idX = (w - idW) / 2 + 30;
-            ctx.fillStyle = "#bfdbfe"; ctx.fillRect(idX, y1, idW, secH); // Drillstring ID
+            ctx.fillStyle = "#bfdbfe"; ctx.fillRect(idX, y1, idW, secH); 
         }
     }
 }
@@ -676,8 +685,17 @@ function updateSchematics() {
     if (scaleMode === "open_hole") { minDepthBase = shoeDepthBase; } 
     else if (scaleMode === "adjustable") { let ohLength = maxDepthBase - shoeDepthBase; minDepthBase = Math.max(0, shoeDepthBase - ohLength); }
     
-    drawWellCanvas("wellCanvasSim", minDepthBase, maxDepthBase, true); // True = Draw Drillstring Overlay
-    if (lastSimResult && document.getElementById('showScooter').checked) initScooter();
+    drawWellCanvas("wellCanvasSim", minDepthBase, maxDepthBase, true); 
+    
+    // Retain scooter state perfectly
+    if (lastSimResult && document.getElementById('showScooter').checked) {
+        let oldVal = document.getElementById('scooterDepthInput').value;
+        initScooter();
+        if (oldVal) {
+             document.getElementById('scooterDepthInput').value = oldVal;
+             updateScooterFromInput();
+        }
+    }
 }
 
 
@@ -761,12 +779,11 @@ function replotChart(){
         if(!isNaN(ppfgProfile.obg[i])) { obgData.push({x: ppfgProfile.obg[i], y: drawTop}); obgData.push({x: ppfgProfile.obg[i], y: bot}); }
     }
 
-    // Dynamic X-Axis Scaling for Open Hole focus
     let xMinUser = undefined; let xMaxUser = undefined;
     if (scaleMode === "adjustable" || scaleMode === "open_hole") {
         let allX = [];
         [ecdData, esdData, ppData, fpData, obgData].forEach(dataset => {
-            dataset.forEach(pt => { if (pt.y >= yMinUser && pt.y <= yMaxUser) allX.push(pt.x); });
+            dataset.forEach(pt => { if (pt.y >= yMinUser && pt.y <= yMaxUser && pt.x != null && !isNaN(pt.x)) allX.push(pt.x); });
         });
         if (allX.length > 0) {
             let minX = Math.min(...allX); let maxX = Math.max(...allX);
@@ -813,8 +830,13 @@ function initScooter() {
     scooterLine.style.display = 'block';
     let leftPad = chartInstance.chartArea.left; let rightPad = chartInstance.width - chartInstance.chartArea.right;
     scooterLine.style.left = leftPad + 'px'; scooterLine.style.width = `calc(100% - ${leftPad + rightPad}px)`;
+    
+    let currentDepth = parseFloat(document.getElementById('scooterDepthInput').value);
     let bottomUserDepth = parseFloat(document.getElementById("depth").value);
-    document.getElementById('scooterDepthInput').value = bottomUserDepth.toFixed(0);
+    
+    if (isNaN(currentDepth)) { currentDepth = bottomUserDepth; }
+    
+    document.getElementById('scooterDepthInput').value = currentDepth.toFixed(0);
     updateScooterFromInput();
 }
 
