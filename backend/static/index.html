@@ -34,7 +34,10 @@
         .case-select { padding: 5px; font-weight: bold; border-radius: 4px; border: 1px solid #ccc; }
         .upload-controls { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; align-items: center;}
         
-        .highlight-col { background-color: #e8f5e9 !important; }
+        /* High-Performance CSS Column Highlighting */
+        table.active-col-1 td:nth-child(2), table.active-col-1 th:nth-child(2) { background-color: #e8f5e9; }
+        table.active-col-2 td:nth-child(3), table.active-col-2 th:nth-child(3) { background-color: #e8f5e9; }
+        table.active-col-3 td:nth-child(4), table.active-col-3 th:nth-child(4) { background-color: #e8f5e9; }
         
         /* Scooter Box styling */
         #scooterLine { position: absolute; height: 2px; background: #eab308; cursor: ns-resize; display: none; z-index: 10; box-shadow: 0px 0px 5px rgba(0,0,0,0.3); }
@@ -219,12 +222,12 @@
                 </div>
             </div>
             
-            <table id="ppfgTable">
+            <table id="ppfgTable" class="active-col-2">
                 <thead>
-                    <tr><th>Top (<span class="lbl-length">ft</span>)</th><th id="th_md">MD (<span class="lbl-length">ft</span>)</th><th id="th_tvddf" class="highlight-col">TVDDF (<span class="lbl-length">ft</span>)</th><th id="th_tvdss">TVDSS (<span class="lbl-length">ft</span>)</th><th>PP (<span class="lbl-density">ppg</span>)</th><th>PP (<span class="lbl-press">psi</span>)</th><th>FG (<span class="lbl-density">ppg</span>)</th><th>FG (<span class="lbl-press">psi</span>)</th><th>OBG (<span class="lbl-density">ppg</span>)</th><th>OBG (<span class="lbl-press">psi</span>)</th><th>Temp (<span class="lbl-temp">°F</span>)</th></tr>
+                    <tr><th>Top (<span class="lbl-length">ft</span>)</th><th id="th_md">MD (<span class="lbl-length">ft</span>)</th><th id="th_tvddf">TVDDF (<span class="lbl-length">ft</span>)</th><th id="th_tvdss">TVDSS (<span class="lbl-length">ft</span>)</th><th>PP (<span class="lbl-density">ppg</span>)</th><th>PP (<span class="lbl-press">psi</span>)</th><th>FG (<span class="lbl-density">ppg</span>)</th><th>FG (<span class="lbl-press">psi</span>)</th><th>OBG (<span class="lbl-density">ppg</span>)</th><th>OBG (<span class="lbl-press">psi</span>)</th><th>Temp (<span class="lbl-temp">°F</span>)</th></tr>
                 </thead>
-                <tbody id="ppfgBody">
-                    <tr><td contenteditable="false">0</td><td contenteditable class="val-length" onkeyup="triggerPPFGCalc(this)"></td><td contenteditable class="val-length highlight-col" onkeyup="triggerPPFGCalc(this)"></td><td contenteditable class="val-length" onkeyup="triggerPPFGCalc(this)"></td><td contenteditable class="val-density" onkeyup="calcPPFG(this, 'pp_dens')"></td><td contenteditable class="val-press" onkeyup="calcPPFG(this, 'pp_press')"></td><td contenteditable class="val-density" onkeyup="calcPPFG(this, 'fp_dens')"></td><td contenteditable class="val-press" onkeyup="calcPPFG(this, 'fp_press')"></td><td contenteditable class="val-density" onkeyup="calcPPFG(this, 'obg_dens')"></td><td contenteditable class="val-press" onkeyup="calcPPFG(this, 'obg_press')"></td><td contenteditable class="val-temp" onkeyup="debouncedUpdateSubsurfaceChart()"></td></tr>
+                <tbody id="ppfgBody" onkeyup="handleTableKeyup(event)">
+                    <tr><td contenteditable="false">0</td><td contenteditable></td><td contenteditable></td><td contenteditable></td><td contenteditable></td><td contenteditable></td><td contenteditable></td><td contenteditable></td><td contenteditable></td><td contenteditable></td><td contenteditable></td></tr>
                 </tbody>
             </table>
             <button onclick="addSubsurfaceRow()">Add Row</button>
@@ -241,10 +244,10 @@ let chartDebounceTimer = null;
 let wellChangeTimer = null;
 let currentUnits = { length: "ft", diam: "in", density: "ppg", press: "psi", flow: "gpm", temp: "F" };
 
-// ================= UTILS =================
+// ================= UTILS & PERFORMANCE DOM EVENT DELEGATION =================
 function parseSafe(val) {
     if (val === undefined || val === null || String(val).trim() === "") return null;
-    let parsed = parseFloat(val);
+    let parsed = parseFloat(String(val).replace(/,/g, '')); // Handles 1,000.5 safely
     return isNaN(parsed) ? null : parsed;
 }
 function getCalcDepthCol() {
@@ -253,15 +256,27 @@ function getCalcDepthCol() {
 }
 function highlightActiveDepth() {
     let colIndex = getCalcDepthCol();
-    document.querySelectorAll('#ppfgTable th').forEach((th, i) => { if(i>0 && i<4) th.classList.remove('highlight-col'); });
-    document.querySelectorAll('#ppfgBody td').forEach((td, i) => { td.classList.remove('highlight-col'); });
-    let thTarget = document.getElementById("ppfgTable").rows[0].cells[colIndex];
-    if(thTarget) thTarget.classList.add('highlight-col');
-    let tbody = document.getElementById("ppfgBody");
-    for(let r=0; r<tbody.rows.length; r++) {
-        if(tbody.rows[r].cells[colIndex]) tbody.rows[r].cells[colIndex].classList.add('highlight-col');
-    }
+    let table = document.getElementById("ppfgTable");
+    table.classList.remove("active-col-1", "active-col-2", "active-col-3");
+    table.classList.add("active-col-" + colIndex);
 }
+
+// Zero-Lag Event Delegation for the massive PPFG Table
+function handleTableKeyup(e) {
+    let td = e.target;
+    if (td.tagName !== 'TD') return;
+    let cellIndex = td.cellIndex;
+    
+    if (cellIndex >= 1 && cellIndex <= 3) triggerPPFGCalc(td);
+    else if (cellIndex === 4) calcPPFG(td, 'pp_dens');
+    else if (cellIndex === 5) calcPPFG(td, 'pp_press');
+    else if (cellIndex === 6) calcPPFG(td, 'fp_dens');
+    else if (cellIndex === 7) calcPPFG(td, 'fp_press');
+    else if (cellIndex === 8) calcPPFG(td, 'obg_dens');
+    else if (cellIndex === 9) calcPPFG(td, 'obg_press');
+    else if (cellIndex === 10) debouncedUpdateSubsurfaceChart();
+}
+
 function switchCalcDepth() {
     let col = getCalcDepthCol();
     let tbody = document.getElementById("ppfgBody");
@@ -337,10 +352,9 @@ function addBhaRow(){
 function addSubsurfaceRow(top="", md="", tvddf="", tvdss="", pp="", pp_psi="", fp="", fp_psi="", obg="", obg_psi="", temp=""){
     const tbody = document.getElementById("ppfgBody");
     const row = tbody.insertRow();
-    let isMD = getCalcDepthCol() === 1 ? 'highlight-col' : ''; let isDF = getCalcDepthCol() === 2 ? 'highlight-col' : ''; let isSS = getCalcDepthCol() === 3 ? 'highlight-col' : '';
-    row.innerHTML = `<td contenteditable="false" class="val-length">${top}</td><td contenteditable class="val-length ${isMD}" onkeyup="triggerPPFGCalc(this)">${md}</td><td contenteditable class="val-length ${isDF}" onkeyup="triggerPPFGCalc(this)">${tvddf}</td><td contenteditable class="val-length ${isSS}" onkeyup="triggerPPFGCalc(this)">${tvdss}</td><td contenteditable class="val-density" onkeyup="calcPPFG(this, 'pp_dens')">${pp}</td><td contenteditable class="val-press" onkeyup="calcPPFG(this, 'pp_press')">${pp_psi}</td><td contenteditable class="val-density" onkeyup="calcPPFG(this, 'fp_dens')">${fp}</td><td contenteditable class="val-press" onkeyup="calcPPFG(this, 'fp_press')">${fp_psi}</td><td contenteditable class="val-density" onkeyup="calcPPFG(this, 'obg_dens')">${obg}</td><td contenteditable class="val-press" onkeyup="calcPPFG(this, 'obg_press')">${obg_psi}</td><td contenteditable class="val-temp" onkeyup="debouncedUpdateSubsurfaceChart()">${temp}</td>`;
-    let prevDepth = 0;
-    for(let i=0; i<tbody.rows.length; i++) { tbody.rows[i].cells[0].textContent = prevDepth.toFixed(0); let botDepth = parseFloat(tbody.rows[i].cells[getCalcDepthCol()].textContent); if(!isNaN(botDepth)) prevDepth = botDepth; }
+    row.innerHTML = `<td contenteditable="false">${top}</td><td contenteditable>${md}</td><td contenteditable>${tvddf}</td><td contenteditable>${tvdss}</td><td contenteditable>${pp}</td><td contenteditable>${pp_psi}</td><td contenteditable>${fp}</td><td contenteditable>${fp_psi}</td><td contenteditable>${obg}</td><td contenteditable>${obg_psi}</td><td contenteditable>${temp}</td>`;
+    let prevDepth = 0; let col = getCalcDepthCol();
+    for(let i=0; i<tbody.rows.length; i++) { tbody.rows[i].cells[0].textContent = prevDepth.toFixed(0); let botDepth = parseFloat(tbody.rows[i].cells[col].textContent); if(!isNaN(botDepth)) prevDepth = botDepth; }
     applyGeothermal(); 
 }
 
@@ -397,9 +411,7 @@ async function handleBhaUpload(event) {
         }
 
         if (!rawData || rawData.length < 2) { 
-            alert("File appears to be empty or unreadable."); 
-            document.getElementById("bhaBody").innerHTML = "";
-            return; 
+            alert("File appears to be empty or unreadable."); document.getElementById("bhaBody").innerHTML = ""; return; 
         }
 
         let map = { name: -1, type: -1, od: -1, id: -1, maxOd: -1, len: -1 };
@@ -435,7 +447,8 @@ async function handleBhaUpload(event) {
 
         for (let i = headerRowIndex + 1; i < rawData.length; i++) {
             let row = rawData[i];
-            if (!row || !row[map.len] || isNaN(parseFloat(row[map.len]))) continue;
+            let rawLen = parseFloat(String(row[map.len]).replace(/,/g,''));
+            if (!row || !row[map.len] || isNaN(rawLen)) continue;
 
             let nm = map.name !== -1 && row[map.name] ? row[map.name] : "Component";
             let tyStr = map.type !== -1 && row[map.type] ? String(row[map.type]).toLowerCase() : "";
@@ -446,10 +459,9 @@ async function handleBhaUpload(event) {
             if (/collar|dc/i.test(tyStr) || /collar|dc/i.test(nm.toLowerCase())) tyOpt = "Collar";
             if (/bit|pdc/i.test(tyStr) || /bit|pdc/i.test(nm.toLowerCase())) tyOpt = "Bit";
 
-            let rawOd = map.od !== -1 ? parseFloat(row[map.od]) : 0;
-            let rawId = map.id !== -1 ? parseFloat(row[map.id]) : 0;
-            let rawMod = map.maxOd !== -1 ? parseFloat(row[map.maxOd]) : rawOd;
-            let rawLen = parseFloat(row[map.len]) || 0;
+            let rawOd = map.od !== -1 ? parseFloat(String(row[map.od]).replace(/,/g,'')) : 0;
+            let rawId = map.id !== -1 ? parseFloat(String(row[map.id]).replace(/,/g,'')) : 0;
+            let rawMod = map.maxOd !== -1 ? parseFloat(String(row[map.maxOd]).replace(/,/g,'')) : rawOd;
 
             let baseOd = converters.diam.toBase(rawOd, units.diam);
             let baseId = converters.diam.toBase(rawId, units.diam);
@@ -471,37 +483,45 @@ async function handleBhaUpload(event) {
                     <td><input class="val-length" value="${uiLen}" onkeyup="triggerWellDesignChange()"></td>
                 </tr>`;
         }
+
         document.getElementById("bhaBody").innerHTML = htmlString;
         triggerWellDesignChange();
         document.getElementById("bhaUpload").value = "";
 
     } catch (err) {
+        console.error(err);
         alert("Error processing BHA file: " + err.message);
         document.getElementById("bhaBody").innerHTML = "";
     }
 }
 
-// ================= EXCEL PARSING (SUBSURFACE) =================
+// ================= EXCEL PARSING (SUBSURFACE BULK) =================
 function handleFileUpload(event) {
     const file = event.target.files[0];
     if (!file) return;
     document.getElementById("ppfgBody").innerHTML = `<tr><td colspan="11" style="text-align:center; padding: 20px;"><b>Processing... Please wait.</b></td></tr>`;
+    
     const reader = new FileReader();
     reader.onload = function(e) {
         setTimeout(() => {
             try {
                 const data = new Uint8Array(e.target.result);
                 const workbook = XLSX.read(data, {type: 'array'});
-                const rawData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], {header: 1});
-                if (!rawData || rawData.length < 2) { alert("File appears to be empty."); document.getElementById("ppfgBody").innerHTML = ""; return; }
+                const rawData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], {header: 1, defval: ""});
+                
+                // Filter out totally empty rows right away
+                const cleanData = rawData.filter(r => r && r.length > 0 && r.some(c => String(c).trim() !== ""));
+                if (cleanData.length < 2) { alert("File appears to be empty."); document.getElementById("ppfgBody").innerHTML = ""; return; }
 
-                let numCols = 0; rawData.slice(0, 15).forEach(r => { if(r && r.length > numCols) numCols = r.length; });
+                let numCols = 0; cleanData.slice(0, 20).forEach(r => { if(r.length > numCols) numCols = r.length; });
+                numCols = Math.min(numCols, 100); // Prevent format explosion
+
                 let headerMatrix = [];
-                for(let r=0; r < Math.min(15, rawData.length); r++) {
+                for(let r=0; r < Math.min(15, cleanData.length); r++) {
                     let rowVals = []; let lastVal = "";
                     for(let c=0; c < numCols; c++) {
-                        let cell = (rawData[r] && rawData[r][c] !== undefined) ? rawData[r][c] : null;
-                        if (cell !== null && String(cell).trim() !== "") lastVal = String(cell).toLowerCase().trim();
+                        let cell = cleanData[r][c];
+                        if (cell !== undefined && cell !== null && String(cell).trim() !== "") lastVal = String(cell).toLowerCase().trim();
                         rowVals.push(lastVal);
                     }
                     headerMatrix.push(rowVals);
@@ -559,8 +579,8 @@ function handleFileUpload(event) {
                 }
 
                 let parsedRows = [];
-                for (let i = 2; i < rawData.length; i++) {
-                    let row = rawData[i]; if (!row) continue;
+                for (let i = 2; i < cleanData.length; i++) {
+                    let row = cleanData[i]; if (!row) continue;
                     let mdRaw = map.md !== -1 ? parseSafe(row[map.md]) : null;
                     let tvddfRaw = map.tvddf !== -1 ? parseSafe(row[map.tvddf]) : null;
                     let tvdssRaw = map.tvdss !== -1 ? parseSafe(row[map.tvdss]) : null;
@@ -595,7 +615,7 @@ function handleFileUpload(event) {
                 });
                 tempData.unshift({x: baseTemp_user, y: 0});
 
-                let isMD = activeType === 'md' ? 'highlight-col' : ''; let isDF = activeType === 'tvddf' ? 'highlight-col' : ''; let isSS = activeType === 'tvdss' ? 'highlight-col' : '';
+                // High Speed String Concat - NO INLINE HANDLERS
                 let htmlString = "";
                 parsedRows.forEach(r => {
                     let mdStr = r.md !== null ? r.md.toFixed(0) : ""; let dfStr = r.tvddf !== null ? r.tvddf.toFixed(0) : ""; let ssStr = r.tvdss !== null ? r.tvdss.toFixed(0) : "";
@@ -604,16 +624,20 @@ function handleFileUpload(event) {
                     let obgStr = r.obg !== null ? r.obg.toFixed(3) : ""; let obgPsiStr = r.obg_psi !== null ? r.obg_psi.toFixed(1) : "";
                     let tempStr = r.temp !== null ? r.temp.toFixed(1) : "";
 
-                    htmlString += `<tr><td contenteditable="false" class="val-length">${r.top.toFixed(0)}</td><td contenteditable class="val-length ${isMD}" onkeyup="triggerPPFGCalc(this)">${mdStr}</td><td contenteditable class="val-length ${isDF}" onkeyup="triggerPPFGCalc(this)">${dfStr}</td><td contenteditable class="val-length ${isSS}" onkeyup="triggerPPFGCalc(this)">${ssStr}</td><td contenteditable class="val-density" onkeyup="calcPPFG(this, 'pp_dens')">${ppStr}</td><td contenteditable class="val-press" onkeyup="calcPPFG(this, 'pp_press')">${ppPsiStr}</td><td contenteditable class="val-density" onkeyup="calcPPFG(this, 'fp_dens')">${fpStr}</td><td contenteditable class="val-press" onkeyup="calcPPFG(this, 'fp_press')">${fpPsiStr}</td><td contenteditable class="val-density" onkeyup="calcPPFG(this, 'obg_dens')">${obgStr}</td><td contenteditable class="val-press" onkeyup="calcPPFG(this, 'obg_press')">${obgPsiStr}</td><td contenteditable class="val-temp" onkeyup="debouncedUpdateSubsurfaceChart()">${tempStr}</td></tr>`;
+                    htmlString += `<tr><td contenteditable="false">${r.top.toFixed(0)}</td><td contenteditable>${mdStr}</td><td contenteditable>${dfStr}</td><td contenteditable>${ssStr}</td><td contenteditable>${ppStr}</td><td contenteditable>${ppPsiStr}</td><td contenteditable>${fpStr}</td><td contenteditable>${fpPsiStr}</td><td contenteditable>${obgStr}</td><td contenteditable>${obgPsiStr}</td><td contenteditable>${tempStr}</td></tr>`;
                 });
 
-                document.getElementById("ppfgBody").innerHTML = htmlString; highlightActiveDepth(); drawSubsurfaceChartDirect(ppData, fpData, obgData, tempData); 
+                document.getElementById("ppfgBody").innerHTML = htmlString; 
+                highlightActiveDepth(); 
+                drawSubsurfaceChartDirect(ppData, fpData, obgData, tempData); 
                 document.getElementById("excelUpload").value = ""; 
+                
             } catch (err) {
+                console.error(err);
                 alert("Error processing Subsurface file: " + err.message);
                 document.getElementById("ppfgBody").innerHTML = "";
             }
-        }, 50); 
+        }, 100); // Small delay to let loading UI paint
     };
     reader.readAsArrayBuffer(file);
 }
@@ -629,13 +653,33 @@ const converters = {
 };
 function changeUnit(category, selectElement) {
     const newUnit = selectElement.value; const oldUnit = currentUnits[category]; if (oldUnit === newUnit) return;
+    
+    // Standalone inputs
     document.querySelectorAll(`.val-${category}`).forEach(el => {
         let isInput = el.tagName === 'INPUT'; let valStr = isInput ? el.value : el.textContent;
         if (valStr.trim() !== "") {
-            let val = parseFloat(valStr);
+            let val = parseFloat(valStr.replace(/,/g,''));
             if (!isNaN(val)) { let baseVal = converters[category].toBase(val, oldUnit); let newVal = converters[category].fromBase(baseVal, newUnit); if (isInput) el.value = newVal.toFixed(3); else el.textContent = newVal.toFixed(3); }
         }
     });
+
+    // Massive Table Fast Conversion by Column Index
+    let colMap = { 'length': [0,1,2,3], 'density': [4,6,8], 'press': [5,7,9], 'temp': [10] };
+    let cols = colMap[category];
+    if (cols) {
+        let rows = document.getElementById("ppfgBody").rows;
+        for(let i=0; i<rows.length; i++) {
+            cols.forEach(c => {
+                let td = rows[i].cells[c]; if(!td) return;
+                let valStr = td.textContent;
+                if (valStr.trim() !== "") {
+                    let val = parseFloat(valStr.replace(/,/g,''));
+                    if (!isNaN(val)) { td.textContent = converters[category].fromBase(converters[category].toBase(val, oldUnit), newUnit).toFixed(3); }
+                }
+            });
+        }
+    }
+
     document.querySelectorAll(`.lbl-${category}`).forEach(el => el.textContent = category === "temp" ? "°" + newUnit : newUnit);
     currentUnits[category] = newUnit;
     debouncedUpdateSubsurfaceChart(); if (lastSimResult) replotChart(); updateSchematics();
@@ -652,15 +696,16 @@ function triggerPPFGCalc(depthCell) {
     applyGeothermal(true); debouncedUpdateSubsurfaceChart();
 }
 function calcPPFG(inputCell, type, skipChart=false) {
-    let row = inputCell.closest("tr"); let col = getCalcDepthCol(); let bottomMD_ft = toBaseLength(parseFloat(row.cells[col].textContent) || 0);
+    let row = inputCell.closest("tr"); let col = getCalcDepthCol(); let bottomMD_ft = toBaseLength(parseFloat(row.cells[col].textContent.replace(/,/g,'')) || 0);
     if (bottomMD_ft <= 0) return; let c = 0.051948;
-    
-    if (type === 'pp_dens') { let d = parseFloat(row.cells[4].textContent); if(!isNaN(d)) row.cells[5].textContent = fromBasePress(toBaseDens(d) * bottomMD_ft * c).toFixed(1); }
-    else if (type === 'pp_press') { let p = parseFloat(row.cells[5].textContent); if(!isNaN(p)) row.cells[4].textContent = fromBaseDens(toBasePress(p) / (bottomMD_ft * c)).toFixed(3); }
-    else if (type === 'fp_dens') { let d = parseFloat(row.cells[6].textContent); if(!isNaN(d)) row.cells[7].textContent = fromBasePress(toBaseDens(d) * bottomMD_ft * c).toFixed(1); }
-    else if (type === 'fp_press') { let p = parseFloat(row.cells[7].textContent); if(!isNaN(p)) row.cells[6].textContent = fromBaseDens(toBasePress(p) / (bottomMD_ft * c)).toFixed(3); }
-    else if (type === 'obg_dens') { let d = parseFloat(row.cells[8].textContent); if(!isNaN(d)) row.cells[9].textContent = fromBasePress(toBaseDens(d) * bottomMD_ft * c).toFixed(1); }
-    else if (type === 'obg_press') { let p = parseFloat(row.cells[9].textContent); if(!isNaN(p)) row.cells[8].textContent = fromBaseDens(toBasePress(p) / (bottomMD_ft * c)).toFixed(3); }
+    let parseCell = (td) => parseFloat(td.textContent.replace(/,/g,''));
+
+    if (type === 'pp_dens') { let d = parseCell(row.cells[4]); if(!isNaN(d)) row.cells[5].textContent = fromBasePress(toBaseDens(d) * bottomMD_ft * c).toFixed(1); else row.cells[5].textContent = "";}
+    else if (type === 'pp_press') { let p = parseCell(row.cells[5]); if(!isNaN(p)) row.cells[4].textContent = fromBaseDens(toBasePress(p) / (bottomMD_ft * c)).toFixed(3); else row.cells[4].textContent = ""; }
+    else if (type === 'fp_dens') { let d = parseCell(row.cells[6]); if(!isNaN(d)) row.cells[7].textContent = fromBasePress(toBaseDens(d) * bottomMD_ft * c).toFixed(1); else row.cells[7].textContent = ""; }
+    else if (type === 'fp_press') { let p = parseCell(row.cells[7]); if(!isNaN(p)) row.cells[6].textContent = fromBaseDens(toBasePress(p) / (bottomMD_ft * c)).toFixed(3); else row.cells[6].textContent = ""; }
+    else if (type === 'obg_dens') { let d = parseCell(row.cells[8]); if(!isNaN(d)) row.cells[9].textContent = fromBasePress(toBaseDens(d) * bottomMD_ft * c).toFixed(1); else row.cells[9].textContent = ""; }
+    else if (type === 'obg_press') { let p = parseCell(row.cells[9]); if(!isNaN(p)) row.cells[8].textContent = fromBaseDens(toBasePress(p) / (bottomMD_ft * c)).toFixed(3); else row.cells[8].textContent = ""; }
     if(!skipChart) debouncedUpdateSubsurfaceChart();
 }
 function applyGeothermal(skipChart=false) {
@@ -669,7 +714,7 @@ function applyGeothermal(skipChart=false) {
     for (let i = 0; i < rows.length; i++) {
         let tempCell = rows[i].cells[10];
         if (useGrad) {
-            tempCell.contentEditable = "false"; let depth_user = parseFloat(rows[i].cells[col].textContent) || 0; let baseTemp_user = parseFloat(document.getElementById("surface_temp").value) || 80;
+            tempCell.contentEditable = "false"; let depth_user = parseFloat(rows[i].cells[col].textContent.replace(/,/g,'')) || 0; let baseTemp_user = parseFloat(document.getElementById("surface_temp").value) || 80;
             tempCell.textContent = (baseTemp_user + (depth_user / 100) * grad_user).toFixed(1);
         } else { tempCell.contentEditable = "true"; }
     }
@@ -678,10 +723,11 @@ function applyGeothermal(skipChart=false) {
 function debouncedUpdateSubsurfaceChart() { clearTimeout(chartDebounceTimer); chartDebounceTimer = setTimeout(updateSubsurfaceChart, 400); }
 function getPPFGProfile() {
     let rows = document.getElementById("ppfgBody").rows; let col = getCalcDepthCol(); let data = { top: [], bottom: [], pp: [], fp: [], obg: [], temp: [] };
+    let parseCell = (td) => parseFloat(td.textContent.replace(/,/g,''));
     for (let i = 0; i < rows.length; i++) {
         let r = rows[i].cells;
-        data.top.push(parseFloat(r[0].textContent) || 0); data.bottom.push(parseFloat(r[col].textContent) || 0); 
-        data.pp.push(parseFloat(r[4].textContent)); data.fp.push(parseFloat(r[6].textContent)); data.obg.push(parseFloat(r[8].textContent)); data.temp.push(parseFloat(r[10].textContent));
+        data.top.push(parseCell(r[0]) || 0); data.bottom.push(parseCell(r[col]) || 0); 
+        data.pp.push(parseCell(r[4])); data.fp.push(parseCell(r[6])); data.obg.push(parseCell(r[8])); data.temp.push(parseCell(r[10]));
     }
     return data;
 }
@@ -698,7 +744,7 @@ function updateSubsurfaceChart() {
 }
 function drawSubsurfaceChartDirect(ppData, fpData, obgData, tempData) {
     const ctx = document.getElementById("subsurfaceChart"); if (!ctx) return; if (subChartInstance) subChartInstance.destroy();
-    subChartInstance = new Chart(ctx,{ type: "scatter", data: { datasets: [ {label: `Pore Press`, data: ppData, showLine: true, borderColor: "#777", borderDash: [5,5], pointRadius: 0, xAxisID: 'x'}, {label: `Frac Press`, data: fpData, showLine: true, borderColor: "#b45309", borderDash: [5,5], pointRadius: 0, xAxisID: 'x'}, {label: `Overburden`, data: obgData, showLine: true, borderColor: "#000", pointRadius: 0, xAxisID: 'x'}, {label: `Temp`, data: tempData, showLine: true, borderColor: "#eab308", backgroundColor: "#eab308", xAxisID: 'x2'} ] }, options: { animation: false, maintainAspectRatio: false, scales: { x: { title: {display: true, text: `Density (${currentUnits.density})`}, position: 'bottom' }, x2: { title: {display: true, text: `Temp (°${currentUnits.temp})`}, position: 'top', grid: {drawOnChartArea: false} }, y: { reverse: true, title: {display: true, text: `Depth (${currentUnits.length})`} } } } });
+    subChartInstance = new Chart(ctx,{ type: "scatter", data: { datasets: [ {label: `Pore Press`, data: ppData, showLine: true, borderColor: "#777", borderDash: [5,5], pointRadius: 0, xAxisID: 'x', normalized: true}, {label: `Frac Press`, data: fpData, showLine: true, borderColor: "#b45309", borderDash: [5,5], pointRadius: 0, xAxisID: 'x', normalized: true}, {label: `Overburden`, data: obgData, showLine: true, borderColor: "#000", pointRadius: 0, xAxisID: 'x', normalized: true}, {label: `Temp`, data: tempData, showLine: true, borderColor: "#eab308", backgroundColor: "#eab308", xAxisID: 'x2', normalized: true} ] }, options: { animation: false, maintainAspectRatio: false, scales: { x: { title: {display: true, text: `Density (${currentUnits.density})`}, position: 'bottom' }, x2: { title: {display: true, text: `Temp (°${currentUnits.temp})`}, position: 'top', grid: {drawOnChartArea: false} }, y: { reverse: true, title: {display: true, text: `Depth (${currentUnits.length})`} } } } });
 }
 
 // ================= SCHEMATICS & VISUALIZATION =================
@@ -742,18 +788,18 @@ function drawWellCanvas(canvasId, yMinBase, yMaxBase, drawString=false) {
             ctx.fillStyle = "#f4f7f6"; ctx.fillRect(idX, y1, idW, secH);
         }
         
-        ctx.fillStyle = "#555"; ctx.font = "bold 11px sans-serif"; ctx.textAlign = "right";
+        ctx.fillStyle = "#555"; ctx.font = "bold 11px sans-serif"; ctx.textAlign = "left";
         let isShoe = sec.type !== "open hole" && (idx === sections.length - 1 || sections[idx+1].type === "open hole");
         let isTD = idx === sections.length - 1;
-        let textX = centerX - (secW / 2) - 5; let textY = y2 + 4; if (textY > h - 2) textY = y2 - 4; 
+        let textX = centerX + (secW / 2) + 10; let textY = y2 + 4; if (textY > h - 2) textY = y2 - 4; 
 
         if (isShoe && sec.bottom <= yMaxBase && sec.bottom >= yMinBase) {
             ctx.fillText(`${fromBaseLength(sec.bottom).toFixed(0)} (Shoe)`, textX, textY);
-            ctx.beginPath(); ctx.moveTo(textX + 2, y2); ctx.lineTo(x, y2); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(centerX + (secW/2) + 2, y2); ctx.lineTo(textX - 2, y2); ctx.stroke();
         }
         if (isTD && sec.type === "open hole" && sec.bottom <= yMaxBase && sec.bottom >= yMinBase) {
             ctx.fillText(`${fromBaseLength(sec.bottom).toFixed(0)} (TD)`, textX, textY);
-            ctx.beginPath(); ctx.moveTo(textX + 2, y2); ctx.lineTo(x, y2); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(centerX + (secW/2) + 2, y2); ctx.lineTo(textX - 2, y2); ctx.stroke();
         }
     });
 
@@ -816,6 +862,7 @@ function updateSchematics() {
         }
     }
 }
+
 
 // ================= SIMULATION LOGIC =================
 function buildPayload(){
@@ -915,11 +962,11 @@ function replotChart(){
         type:"scatter",
         data:{
             datasets:[
-                {label:`ECD`, data:ecdData, showLine:true, borderColor: "#ef4444", backgroundColor: "#ef4444", pointRadius: 1},
-                {label:`ESD`, data:esdData, showLine:true, borderColor: "#3b82f6", backgroundColor: "#3b82f6", pointRadius: 1},
-                {label:`Pore Press`, data:ppData, showLine:true, borderColor: "#737373", borderDash: [5,5], pointRadius: 0},
-                {label:`Frac Press`, data:fpData, showLine:true, borderColor: "#b45309", borderDash: [5,5], pointRadius: 0},
-                {label:`Overburden`, data:obgData, showLine:true, borderColor: "#000", pointRadius: 0}
+                {label:`ECD`, data:ecdData, showLine:true, borderColor: "#ef4444", backgroundColor: "#ef4444", pointRadius: 1, normalized: true},
+                {label:`ESD`, data:esdData, showLine:true, borderColor: "#3b82f6", backgroundColor: "#3b82f6", pointRadius: 1, normalized: true},
+                {label:`Pore Press`, data:ppData, showLine:true, borderColor: "#737373", borderDash: [5,5], pointRadius: 0, normalized: true},
+                {label:`Frac Press`, data:fpData, showLine:true, borderColor: "#b45309", borderDash: [5,5], pointRadius: 0, normalized: true},
+                {label:`Overburden`, data:obgData, showLine:true, borderColor: "#000", pointRadius: 0, normalized: true}
             ]
         },
         options:{
