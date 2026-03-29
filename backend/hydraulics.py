@@ -1,16 +1,17 @@
-from flask import Flask, request, jsonify, send_from_directory
 import math
-import os
-
-app = Flask(__name__, static_folder='static')
-
-@app.route('/')
-def index():
-    return send_from_directory(app.static_folder, 'index.html')
 
 # Import your custom modules
 from trajectory import build_trajectory
 from rheology import hb_fit
+
+# -----------------------------
+# HELPER: Data Extractor
+# -----------------------------
+def get_val(obj, key, default=None):
+    """Safely extracts data whether FastAPI passes a Pydantic object or a dictionary"""
+    if isinstance(obj, dict):
+        return obj.get(key, default)
+    return getattr(obj, key, default)
 
 # -----------------------------
 # GEOMETRY
@@ -25,8 +26,8 @@ def build_bha_profile(bha_list, depth):
     profile = []
     current_bottom = depth
     for comp in reversed(bha_list):
-        comp_len = float(comp.get("length", 0)) if isinstance(comp, dict) else float(comp.length)
-        comp_od = float(comp.get("od", 5.0)) if isinstance(comp, dict) else float(comp.od)
+        comp_len = float(get_val(comp, "length", 0))
+        comp_od = float(get_val(comp, "od", 5.0))
         top = max(current_bottom - comp_len, 0)
         profile.append({"top": top, "bottom": current_bottom, "od": comp_od})
         current_bottom = top
@@ -40,16 +41,18 @@ def get_pipe_od(profile, md):
 
 def get_annulus_id(sections, md):
     for sec in sections:
-        sec_top = float(sec.get("top_md", 0)) if isinstance(sec, dict) else float(sec.top_md)
-        sec_bot = float(sec.get("end_md", 0)) if isinstance(sec, dict) else float(sec.end_md)
-        sec_type = sec.get("type", "").lower() if isinstance(sec, dict) else sec.type.lower()
+        sec_top = float(get_val(sec, 'top_md', 0))
+        sec_bot = float(get_val(sec, 'end_md', 0))
+        sec_type = str(get_val(sec, 'type', '')).lower()
         if sec_top <= md <= sec_bot:
             if sec_type == "open hole":
-                return float(sec.get("hole_d", 8.5) if isinstance(sec, dict) else sec.hole_d)
+                return float(get_val(sec, 'hole_d', 8.5))
             else:
-                return float(sec.get("casing_id", 8.5) if isinstance(sec, dict) else sec.casing_id)
-    last_sec = sections[-1] if sections else {}
-    return float(last_sec.get("hole_d", 8.5) if isinstance(last_sec, dict) else 8.5)
+                return float(get_val(sec, 'casing_id', 8.5))
+    if sections:
+        last_sec = sections[-1]
+        return float(get_val(last_sec, 'hole_d', 8.5))
+    return 8.5
 
 def get_tvd(trajectory_profile, md):
     if not trajectory_profile:
@@ -94,8 +97,9 @@ def run_pass(Q, sbp, total_depth, md_points, data, mw, tau_y, K, n, traj_profile
     
     # 1. Friction Pass
     dp_segments = []
+    well_sections = get_val(data, 'well_sections', [])
     for md in md_points:
-        Do = get_annulus_id(data.get('well_sections', []), md)
+        Do = get_annulus_id(well_sections, md)
         Di = get_pipe_od(bha_profile, md)
         actual_step = md if len(depths) == 0 else md - depths[-1]
         dp = calculate_annular_pressure_loss(mw, Q, Do, Di, tau_y, K, n, actual_step)
@@ -129,33 +133,40 @@ def run_pass(Q, sbp, total_depth, md_points, data, mw, tau_y, K, n, traj_profile
     return depths, ecd_prof, esd_prof, temp_prof, total_ann_loss
 
 # -----------------------------
-# MAIN SIMULATION API
+# MAIN SIMULATION EXPORT
 # -----------------------------
-@app.route('/simulate', methods=['POST'])
-def run_simulation():
+def run_simulation(data):
     try:
-        data = request.json
-        Q = float(data.get('flowrate', 400))
-        total_depth = max(float(data.get('depth', 10000)), 100)
+        Q = float(get_val(data, 'flowrate', 400))
+        total_depth = max(float(get_val(data, 'depth', 10000)), 100)
         
-        fluid = data.get('fluid', {})
-        mw = float(fluid.get('mw', 10))
-        tau_y, K, n = hb_fit([float(fluid.get(f'fann_{x}', 0)) for x in [600, 300, 200, 100, 6, 3]])
+        fluid = get_val(data, 'fluid', {})
+        mw = float(get_val(fluid, 'mw', 10))
+        
+        fann_vals = [
+            float(get_val(fluid, 'fann_600', 60)),
+            float(get_val(fluid, 'fann_300', 40)),
+            float(get_val(fluid, 'fann_200', 30)),
+            float(get_val(fluid, 'fann_100', 20)),
+            float(get_val(fluid, 'fann_6', 10)),
+            float(get_val(fluid, 'fann_3', 5))
+        ]
+        tau_y, K, n = hb_fit(fann_vals)
         n = max(min(n, 1.0), 0.1)
         K = max(K, 0.0001)
         
-        temp_data = data.get('temperature', {})
-        t_surf = float(temp_data.get('surface_temp', 80))
-        beta = float(temp_data.get('beta', 0.0003))
-        geo_grad = float(temp_data.get('geothermal_grad', 1.5)) / 100.0
+        temp_data = get_val(data, 'temperature', {})
+        t_surf = float(get_val(temp_data, 'surface_temp', 80))
+        beta = float(get_val(temp_data, 'beta', 0.0003))
+        geo_grad = float(get_val(temp_data, 'geothermal_grad', 1.5)) / 100.0
         
         t_rock_td = t_surf + (geo_grad * total_depth)
         cooling_factor = 0.85 if Q > 100 else 0.95
         t_bhct = t_surf + ((t_rock_td - t_surf) * cooling_factor)
         friction_heat_factor = 0.061 / max(mw, 1.0)
         
-        traj_profile = build_trajectory(data.get('trajectory', []))
-        bha_profile = build_bha_profile(data.get('bha', []), total_depth)
+        traj_profile = build_trajectory(get_val(data, 'trajectory', []))
+        bha_profile = build_bha_profile(get_val(data, 'bha', []), total_depth)
 
         step = max(int(total_depth / 100), 50)
         md_points = list(range(step, int(total_depth) + step, step))
@@ -164,8 +175,8 @@ def run_simulation():
         # -----------------------------
         # PROPRIETARY TWO-PASS SOLVER
         # -----------------------------
-        main_mode = data.get('main_mode', 'conventional')
-        mpd_mode = data.get('mpd_mode', 'sbp')
+        main_mode = get_val(data, 'main_mode', 'conventional')
+        mpd_mode = get_val(data, 'mpd_mode', 'sbp')
         applied_sbp = 0.0
         target_warning = None
 
@@ -173,30 +184,28 @@ def run_simulation():
             # PASS 1: Simulate at 0 SBP to find friction
             depths, ecd0, esd0, tmp0, loss0 = run_pass(Q, 0.0, total_depth, md_points, data, mw, tau_y, K, n, traj_profile, bha_profile, t_surf, t_bhct, t_rock_td, friction_heat_factor, beta, geo_grad)
             
-            # Find Anchor Depth
-            anchor_type = data.get('anchor_type', 'bh')
+            anchor_type = get_val(data, 'anchor_type', 'bh')
             if anchor_type == 'shoe':
-                secs = data.get('well_sections', [])
-                anchor_depth = next((float(s['top_md']) for s in secs if s['type'].lower() == 'open hole'), total_depth)
+                secs = get_val(data, 'well_sections', [])
+                def get_type(s): return get_val(s, 'type', '').lower()
+                def get_top(s): return float(get_val(s, 'top_md', total_depth))
+                anchor_depth = next((get_top(s) for s in secs if get_type(s) == 'open hole'), total_depth)
             elif anchor_type == 'fixed':
-                anchor_depth = float(data.get('anchor_fixed_val', 5000))
+                anchor_depth = float(get_val(data, 'anchor_fixed_val', 5000))
             else:
                 anchor_depth = total_depth
                 
-            # Interpolate ECD at Anchor
             idx = next((i for i, d in enumerate(depths) if d >= anchor_depth), -1)
             base_ecd = ecd0[idx] if idx != -1 else ecd0[-1]
             
-            # Calculate required SBP
-            target_type = data.get('target_type', 'density')
-            target_val = float(data.get('target_val', 12.0))
+            target_type = get_val(data, 'target_type', 'density')
+            target_val = float(get_val(data, 'target_val', 12.0))
             targ_press = (target_val * anchor_depth * 0.051948) if target_type == 'density' else target_val
             base_press = base_ecd * anchor_depth * 0.051948
             req_sbp = targ_press - base_press
             
-            # Apply Limits
-            min_sbp = float(data.get('min_sbp', 0))
-            max_sbp = float(data.get('max_sbp', 2000))
+            min_sbp = float(get_val(data, 'min_sbp', 0))
+            max_sbp = float(get_val(data, 'max_sbp', 2000))
             
             if req_sbp < min_sbp:
                 applied_sbp = min_sbp
@@ -207,7 +216,7 @@ def run_simulation():
             else:
                 applied_sbp = req_sbp
         elif main_mode == 'mpd' and mpd_mode == 'sbp':
-            applied_sbp = float(data.get('sbp', 0.0))
+            applied_sbp = float(get_val(data, 'sbp', 0.0))
 
         # PASS 2: Final Run
         depths, ecd_prof, esd_prof, temp_prof, total_loss = run_pass(Q, applied_sbp, total_depth, md_points, data, mw, tau_y, K, n, traj_profile, bha_profile, t_surf, t_bhct, t_rock_td, friction_heat_factor, beta, geo_grad)
@@ -215,7 +224,7 @@ def run_simulation():
         # -----------------------------
         # STANDPIPE PRESSURE CALC
         # -----------------------------
-        bit_tfa = float(data.get('bit_tfa', 1.0))
+        bit_tfa = float(get_val(data, 'bit_tfa', 1.0))
         p_bit = (mw * Q**2) / (10858 * bit_tfa**2) if Q > 0 else 0
         p_pipe = total_loss * 2.5 # Internal friction est
         spp = p_bit + total_loss + p_pipe
@@ -223,8 +232,8 @@ def run_simulation():
         # -----------------------------
         # ZERO FLOW THERMAL CALC
         # -----------------------------
-        zf_mode = data.get('zero_flow_mode', 'immediate')
-        zf_time = float(data.get('zero_flow_time', 12)) if zf_mode == 'insitu' else 0
+        zf_mode = get_val(data, 'zero_flow_mode', 'immediate')
+        zf_time = float(get_val(data, 'zero_flow_time', 12)) if zf_mode == 'insitu' else 0
         thermal_factor = 1 - math.exp(-zf_time / 10.0)
         
         cbhp_dyn = ecd_prof[-1] * 0.051948 * total_depth
@@ -247,7 +256,7 @@ def run_simulation():
                 hydro = rho_t * 0.051948 * md
                 zf_emw_prof.append(round((zf_req_sbp + hydro) / (0.051948 * md), 3))
 
-        return jsonify({
+        return {
             "summary": {
                 "ecd_bottom": ecd_prof[-1] if ecd_prof else mw,
                 "esd_bottom": esd_prof[-1] if esd_prof else mw,
@@ -265,12 +274,8 @@ def run_simulation():
                 "zf_emw": zf_emw_prof,
                 "t_geo": t_geo_prof
             }
-        })
+        }
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
-
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=True)
+        return {"error": str(e)}
