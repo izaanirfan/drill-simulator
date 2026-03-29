@@ -28,6 +28,7 @@
         /* 3-Chart Grid System */
         .charts-wrapper { flex-grow: 1; display: flex; gap: 5px; position: relative; background: #fff; border: 1px solid #ccc; padding: 10px; min-height: 600px; overflow: hidden;}
         .chart-col { flex: 1; position: relative; }
+        .chart-box { flex-grow: 1; background: #fff; border: 1px solid #ccc; padding: 10px; min-height: 400px; position: relative; overflow: hidden; }
         
         .controls-row { display: flex; gap: 15px; align-items: flex-start; background: #f9f9f9; padding: 15px; border: 1px solid #ddd; border-radius: 5px; flex-wrap: wrap; }
         
@@ -100,7 +101,6 @@
 </div>
 
 <div id="simulation" class="tab active">
-    
     <div class="controls-row">
         <div><label>Flowrate (<span class="lbl-flow">gpm</span>):</label><br><input id="flowrate" class="val-flow" value="400" onkeyup="triggerWellDesignChange()"></div>
         <div><label>Depth (<span class="lbl-length">ft</span>):</label><br><input id="depth" class="val-length" value="10000" onkeyup="triggerWellDesignChange()"></div>
@@ -186,10 +186,7 @@
         </div>
     </div>
 
-    <div id="result" class="results-bar">
-        <span style="color: #64748b;">Ready to run simulation...</span>
-    </div>
-    
+    <div id="result" class="results-bar"><span style="color: #64748b;">Ready to run simulation...</span></div>
     <div id="targetWarning" class="warning-bar"></div>
     
     <div class="dash-panel">
@@ -413,7 +410,7 @@
             </table>
             <button onclick="addSubsurfaceRow()">Add Row</button>
         </div>
-        <div style="display: none;"><canvas id="subsurfaceChart"></canvas></div>
+        <div class="chart-box" style="flex: 1; min-width: 400px; min-height: 400px;"><canvas id="subsurfaceChart"></canvas></div>
     </div>
 </div>
 
@@ -421,6 +418,7 @@
 let chartDensityInstance = null;
 let chartPressureInstance = null;
 let chartTempInstance = null;
+let subChartInstance = null;
 let lastSimResult = null; 
 let chartDebounceTimer = null;
 let wellChangeTimer = null;
@@ -493,7 +491,7 @@ function drawRheologyChart() {
         type: 'scatter',
         data: {
             datasets: [{
-                label: 'Shear Stress (lbf/100ft²) vs Shear Rate (1/s)',
+                label: 'Shear Stress vs Shear Rate',
                 data: dataPoints,
                 borderColor: '#0284c7',
                 backgroundColor: '#0284c7',
@@ -603,11 +601,7 @@ function updateDashboard(spp, sbp, anchorDep, anchorPress, anchorEcd, modeType, 
     let titleAnchor = document.getElementById("dashAnchorTitle");
 
     if (modeType === "dh") {
-        if(badge){
-            if (anchorSelect === 'bh') badge.innerText = "BH";
-            else if (anchorSelect === 'shoe') badge.innerText = "SHOE";
-            else badge.innerText = anchorDep.toFixed(0) + " " + currentUnits.length;
-        }
+        if(badge) badge.innerText = anchorSelect === 'bh' ? "BH" : (anchorSelect === 'shoe' ? "SHOE" : anchorDep.toFixed(0) + " " + currentUnits.length);
         if(cardAnchor) cardAnchor.classList.add("active-anchor");
         if(titleAnchor) titleAnchor.classList.add("active-anchor");
     } else {
@@ -623,7 +617,11 @@ function parseSafe(val) {
     let parsed = parseFloat(String(val).replace(/,/g, ''));
     return isNaN(parsed) ? null : parsed;
 }
-function getCalcDepthCol() { return document.getElementById("calcDepthType").value === "md" ? 1 : document.getElementById("calcDepthType").value === "tvddf" ? 2 : 3; }
+
+function getCalcDepthCol() { 
+    return document.getElementById("calcDepthType").value === "md" ? 1 : document.getElementById("calcDepthType").value === "tvddf" ? 2 : 3; 
+}
+
 function highlightActiveDepth() {
     let colIndex = getCalcDepthCol(); let table = document.getElementById("ppfgTable");
     table.classList.remove("active-col-1", "active-col-2", "active-col-3"); table.classList.add("active-col-" + colIndex);
@@ -635,7 +633,7 @@ function handleTableKeyup(e) {
     else if (cellIndex === 4) calcPPFG(td, 'pp_dens'); else if (cellIndex === 5) calcPPFG(td, 'pp_press');
     else if (cellIndex === 6) calcPPFG(td, 'fp_dens'); else if (cellIndex === 7) calcPPFG(td, 'fp_press');
     else if (cellIndex === 8) calcPPFG(td, 'obg_dens'); else if (cellIndex === 9) calcPPFG(td, 'obg_press');
-    else if (cellIndex === 10) { clearTimeout(chartDebounceTimer); chartDebounceTimer = setTimeout(replotChart, 400); }
+    else if (cellIndex === 10) { clearTimeout(chartDebounceTimer); chartDebounceTimer = setTimeout(updateSubsurfaceChart, 400); }
 }
 
 function switchCalcDepth() {
@@ -645,7 +643,7 @@ function switchCalcDepth() {
         let botDepth = parseFloat(row.cells[col].textContent); if (!isNaN(botDepth)) prevDepth = botDepth;
         calcPPFG(row.cells[4], 'pp_dens', true); calcPPFG(row.cells[6], 'fp_dens', true); calcPPFG(row.cells[8], 'obg_dens', true);
     }
-    applyGeothermal(true); clearTimeout(chartDebounceTimer); chartDebounceTimer = setTimeout(replotChart, 400);
+    applyGeothermal(true); clearTimeout(chartDebounceTimer); chartDebounceTimer = setTimeout(updateSubsurfaceChart, 400);
 }
 
 function showTab(tab, btn) {
@@ -655,6 +653,7 @@ function showTab(tab, btn) {
     btn.classList.add("active-nav");
     updateSchematics();
     if(tab === 'mud') updateMudProperties();
+    if(tab === 'subsurface') updateSubsurfaceChart();
     if(tab === 'simulation') { toggleScooter(); }
 }
 
@@ -915,7 +914,6 @@ function handleFileUpload(event) {
 
                 const c = 0.051948; let prevDepth = 0;
                 let useGrad = document.getElementById("use_geo_grad").checked; let grad_user = parseFloat(document.getElementById("geo_grad").value) || 0; let baseTemp_user = parseFloat(document.getElementById("surface_temp").value) || 80;
-                let ppData = [], fpData = [], obgData = [], tempData = [];
 
                 parsedRows.forEach(r => {
                     let activeBot = r[activeType] !== null ? r[activeType] : 0;
@@ -944,7 +942,7 @@ function handleFileUpload(event) {
                 });
 
                 document.getElementById("ppfgBody").innerHTML = htmlString; highlightActiveDepth(); 
-                clearTimeout(chartDebounceTimer); chartDebounceTimer = setTimeout(replotChart, 400);
+                clearTimeout(chartDebounceTimer); chartDebounceTimer = setTimeout(updateSubsurfaceChart, 400);
                 document.getElementById("excelUpload").value = ""; 
             } catch (err) { console.error(err); alert("Error processing Subsurface file: " + err.message); document.getElementById("ppfgBody").innerHTML = ""; }
         }, 100); 
@@ -990,53 +988,27 @@ function changeUnit(category, selectElement) {
 
     document.querySelectorAll(`.lbl-${category}`).forEach(el => el.textContent = category === "temp" ? "°" + newUnit : newUnit);
     currentUnits[category] = newUnit;
-    if (lastSimResult) replotChart(); updateSchematics();
+    if (lastSimResult) replotChart(); updateSchematics(); updateSubsurfaceChart();
 }
 function toBaseLength(v) { return converters.length.toBase(v, currentUnits.length); } function toBaseDiam(v)   { return converters.diam.toBase(v, currentUnits.diam); }
 function toBaseDens(v)   { return converters.density.toBase(v, currentUnits.density); } function toBasePress(v)  { return converters.press.toBase(v, currentUnits.press); }
 function fromBaseLength(v) { return converters.length.fromBase(v, currentUnits.length); } function fromBaseDens(v)   { return converters.density.fromBase(v, currentUnits.density); } function fromBasePress(v)  { return converters.press.fromBase(v, currentUnits.press); }
 
-// SUBSURFACE CALCS
-function triggerPPFGCalc(depthCell) {
-    let tbody = document.getElementById("ppfgBody"); let col = getCalcDepthCol(); let prevDepth = 0;
-    for(let i=0; i<tbody.rows.length; i++) { tbody.rows[i].cells[0].textContent = prevDepth.toFixed(0); let botDepth = parseFloat(tbody.rows[i].cells[col].textContent); if(!isNaN(botDepth)) prevDepth = botDepth; }
-    let row = depthCell.closest("tr"); calcPPFG(row.cells[4], 'pp_dens', true); calcPPFG(row.cells[6], 'fp_dens', true); calcPPFG(row.cells[8], 'obg_dens', true);
-    applyGeothermal(true); clearTimeout(chartDebounceTimer); chartDebounceTimer = setTimeout(replotChart, 400);
-}
-function calcPPFG(inputCell, type, skipChart=false) {
-    let row = inputCell.closest("tr"); let col = getCalcDepthCol(); let bottomMD_ft = toBaseLength(parseFloat(row.cells[col].textContent.replace(/,/g,'')) || 0);
-    if (bottomMD_ft <= 0) return; let c = 0.051948;
-    let parseCell = (td) => parseFloat(td.textContent.replace(/,/g,''));
-
-    if (type === 'pp_dens') { let d = parseCell(row.cells[4]); if(!isNaN(d)) row.cells[5].textContent = fromBasePress(toBaseDens(d) * bottomMD_ft * c).toFixed(1); else row.cells[5].textContent = "";}
-    else if (type === 'pp_press') { let p = parseCell(row.cells[5]); if(!isNaN(p)) row.cells[4].textContent = fromBaseDens(toBasePress(p) / (bottomMD_ft * c)).toFixed(3); else row.cells[4].textContent = ""; }
-    else if (type === 'fp_dens') { let d = parseCell(row.cells[6]); if(!isNaN(d)) row.cells[7].textContent = fromBasePress(toBaseDens(d) * bottomMD_ft * c).toFixed(1); else row.cells[7].textContent = ""; }
-    else if (type === 'fp_press') { let p = parseCell(row.cells[7]); if(!isNaN(p)) row.cells[6].textContent = fromBaseDens(toBasePress(p) / (bottomMD_ft * c)).toFixed(3); else row.cells[6].textContent = ""; }
-    else if (type === 'obg_dens') { let d = parseCell(row.cells[8]); if(!isNaN(d)) row.cells[9].textContent = fromBasePress(toBaseDens(d) * bottomMD_ft * c).toFixed(1); else row.cells[9].textContent = ""; }
-    else if (type === 'obg_press') { let p = parseCell(row.cells[9]); if(!isNaN(p)) row.cells[8].textContent = fromBaseDens(toBasePress(p) / (bottomMD_ft * c)).toFixed(3); else row.cells[8].textContent = ""; }
-    if(!skipChart) { clearTimeout(chartDebounceTimer); chartDebounceTimer = setTimeout(replotChart, 400); }
-}
-function applyGeothermal(skipChart=false) {
-    let useGrad = document.getElementById("use_geo_grad").checked; document.getElementById("grad_inputs").style.display = useGrad ? "inline-block" : "none";
-    let rows = document.getElementById("ppfgBody").rows; let grad_user = parseFloat(document.getElementById("geo_grad").value) || 0; let col = getCalcDepthCol();
-    for (let i = 0; i < rows.length; i++) {
-        let tempCell = rows[i].cells[10];
-        if (useGrad) {
-            tempCell.contentEditable = "false"; let depth_user = parseFloat(rows[i].cells[col].textContent.replace(/,/g,'')) || 0; let baseTemp_user = parseFloat(document.getElementById("surface_temp").value) || 80;
-            tempCell.textContent = (baseTemp_user + (depth_user / 100) * grad_user).toFixed(1);
-        } else { tempCell.contentEditable = "true"; }
+// SUBSURFACE CHARTING (RESTORED)
+function updateSubsurfaceChart() {
+    let profile = getPPFGProfile(); let ppData = [], fpData = [], obgData = [], tempData = [];
+    for (let i = 0; i < profile.bottom.length; i++) {
+        if(!isNaN(profile.pp[i])) { ppData.push({x: profile.pp[i], y: profile.top[i]}); ppData.push({x: profile.pp[i], y: profile.bottom[i]}); }
+        if(!isNaN(profile.fp[i])) { fpData.push({x: profile.fp[i], y: profile.top[i]}); fpData.push({x: profile.fp[i], y: profile.bottom[i]}); }
+        if(!isNaN(profile.obg[i])) { obgData.push({x: profile.obg[i], y: profile.top[i]}); obgData.push({x: profile.obg[i], y: profile.bottom[i]}); }
+        if(!isNaN(profile.temp[i])){ tempData.push({x: profile.temp[i], y: profile.bottom[i]}); }
     }
-    if(!skipChart) { clearTimeout(chartDebounceTimer); chartDebounceTimer = setTimeout(replotChart, 400); }
+    let surfTemp = parseFloat(document.getElementById("surface_temp").value) || 80; tempData.unshift({x: surfTemp, y: 0});
+    drawSubsurfaceChartDirect(ppData, fpData, obgData, tempData);
 }
-function getPPFGProfile() {
-    let rows = document.getElementById("ppfgBody").rows; let col = getCalcDepthCol(); let data = { top: [], bottom: [], pp: [], fp: [], obg: [], temp: [] };
-    let parseCell = (td) => parseFloat(td.textContent.replace(/,/g,''));
-    for (let i = 0; i < rows.length; i++) {
-        let r = rows[i].cells;
-        data.top.push(parseCell(r[0]) || 0); data.bottom.push(parseCell(r[col]) || 0); 
-        data.pp.push(parseCell(r[4])); data.fp.push(parseCell(r[6])); data.obg.push(parseCell(r[8])); data.temp.push(parseCell(r[10]));
-    }
-    return data;
+function drawSubsurfaceChartDirect(ppData, fpData, obgData, tempData) {
+    const ctx = document.getElementById("subsurfaceChart"); if (!ctx) return; if (subChartInstance) subChartInstance.destroy();
+    subChartInstance = new Chart(ctx,{ type: "scatter", data: { datasets: [ {label: `Pore Press`, data: ppData, showLine: true, borderColor: "#777", borderDash: [5,5], pointRadius: 0, xAxisID: 'x', normalized: true}, {label: `Frac Press`, data: fpData, showLine: true, borderColor: "#b45309", borderDash: [5,5], pointRadius: 0, xAxisID: 'x', normalized: true}, {label: `Overburden`, data: obgData, showLine: true, borderColor: "#000", pointRadius: 0, xAxisID: 'x', normalized: true}, {label: `Temp`, data: tempData, showLine: true, borderColor: "#eab308", backgroundColor: "#eab308", xAxisID: 'x2', normalized: true} ] }, options: { animation: false, maintainAspectRatio: false, scales: { x: { title: {display: true, text: `Density (${currentUnits.density})`}, position: 'bottom' }, x2: { title: {display: true, text: `Temp (°${currentUnits.temp})`}, position: 'top', grid: {drawOnChartArea: false} }, y: { reverse: true, title: {display: true, text: `Depth (${currentUnits.length})`} } } } });
 }
 
 // SCHEMATICS 
@@ -1529,7 +1501,7 @@ window.onload = function() {
     calcBhaCumLength();
     updateSchematics(); 
     updateMudProperties();
-    debouncedUpdateSubsurfaceChart(); 
+    updateSubsurfaceChart(); 
 };
 </script>
 </body>
