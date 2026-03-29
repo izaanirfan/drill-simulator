@@ -25,7 +25,7 @@
         .dashboard-container { display: flex; gap: 20px; align-items: stretch; margin-top: 15px; width: 100%; }
         .schematic-box { width: 200px; background: #f4f7f6; border: 1px solid #ccc; display: flex; justify-content: center; position: relative; }
         .chart-box { flex-grow: 1; background: #fff; border: 1px solid #ccc; padding: 10px; min-height: 550px; position: relative; overflow: hidden; }
-        .controls-row { display: flex; gap: 15px; align-items: center; background: #f9f9f9; padding: 15px; border: 1px solid #ddd; border-radius: 5px; flex-wrap: wrap; }
+        .controls-row { display: flex; gap: 15px; align-items: flex-start; background: #f9f9f9; padding: 15px; border: 1px solid #ddd; border-radius: 5px; flex-wrap: wrap; }
         
         .upload-box { border: 2px dashed #4CAF50; padding: 15px; text-align: center; background: #f0fdf4; border-radius: 5px; margin-bottom: 15px; max-width: 1200px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
         .upload-box input[type="file"] { display: none; }
@@ -36,10 +36,26 @@
         
         .highlight-col { background-color: #e8f5e9 !important; }
         
-        /* Scooter Box styling */
         #scooterLine { position: absolute; height: 2px; background: #eab308; cursor: ns-resize; display: none; z-index: 10; box-shadow: 0px 0px 5px rgba(0,0,0,0.3); }
         #scooterLine::before { content: "↔"; position: absolute; left: -15px; top: -8px; font-size: 14px; color: #eab308; font-weight: bold; transform: rotate(90deg); }
         #scooterBox { position: absolute; left: 10px; top: -35px; background: rgba(255,255,255,0.95); border: 1px solid #999; padding: 5px 10px; border-radius: 4px; box-shadow: 0px 2px 5px rgba(0,0,0,0.2); display: flex; align-items: center; gap: 10px; cursor: default; pointer-events: auto; }
+        
+        /* Dark Mode Gauges Dashboard */
+        .dash-panel { display: flex; gap: 15px; background: #334155; padding: 15px; border-radius: 8px; margin-top: 15px; align-items: stretch; justify-content: center; }
+        .dash-card { flex: 1; max-width: 300px; background: #1e293b; border: 1px solid #475569; border-radius: 6px; padding: 15px; display: flex; flex-direction: column; align-items: center; position: relative; }
+        .dash-card.active-anchor { border-color: #4ade80; box-shadow: 0 0 10px rgba(74, 222, 128, 0.2); }
+        .dash-title { font-size: 0.8em; font-weight: bold; color: #cbd5e1; text-transform: uppercase; background: #334155; padding: 4px 12px; border-radius: 12px; margin-bottom: 15px; letter-spacing: 1px; }
+        .dash-title.active-anchor { background: #4ade80; color: #064e3b; }
+        
+        .gauge { position: relative; width: 140px; height: 70px; overflow: hidden; margin-bottom: 5px; }
+        .gauge-bg { position: absolute; top: 0; left: 0; width: 140px; height: 140px; border-radius: 50%; border: 15px solid #475569; box-sizing: border-box; }
+        .gauge-fill { position: absolute; top: 0; left: 0; width: 140px; height: 140px; border-radius: 50%; border: 15px solid transparent; border-bottom-color: #f59e0b; border-left-color: #f59e0b; box-sizing: border-box; transform: rotate(45deg); transition: transform 0.8s ease-out; }
+        
+        .dash-val { font-size: 1.8em; font-weight: bold; color: #fff; margin-top: 5px; line-height: 1; }
+        .dash-unit { font-size: 0.8em; color: #94a3b8; }
+        .dash-footer { display: flex; justify-content: space-between; width: 100%; font-size: 0.75em; color: #94a3b8; margin-top: 10px; padding-top: 10px; border-top: 1px solid #475569; }
+        .dash-footer span b { color: #fff; }
+        .badge { position: absolute; top: 15px; right: 15px; font-size: 0.7em; color: #94a3b8; font-weight: bold; }
     </style>
 </head>
 
@@ -70,30 +86,107 @@
 </div>
 
 <div id="simulation" class="tab active">
+    
     <div class="controls-row">
         <div><label>Flowrate (<span class="lbl-flow">gpm</span>):</label><br><input id="flowrate" class="val-flow" value="400"></div>
         <div><label>Depth (<span class="lbl-length">ft</span>):</label><br><input id="depth" class="val-length" value="10000" onkeyup="triggerWellDesignChange()"></div>
-        <div><label>Surface SBP (<span class="lbl-press">psi</span>):</label><br><input id="sbp" class="val-press" value="0"></div>
         <div><label>Surface Temp (<span class="lbl-temp">°F</span>):</label><br><input id="surface_temp" class="val-temp" value="80" onchange="applyGeothermal()"></div>
-        <div>
+        <div><label>Bit TFA (in²):</label><br><input id="bit_tfa" value="0.994" style="width: 55px;"></div>
+        
+        <div style="border-left: 2px solid #ddd; padding-left: 15px;">
+            <label>Drilling Mode:</label><br>
+            <select id="mainMode" onchange="toggleMainMode()" style="padding: 4px; font-weight: bold; background: #e2e8f0;">
+                <option value="conventional">Conventional</option>
+                <option value="mpd" selected>MPD</option>
+            </select>
+        </div>
+        
+        <div id="mpdSubModeDiv" style="border-left: 2px solid #ddd; padding-left: 15px;">
+            <label>MPD Control:</label><br>
+            <select id="mpdMode" onchange="toggleMpdMode()" style="padding: 4px; font-weight: bold; color: #1e3a8a;">
+                <option value="sbp" selected>SBP Mode</option>
+                <option value="downhole">Downhole Mode</option>
+            </select>
+        </div>
+        
+        <div id="sbpInputDiv">
+            <label>Surface SBP (<span class="lbl-press">psi</span>):</label><br>
+            <input id="sbp" class="val-press" value="0">
+        </div>
+        
+        <div id="dhAnchorDiv" style="display: none; border-left: 2px solid #ddd; padding-left: 15px;">
+            <label>Anchor Point:</label><br>
+            <select id="anchorType" onchange="toggleAnchorFixed()" style="padding: 4px;">
+                <option value="bh">Bottom Hole (BH)</option>
+                <option value="shoe">Casing Shoe</option>
+                <option value="fixed">Fixed Depth</option>
+            </select>
+        </div>
+        
+        <div id="dhFixedDiv" style="display: none;">
+            <label>Depth (<span class="lbl-length">ft</span>):</label><br>
+            <input id="anchorFixedVal" class="val-length" value="5000">
+        </div>
+
+        <div id="dhTargetDiv" style="display: none;">
+            <label>Target:</label><br>
+            <select id="targetType" style="padding: 4px;" onchange="updateTargetLabel()">
+                <option value="density">Density</option>
+                <option value="press">Pressure</option>
+            </select>
+            <input id="targetVal" value="12.0" style="width: 55px;"> <span id="targetLbl" class="lbl-density" style="font-size: 0.85em; font-weight: bold;">ppg</span>
+        </div>
+
+        <div style="border-left: 2px solid #ddd; padding-left: 15px;">
             <label>Chart Depth Scale:</label><br>
             <select id="chartScale" onchange="replotChart()" style="padding: 4px; font-weight: bold;">
                 <option value="adjustable" selected>Adjustable (Focus Open Hole)</option>
                 <option value="auto">Linear (Surface to TD)</option>
                 <option value="open_hole">Open Hole Only (Shoe to TD)</option>
             </select>
-        </div>
-        <div>
-            <label style="display: flex; align-items: center; gap: 5px; margin-top: 15px; cursor: pointer;">
-                <input type="checkbox" id="showScooter" checked onchange="toggleScooter()"> Show Probe
+            <br>
+            <label style="display: flex; align-items: center; gap: 5px; margin-top: 5px; cursor: pointer; font-size: 0.9em;">
+                <input type="checkbox" id="showScooter" checked onchange="toggleScooter()"> Show Chart Probe
             </label>
         </div>
         <div style="margin-left: auto;">
-            <button onclick="runSimulation()" style="background-color: #4CAF50; color: white; border: none; font-size: 16px;">Run Simulation</button>
+            <button onclick="runSimulation()" style="background-color: #4CAF50; color: white; border: none; font-size: 16px; padding: 12px 20px;">Run Simulation</button>
         </div>
     </div>
 
-    <h4 id="result" style="color: #4CAF50; margin-top: 15px;">Ready to run...</h4>
+    <div class="dash-panel">
+        <div class="dash-card">
+            <div class="dash-title">Standpipe</div>
+            <div class="gauge"><div class="gauge-bg"></div><div class="gauge-fill" id="gaugeSpp"></div></div>
+            <div class="dash-val"><span id="dashSppVal">-</span></div>
+            <div class="dash-unit lbl-press">psi</div>
+            <div class="dash-footer">
+                <span>Ann. Loss: <b id="dashAnnLoss">-</b> <span class="lbl-press">psi</span></span>
+            </div>
+        </div>
+
+        <div class="dash-card" id="cardAnchor">
+            <div class="badge" id="dashAnchorBadge">BH</div>
+            <div class="dash-title" id="dashAnchorTitle">Anchor</div>
+            <div class="gauge"><div class="gauge-bg"></div><div class="gauge-fill" id="gaugeAnchor" style="border-color: #10b981;"></div></div>
+            <div class="dash-val"><span id="dashAnchorPress">-</span></div>
+            <div class="dash-unit lbl-press">psi</div>
+            <div class="dash-footer">
+                <span>ECD: <b id="dashAnchorEcd">-</b> <span class="lbl-density">ppg</span></span>
+                <span>Depth: <b id="dashAnchorDep">-</b> <span class="lbl-length">ft</span></span>
+            </div>
+        </div>
+
+        <div class="dash-card">
+            <div class="dash-title">Choke</div>
+            <div class="gauge"><div class="gauge-bg"></div><div class="gauge-fill" id="gaugeChoke"></div></div>
+            <div class="dash-val"><span id="dashSbpVal">-</span></div>
+            <div class="dash-unit lbl-press">psi</div>
+            <div class="dash-footer">
+                <span id="dashSbpStatus">Mode: <b>Conventional</b></span>
+            </div>
+        </div>
+    </div>
     
     <div class="dashboard-container">
         <div class="schematic-box"><canvas id="wellCanvasSim" width="200" height="550"></canvas></div>
@@ -241,6 +334,105 @@ let chartDebounceTimer = null;
 let wellChangeTimer = null;
 let currentUnits = { length: "ft", diam: "in", density: "ppg", press: "psi", flow: "gpm", temp: "F" };
 
+// ================= UI CONTROLS & DASHBOARD =================
+function toggleMainMode() {
+    let mode = document.getElementById("mainMode").value;
+    if (mode === "conventional") {
+        document.getElementById("mpdSubModeDiv").style.display = "none";
+        document.getElementById("sbpInputDiv").style.display = "none";
+        document.getElementById("dhAnchorDiv").style.display = "none";
+        document.getElementById("dhFixedDiv").style.display = "none";
+        document.getElementById("dhTargetDiv").style.display = "none";
+    } else {
+        document.getElementById("mpdSubModeDiv").style.display = "block";
+        toggleMpdMode();
+    }
+}
+
+function toggleMpdMode() {
+    let mode = document.getElementById("mpdMode").value;
+    if (mode === "sbp") {
+        document.getElementById("sbpInputDiv").style.display = "block";
+        document.getElementById("dhAnchorDiv").style.display = "none";
+        document.getElementById("dhFixedDiv").style.display = "none";
+        document.getElementById("dhTargetDiv").style.display = "none";
+    } else {
+        document.getElementById("sbpInputDiv").style.display = "none";
+        document.getElementById("dhAnchorDiv").style.display = "block";
+        document.getElementById("dhTargetDiv").style.display = "block";
+        toggleAnchorFixed();
+    }
+}
+
+function toggleAnchorFixed() {
+    let anchor = document.getElementById("anchorType").value;
+    document.getElementById("dhFixedDiv").style.display = (anchor === "fixed") ? "block" : "none";
+}
+
+function updateTargetLabel() {
+    let tType = document.getElementById("targetType").value;
+    document.getElementById("targetLbl").innerText = tType === "density" ? currentUnits.density : currentUnits.press;
+    document.getElementById("targetLbl").className = tType === "density" ? "lbl-density" : "lbl-press";
+}
+
+function updateDashboard(spp, sbp, anchorDep, anchorPress, anchorEcd, modeType, annLoss) {
+    // Limits for rotation scaling (can be tweaked)
+    let maxSpp = 6000;
+    let maxSbp = 2000;
+    let maxPress = 10000;
+
+    let rotSpp = Math.min(180, Math.max(0, (spp / maxSpp) * 180));
+    let rotSbp = Math.min(180, Math.max(0, (sbp / maxSbp) * 180));
+    let rotAnch = Math.min(180, Math.max(0, (anchorPress / maxPress) * 180));
+
+    document.getElementById("gaugeSpp").style.transform = `rotate(${45 + rotSpp}deg)`;
+    document.getElementById("gaugeChoke").style.transform = `rotate(${45 + rotSbp}deg)`;
+    document.getElementById("gaugeAnchor").style.transform = `rotate(${45 + rotAnch}deg)`;
+
+    document.getElementById("dashSppVal").innerText = spp.toFixed(0);
+    document.getElementById("dashSbpVal").innerText = sbp.toFixed(0);
+    document.getElementById("dashAnchorPress").innerText = anchorPress.toFixed(0);
+    
+    document.getElementById("dashAnchorEcd").innerText = anchorEcd.toFixed(2);
+    document.getElementById("dashAnchorDep").innerText = anchorDep.toFixed(0);
+    document.getElementById("dashAnnLoss").innerText = annLoss.toFixed(0);
+
+    let modeText = modeType === "conv" ? "Conventional" : (modeType === "sbp" ? "Surface SBP" : "Target Downhole");
+    document.getElementById("dashSbpStatus").innerHTML = `Mode: <b>${modeText}</b>`;
+
+    let anchorMap = { bh: "BH", shoe: "SHOE", fixed: "FIXED" };
+    let anchorSelect = document.getElementById("anchorType").value;
+    document.getElementById("dashAnchorBadge").innerText = modeType === "dh" ? anchorMap[anchorSelect] : "BH";
+
+    let cardAnchor = document.getElementById("cardAnchor");
+    let titleAnchor = document.getElementById("dashAnchorTitle");
+    if (modeType === "dh") {
+        cardAnchor.classList.add("active-anchor");
+        titleAnchor.classList.add("active-anchor");
+    } else {
+        cardAnchor.classList.remove("active-anchor");
+        titleAnchor.classList.remove("active-anchor");
+    }
+}
+
+function interpolateAtDepth(targetDepth, prof) {
+    let ecd = 0, esd = 0;
+    for (let i=0; i<prof.depth.length-1; i++) {
+        if (targetDepth >= prof.depth[i] && targetDepth <= prof.depth[i+1]) {
+            let ratio = (targetDepth - prof.depth[i]) / (prof.depth[i+1] - prof.depth[i]);
+            ecd = prof.ecd[i] + ratio * (prof.ecd[i+1] - prof.ecd[i]);
+            esd = prof.esd[i] + ratio * (prof.esd[i+1] - prof.esd[i]);
+            break;
+        }
+    }
+    if (targetDepth >= prof.depth[prof.depth.length-1]) {
+        ecd = prof.ecd[prof.ecd.length-1];
+        esd = prof.esd[prof.esd.length-1];
+    }
+    return {ecd: ecd, esd: esd};
+}
+
+
 // ================= UTILS & PERFORMANCE DOM EVENT DELEGATION =================
 function parseSafe(val) {
     if (val === undefined || val === null || String(val).trim() === "") return null;
@@ -285,7 +477,6 @@ function switchCalcDepth() {
     applyGeothermal(true); debouncedUpdateSubsurfaceChart();
 }
 
-// ================= UI NAVIGATION & TRIGGERS =================
 function showTab(tab, btn) {
     document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
     document.getElementById(tab).classList.add("active");
@@ -355,10 +546,9 @@ function addBhaRow(){
 }
 function addSubsurfaceRow(top="", md="", tvddf="", tvdss="", pp="", pp_psi="", fp="", fp_psi="", obg="", obg_psi="", temp=""){
     const tbody = document.getElementById("ppfgBody"); const row = tbody.insertRow();
-    let isMD = getCalcDepthCol() === 1 ? 'highlight-col' : ''; let isDF = getCalcDepthCol() === 2 ? 'highlight-col' : ''; let isSS = getCalcDepthCol() === 3 ? 'highlight-col' : '';
-    row.innerHTML = `<td contenteditable="false" class="val-length">${top}</td><td contenteditable class="val-length ${isMD}" onkeyup="triggerPPFGCalc(this)">${md}</td><td contenteditable class="val-length ${isDF}" onkeyup="triggerPPFGCalc(this)">${tvddf}</td><td contenteditable class="val-length ${isSS}" onkeyup="triggerPPFGCalc(this)">${tvdss}</td><td contenteditable class="val-density" onkeyup="calcPPFG(this, 'pp_dens')">${pp}</td><td contenteditable class="val-press" onkeyup="calcPPFG(this, 'pp_press')">${pp_psi}</td><td contenteditable class="val-density" onkeyup="calcPPFG(this, 'fp_dens')">${fp}</td><td contenteditable class="val-press" onkeyup="calcPPFG(this, 'fp_press')">${fp_psi}</td><td contenteditable class="val-density" onkeyup="calcPPFG(this, 'obg_dens')">${obg}</td><td contenteditable class="val-press" onkeyup="calcPPFG(this, 'obg_press')">${obg_psi}</td><td contenteditable class="val-temp" onkeyup="debouncedUpdateSubsurfaceChart()">${temp}</td>`;
-    let prevDepth = 0;
-    for(let i=0; i<tbody.rows.length; i++) { tbody.rows[i].cells[0].textContent = prevDepth.toFixed(0); let botDepth = parseFloat(tbody.rows[i].cells[getCalcDepthCol()].textContent); if(!isNaN(botDepth)) prevDepth = botDepth; }
+    row.innerHTML = `<td contenteditable="false">${top}</td><td contenteditable>${md}</td><td contenteditable>${tvddf}</td><td contenteditable>${tvdss}</td><td contenteditable>${pp}</td><td contenteditable>${pp_psi}</td><td contenteditable>${fp}</td><td contenteditable>${fp_psi}</td><td contenteditable>${obg}</td><td contenteditable>${obg_psi}</td><td contenteditable>${temp}</td>`;
+    let prevDepth = 0; let col = getCalcDepthCol();
+    for(let i=0; i<tbody.rows.length; i++) { tbody.rows[i].cells[0].textContent = prevDepth.toFixed(0); let botDepth = parseFloat(tbody.rows[i].cells[col].textContent); if(!isNaN(botDepth)) prevDepth = botDepth; }
     applyGeothermal(); 
 }
 
@@ -696,7 +886,6 @@ function handleFileUpload(event) {
                 });
                 tempData.unshift({x: baseTemp_user, y: 0});
 
-                let isMD = activeType === 'md' ? 'highlight-col' : ''; let isDF = activeType === 'tvddf' ? 'highlight-col' : ''; let isSS = activeType === 'tvdss' ? 'highlight-col' : '';
                 let htmlString = "";
                 parsedRows.forEach(r => {
                     let mdStr = r.md !== null ? r.md.toFixed(0) : ""; let dfStr = r.tvddf !== null ? r.tvddf.toFixed(0) : ""; let ssStr = r.tvdss !== null ? r.tvdss.toFixed(0) : "";
@@ -963,7 +1152,7 @@ function buildPayload(){
     return {
         flowrate: converters.flow.toBase(Number(document.getElementById("flowrate").value), currentUnits.flow),
         depth: toBaseLength(Number(document.getElementById("depth").value)),
-        sbp: converters.press.toBase(Number(document.getElementById("sbp").value), currentUnits.press),
+        sbp: 0, // Injected down below
         hole_diameter: 8.5, mpd_mode: "SBP", gradient_mode: "static",
         fluid: { mw: converters.density.toBase(Number(document.getElementById("mw").value), currentUnits.density), fann_600: Number(document.getElementById("f600").value), fann_300: Number(document.getElementById("f300").value), fann_200: Number(document.getElementById("f200").value), fann_100: Number(document.getElementById("f100").value), fann_6: Number(document.getElementById("f6").value), fann_3: Number(document.getElementById("f3").value) },
         temperature: { surface_temp: converters.temp.toBase(defaultSurfTemp, currentUnits.temp), bhct: converters.temp.toBase(maxTempUser, currentUnits.temp), geothermal_grad: 1.5, beta: 0.0003 },
@@ -973,20 +1162,118 @@ function buildPayload(){
 }
 
 async function runSimulation(){
-    document.getElementById("result").innerText = "Running Simulation..."; document.getElementById("result").style.color = "#333";
-    try {
-        const response = await fetch("/simulate", { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(buildPayload()) });
-        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-        const result = await response.json();
-        if (result.error) { document.getElementById("result").innerText = "Error: " + result.error; document.getElementById("result").style.color = "red"; return; }
+    let resultBar = document.getElementById("result");
+    resultBar.innerHTML = `<span style="color: #3b82f6;"><b>Running Simulation...</b></span>`;
+    resultBar.style.backgroundColor = "#eff6ff"; resultBar.style.border = "1px solid #bfdbfe";
 
-        lastSimResult = result;
-        let displayEcd = fromBaseDens(result.summary.ecd_bottom).toFixed(3);
-        let displayLoss = fromBasePress(result.summary.total_annular_loss_psi).toFixed(1);
-        document.getElementById("result").innerText = `✅ Success | ECD Bottom: ${displayEcd} ${currentUnits.density} | Annular Loss: ${displayLoss} ${currentUnits.press}`;
-        document.getElementById("result").style.color = "#4CAF50";
+    let mainMode = document.getElementById("mainMode").value;
+    let mpdMode = document.getElementById("mpdMode").value;
+    let payload = buildPayload();
+    let displayMode = "conv";
+
+    try {
+        let finalResult;
+        
+        if (mainMode === "conventional") {
+            payload.sbp = 0;
+            displayMode = "conv";
+            let res = await fetch("/simulate", { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(payload) });
+            finalResult = await res.json();
+            if (finalResult.error) throw new Error(finalResult.error);
+        } 
+        else if (mpdMode === "sbp") {
+            payload.sbp = converters.press.toBase(Number(document.getElementById("sbp").value), currentUnits.press);
+            displayMode = "sbp";
+            let res = await fetch("/simulate", { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(payload) });
+            finalResult = await res.json();
+            if (finalResult.error) throw new Error(finalResult.error);
+        }
+        else if (mpdMode === "downhole") {
+            displayMode = "dh";
+            payload.sbp = 0;
+            let res1 = await fetch("/simulate", { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(payload) });
+            if (!res1.ok) throw new Error("Server error Pass 1");
+            let data1 = await res1.json();
+            if (data1.error) throw new Error(data1.error);
+
+            let anchorType = document.getElementById("anchorType").value;
+            let anchorDepthBase = 0;
+            if (anchorType === 'bh') {
+                anchorDepthBase = payload.depth;
+            } else if (anchorType === 'shoe') {
+                let sections = getWellSectionsForDrawing(); let openHoles = sections.filter(s => s.type === "open hole");
+                anchorDepthBase = openHoles.length > 0 ? openHoles[0].top : payload.depth;
+            } else {
+                anchorDepthBase = toBaseLength(Number(document.getElementById("anchorFixedVal").value));
+            }
+
+            let baseEcdAtAnchor = interpolateAtDepth(anchorDepthBase, data1.profile).ecd;
+            
+            let targetType = document.getElementById("targetType").value;
+            let targetValUser = Number(document.getElementById("targetVal").value);
+            let targetPressBase = 0;
+            if (targetType === "density") {
+                targetPressBase = converters.density.toBase(targetValUser, currentUnits.density) * anchorDepthBase * 0.051948;
+            } else {
+                targetPressBase = converters.press.toBase(targetValUser, currentUnits.press);
+            }
+
+            let baseDynamicPress = baseEcdAtAnchor * anchorDepthBase * 0.051948;
+            let requiredSbpPsi = targetPressBase - baseDynamicPress;
+            if (requiredSbpPsi < 0) requiredSbpPsi = 0;
+            
+            payload.sbp = requiredSbpPsi;
+            let res2 = await fetch("/simulate", { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(payload) });
+            finalResult = await res2.json();
+            if (finalResult.error) throw new Error(finalResult.error);
+        }
+
+        lastSimResult = finalResult;
+        
+        let displayEcd = fromBaseDens(finalResult.summary.ecd_bottom);
+        let displayLoss = fromBasePress(finalResult.summary.total_annular_loss_psi);
+        let appliedSbp = fromBasePress(payload.sbp);
+
+        // Fallback SPP
+        let backendSpp = finalResult.summary.spp || finalResult.summary.standpipe_pressure || finalResult.summary.pump_pressure_psi;
+        if (backendSpp === undefined) {
+            let mw = converters.density.toBase(Number(document.getElementById("mw").value), currentUnits.density);
+            let flow = converters.flow.toBase(Number(document.getElementById("flowrate").value), currentUnits.flow);
+            let tfa = Number(document.getElementById("bit_tfa").value) || 1.0;
+            let pBit = (mw * flow * flow) / (10858 * tfa * tfa);
+            let pAnn = finalResult.summary.total_annular_loss_psi || 0;
+            let pPipe = pAnn * 2.5; 
+            backendSpp = pBit + pAnn + pPipe;
+        }
+        let displaySpp = fromBasePress(backendSpp);
+
+        resultBar.innerHTML = `<span style="color: #166534;"><b>Simulation Complete</b></span>`;
+        resultBar.style.backgroundColor = "#f0fdf4"; resultBar.style.border = "1px solid #bbf7d0";
+
+        // Calculate final Anchor info for Dashboard
+        let anchorDepthUser = fromBaseLength(payload.depth); // default
+        if (displayMode === "dh") {
+            let anchorType = document.getElementById("anchorType").value;
+            if (anchorType === 'shoe') {
+                let sections = getWellSectionsForDrawing(); let openHoles = sections.filter(s => s.type === "open hole");
+                anchorDepthUser = fromBaseLength(openHoles.length > 0 ? openHoles[0].top : payload.depth);
+            } else if (anchorType === 'fixed') {
+                anchorDepthUser = Number(document.getElementById("anchorFixedVal").value);
+            }
+        }
+        let anchorDepthBase = toBaseLength(anchorDepthUser);
+        let anchorStats = interpolateAtDepth(anchorDepthBase, finalResult.profile);
+        let anchorPressUser = fromBasePress(anchorStats.ecd * anchorDepthBase * 0.051948);
+        let anchorEcdUser = fromBaseDens(anchorStats.ecd);
+
+        updateDashboard(displaySpp, appliedSbp, anchorDepthUser, anchorPressUser, anchorEcdUser, displayMode, displayLoss);
         replotChart();
-    } catch (error) { document.getElementById("result").innerText = "Failed to run simulation."; document.getElementById("result").style.color = "red"; }
+
+    } catch (error) { 
+        resultBar.innerHTML = `❌ <b style="color: #991b1b;">Failed to run simulation.</b> Check console for errors.`;
+        resultBar.style.backgroundColor = "#fef2f2"; resultBar.style.border = "1px solid #fecaca";
+        console.error(error);
+    }
 }
 
 function replotChart(){
@@ -1135,6 +1422,7 @@ document.addEventListener('mousemove', (e) => { if (!isDraggingScooter || !chart
 document.addEventListener('mouseup', () => { isDraggingScooter = false; });
 
 window.onload = function() { 
+    toggleMainMode();
     enforceOpenHoleTop();
     highlightActiveDepth(); 
     calcBhaCumLength();
