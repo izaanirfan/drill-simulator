@@ -3,6 +3,7 @@
 <head>
     <title>Drilling Hydraulics Simulator</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
 
     <style>
         body { font-family: sans-serif; margin: 20px; color: #333; }
@@ -23,6 +24,12 @@
         .schematic-box { width: 120px; background: #f4f7f6; border: 1px solid #ccc; display: flex; justify-content: center; }
         .chart-box { flex-grow: 1; background: #fff; border: 1px solid #ccc; padding: 10px; min-height: 500px; }
         .controls-row { display: flex; gap: 15px; align-items: center; background: #f9f9f9; padding: 15px; border: 1px solid #ddd; border-radius: 5px; flex-wrap: wrap; }
+        
+        /* Upload Box */
+        .upload-box { border: 2px dashed #4CAF50; padding: 15px; text-align: center; background: #f0fdf4; border-radius: 5px; margin-bottom: 15px; max-width: 800px; }
+        .upload-box input[type="file"] { display: none; }
+        .upload-btn { background: #4CAF50; color: white; border: none; padding: 8px 15px; cursor: pointer; border-radius: 4px; font-weight: bold; display: inline-block; margin-top: 5px; }
+        .upload-btn:hover { background: #45a049; }
     </style>
 </head>
 
@@ -140,48 +147,60 @@
 </div>
 
 <div id="subsurface" class="tab">
+    
+    <div class="upload-box">
+        <strong>Intelligent PPFG Import</strong><br>
+        <span style="font-size: 0.85em; color: #555;">Upload an Excel (.xlsx) or CSV file. We will automatically map the columns, sort the depths, and calculate missing parameters based on your current unit settings.</span><br>
+        <label class="upload-btn">
+            Choose Excel/CSV File
+            <input type="file" id="excelUpload" accept=".xlsx, .xls, .csv" onchange="handleFileUpload(event)">
+        </label>
+    </div>
+
     <div style="display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap;">
         <div style="flex: 1; min-width: 600px;">
-            <h3>Subsurface Profile (PPFG & Temperature)</h3>
+            <h3>Subsurface Profile</h3>
             <div class="controls-row" style="padding: 10px; margin-bottom: 10px;">
                 <label><input type="checkbox" id="use_geo_grad" onchange="applyGeothermal()"> Use Geothermal Gradient Formula</label>
                 <div id="grad_inputs" style="display: none; margin-left: 20px;">
                     Gradient: <input id="geo_grad" value="1.5" onkeyup="applyGeothermal()" style="width: 50px;"> <span class="lbl-temp">°F</span> / 100 <span class="lbl-length">ft</span>
-                    <i style="font-size: 0.8em; color: gray; margin-left: 10px;">(Uses Surface Temp from Sim Tab)</i>
                 </div>
             </div>
             
-            <p style="font-size: 0.85em; color: #555;"><i>* Tip: You can copy a block of cells directly from Excel and paste it into this table.</i></p>
             <table id="ppfgTable">
-                <tr>
-                    <th>Top MD (<span class="lbl-length">ft</span>)</th>
-                    <th>Bottom MD (<span class="lbl-length">ft</span>)</th>
-                    <th>Pore Press (<span class="lbl-density">ppg</span>)</th>
-                    <th>Pore Press (<span class="lbl-press">psi</span>)</th>
-                    <th>Frac Press (<span class="lbl-density">ppg</span>)</th>
-                    <th>Frac Press (<span class="lbl-press">psi</span>)</th>
-                    <th>Temp (<span class="lbl-temp">°F</span>)</th>
-                </tr>
-                <tr>
-                    <td contenteditable class="val-length">0</td>
-                    <td contenteditable class="val-length" onkeyup="triggerPPFGCalc(this)">3000</td>
-                    <td contenteditable class="val-density" onkeyup="calcPPFG(this, 'pp_dens')">8.5</td>
-                    <td contenteditable class="val-press" onkeyup="calcPPFG(this, 'pp_press')">1324.7</td>
-                    <td contenteditable class="val-density" onkeyup="calcPPFG(this, 'fp_dens')">12.0</td>
-                    <td contenteditable class="val-press" onkeyup="calcPPFG(this, 'fp_press')">1870.1</td>
-                    <td contenteditable class="val-temp" onkeyup="updateSubsurfaceChart()">125</td>
-                </tr>
-                <tr>
-                    <td contenteditable class="val-length">3000</td>
-                    <td contenteditable class="val-length" onkeyup="triggerPPFGCalc(this)">10000</td>
-                    <td contenteditable class="val-density" onkeyup="calcPPFG(this, 'pp_dens')">9.2</td>
-                    <td contenteditable class="val-press" onkeyup="calcPPFG(this, 'pp_press')">4779.2</td>
-                    <td contenteditable class="val-density" onkeyup="calcPPFG(this, 'fp_dens')">14.5</td>
-                    <td contenteditable class="val-press" onkeyup="calcPPFG(this, 'fp_press')">7532.5</td>
-                    <td contenteditable class="val-temp" onkeyup="updateSubsurfaceChart()">230</td>
-                </tr>
+                <thead>
+                    <tr>
+                        <th>Top MD (<span class="lbl-length">ft</span>)</th>
+                        <th>Bottom MD (<span class="lbl-length">ft</span>)</th>
+                        <th>Pore Press (<span class="lbl-density">ppg</span>)</th>
+                        <th>Pore Press (<span class="lbl-press">psi</span>)</th>
+                        <th>Frac Press (<span class="lbl-density">ppg</span>)</th>
+                        <th>Frac Press (<span class="lbl-press">psi</span>)</th>
+                        <th>Temp (<span class="lbl-temp">°F</span>)</th>
+                    </tr>
+                </thead>
+                <tbody id="ppfgBody">
+                    <tr>
+                        <td contenteditable class="val-length">0</td>
+                        <td contenteditable class="val-length" onkeyup="triggerPPFGCalc(this)">3000</td>
+                        <td contenteditable class="val-density" onkeyup="calcPPFG(this, 'pp_dens')">8.5</td>
+                        <td contenteditable class="val-press" onkeyup="calcPPFG(this, 'pp_press')">1324.7</td>
+                        <td contenteditable class="val-density" onkeyup="calcPPFG(this, 'fp_dens')">12.0</td>
+                        <td contenteditable class="val-press" onkeyup="calcPPFG(this, 'fp_press')">1870.1</td>
+                        <td contenteditable class="val-temp" onkeyup="updateSubsurfaceChart()">125</td>
+                    </tr>
+                    <tr>
+                        <td contenteditable class="val-length">3000</td>
+                        <td contenteditable class="val-length" onkeyup="triggerPPFGCalc(this)">10000</td>
+                        <td contenteditable class="val-density" onkeyup="calcPPFG(this, 'pp_dens')">9.2</td>
+                        <td contenteditable class="val-press" onkeyup="calcPPFG(this, 'pp_press')">4779.2</td>
+                        <td contenteditable class="val-density" onkeyup="calcPPFG(this, 'fp_dens')">14.5</td>
+                        <td contenteditable class="val-press" onkeyup="calcPPFG(this, 'fp_press')">7532.5</td>
+                        <td contenteditable class="val-temp" onkeyup="updateSubsurfaceChart()">230</td>
+                    </tr>
+                </tbody>
             </table>
-            <button onclick="addSubsurfaceRow()">Add Row</button>
+            <button onclick="addSubsurfaceRow()">Add Row manually</button>
         </div>
         
         <div class="chart-box" style="flex: 1; min-width: 400px; min-height: 400px;">
@@ -227,11 +246,110 @@ function addTrajectoryRow(){
     row.innerHTML = `<td contenteditable class="val-length"></td><td contenteditable></td><td contenteditable></td>`;
 }
 
-function addSubsurfaceRow(){
-    const table = document.getElementById("ppfgTable");
-    const row = table.insertRow();
-    row.innerHTML = `<td contenteditable class="val-length"></td><td contenteditable class="val-length" onkeyup="triggerPPFGCalc(this)"></td><td contenteditable class="val-density" onkeyup="calcPPFG(this, 'pp_dens')"></td><td contenteditable class="val-press" onkeyup="calcPPFG(this, 'pp_press')"></td><td contenteditable class="val-density" onkeyup="calcPPFG(this, 'fp_dens')"></td><td contenteditable class="val-press" onkeyup="calcPPFG(this, 'fp_press')"></td><td contenteditable class="val-temp" onkeyup="updateSubsurfaceChart()"></td>`;
-    applyGeothermal(); // Apply gradient to new row if active
+function addSubsurfaceRow(top="", bot="", pp="", pp_psi="", fp="", fp_psi="", temp=""){
+    const tbody = document.getElementById("ppfgBody");
+    const row = tbody.insertRow();
+    row.innerHTML = `<td contenteditable class="val-length">${top}</td><td contenteditable class="val-length" onkeyup="triggerPPFGCalc(this)">${bot}</td><td contenteditable class="val-density" onkeyup="calcPPFG(this, 'pp_dens')">${pp}</td><td contenteditable class="val-press" onkeyup="calcPPFG(this, 'pp_press')">${pp_psi}</td><td contenteditable class="val-density" onkeyup="calcPPFG(this, 'fp_dens')">${fp}</td><td contenteditable class="val-press" onkeyup="calcPPFG(this, 'fp_press')">${fp_psi}</td><td contenteditable class="val-temp" onkeyup="updateSubsurfaceChart()">${temp}</td>`;
+    applyGeothermal(); 
+}
+
+// ================= EXCEL IMPORT ENGINE (SHEETJS) =================
+function handleFileUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, {type: 'array'});
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        
+        // Convert to array of arrays
+        const rawData = XLSX.utils.sheet_to_json(worksheet, {header: 1});
+        if (rawData.length < 2) { alert("File appears to be empty or missing headers."); return; }
+
+        const headers = rawData[0].map(h => String(h).toLowerCase());
+        
+        // Fuzzy Matching Algorithm
+        let map = { depth: -1, top: -1, bot: -1, pp: -1, pp_psi: -1, fp: -1, fp_psi: -1, temp: -1 };
+        
+        headers.forEach((h, i) => {
+            if (/top/i.test(h)) map.top = i;
+            else if (/bot|end/i.test(h)) map.bot = i;
+            else if (/depth|md/i.test(h) && map.depth === -1) map.depth = i;
+            
+            if (/pore|pp|form.*press/i.test(h)) {
+                if (/psi/i.test(h)) map.pp_psi = i; else map.pp = i;
+            }
+            if (/frac|fg|fp/i.test(h)) {
+                if (/psi/i.test(h)) map.fp_psi = i; else map.fp = i;
+            }
+            if (/temp/i.test(h)) map.temp = i;
+        });
+
+        // Determine primary depth column if top/bottom not explicitly found
+        let dCol = map.bot !== -1 ? map.bot : (map.depth !== -1 ? map.depth : map.top);
+        if (dCol === -1) { alert("Could not find a 'Depth', 'Top', or 'Bottom' column."); return; }
+
+        let parsedRows = [];
+        let prevDepth = 0;
+
+        for (let i = 1; i < rawData.length; i++) {
+            let row = rawData[i];
+            if (!row || row.length === 0 || row[dCol] === undefined) continue;
+
+            let currentDepth = parseFloat(row[dCol]);
+            let topD = map.top !== -1 ? parseFloat(row[map.top]) : prevDepth;
+            let botD = map.bot !== -1 ? parseFloat(row[map.bot]) : currentDepth;
+
+            let pp = map.pp !== -1 ? parseFloat(row[map.pp]) : "";
+            let pp_psi = map.pp_psi !== -1 ? parseFloat(row[map.pp_psi]) : "";
+            let fp = map.fp !== -1 ? parseFloat(row[map.fp]) : "";
+            let fp_psi = map.fp_psi !== -1 ? parseFloat(row[map.fp_psi]) : "";
+            let temp = map.temp !== -1 ? parseFloat(row[map.temp]) : "";
+
+            parsedRows.push({ top: topD, bot: botD, pp: pp, pp_psi: pp_psi, fp: fp, fp_psi: fp_psi, temp: temp });
+            prevDepth = botD;
+        }
+
+        // Sort by bottom depth
+        parsedRows.sort((a, b) => a.bot - b.bot);
+
+        // Generate Import Report
+        let report = `✅ Import Successful.\n\nMapped Columns:\n`;
+        report += `• Depth: '${headers[dCol]}'\n`;
+        if(map.pp !== -1 || map.pp_psi !== -1) report += `• Pore Pressure: Found\n`; else report += `⚠️ Pore Pressure: NOT FOUND\n`;
+        if(map.fp !== -1 || map.fp_psi !== -1) report += `• Frac Gradient: Found\n`; else report += `⚠️ Frac Gradient: NOT FOUND\n`;
+        if(map.temp !== -1) report += `• Temperature: Found\n`; else report += `⚠️ Temperature: NOT FOUND\n`;
+        report += `\nAssuming imported values match your current global unit settings.`;
+        
+        alert(report);
+
+        // Clear existing table and inject new data
+        document.getElementById("ppfgBody").innerHTML = "";
+        parsedRows.forEach(r => {
+            addSubsurfaceRow(
+                r.top || 0, r.bot || 0, 
+                r.pp || "", r.pp_psi || "", 
+                r.fp || "", r.fp_psi || "", 
+                r.temp || ""
+            );
+        });
+
+        // Force calculations to fill in blanks (ppg to psi, or psi to ppg)
+        let tbody = document.getElementById("ppfgBody");
+        Array.from(tbody.rows).forEach(row => {
+            if(row.cells[2].innerText && !row.cells[3].innerText) calcPPFG(row.cells[2], 'pp_dens');
+            if(row.cells[3].innerText && !row.cells[2].innerText) calcPPFG(row.cells[3], 'pp_press');
+            if(row.cells[4].innerText && !row.cells[5].innerText) calcPPFG(row.cells[4], 'fp_dens');
+            if(row.cells[5].innerText && !row.cells[4].innerText) calcPPFG(row.cells[5], 'fp_press');
+        });
+
+        updateSubsurfaceChart();
+        document.getElementById("excelUpload").value = ""; // Reset file input
+    };
+    reader.readAsArrayBuffer(file);
 }
 
 // ================= UNIT ENGINE =================
@@ -278,45 +396,12 @@ function fromBaseLength(v) { return converters.length.fromBase(v, currentUnits.l
 function fromBaseDens(v)   { return converters.density.fromBase(v, currentUnits.density); }
 function fromBasePress(v)  { return converters.press.fromBase(v, currentUnits.press); }
 
-// ================= EXCEL PASTE LOGIC =================
-document.addEventListener('paste', function (e) {
-    let target = e.target;
-    if (target.closest('#ppfgTable') && target.tagName === 'TD') {
-        e.preventDefault();
-        let text = (e.originalEvent || e).clipboardData.getData('text/plain');
-        let rows = text.split(/\r?\n/);
-        let tr = target.closest('tr');
-        let tbody = tr.parentElement;
-        let startRowIdx = Array.from(tbody.children).indexOf(tr);
-        let startColIdx = Array.from(tr.children).indexOf(target);
-
-        rows.forEach((rowStr, i) => {
-            if (!rowStr.trim()) return;
-            let cols = rowStr.split('\t');
-            let currentRow = tbody.children[startRowIdx + i];
-            if (!currentRow && startRowIdx > 0) { addSubsurfaceRow(); currentRow = tbody.children[startRowIdx + i]; }
-            
-            if (currentRow) {
-                cols.forEach((colStr, j) => {
-                    let cell = currentRow.children[startColIdx + j];
-                    if (cell && cell.contentEditable !== "false") cell.innerText = colStr.trim();
-                });
-                // Force Recalc based on pasted density
-                calcPPFG(currentRow.children[2], 'pp_dens');
-                calcPPFG(currentRow.children[4], 'fp_dens');
-            }
-        });
-        applyGeothermal();
-        updateSubsurfaceChart();
-    }
-});
-
 
 // ================= SUBSURFACE LOGIC (PPFG & TEMP) =================
 function triggerPPFGCalc(depthCell) {
     let row = depthCell.closest("tr");
-    calcPPFG(row.children[2], 'pp_dens');
-    calcPPFG(row.children[4], 'fp_dens');
+    calcPPFG(row.cells[2], 'pp_dens');
+    calcPPFG(row.cells[4], 'fp_dens');
     applyGeothermal();
 }
 
@@ -347,20 +432,16 @@ function applyGeothermal() {
     let useGrad = document.getElementById("use_geo_grad").checked;
     document.getElementById("grad_inputs").style.display = useGrad ? "inline-block" : "none";
     
-    let rows = document.getElementById("ppfgTable").rows;
-    let baseTemp_F = converters.temp.toBase(parseFloat(document.getElementById("surface_temp").value) || 80, currentUnits.temp);
-    let grad_user = parseFloat(document.getElementById("geo_grad").value) || 0; // User unit per 100 user length
+    let rows = document.getElementById("ppfgBody").rows;
+    let grad_user = parseFloat(document.getElementById("geo_grad").value) || 0; 
 
-    for (let i = 1; i < rows.length; i++) {
+    for (let i = 0; i < rows.length; i++) {
         let tempCell = rows[i].cells[6];
         if (useGrad) {
             tempCell.contentEditable = "false";
             let depth_user = parseFloat(rows[i].cells[1].innerText) || 0;
-            
-            // Calc in User Units: BaseTemp(user) + (Depth(user) / 100) * Grad(user)
             let baseTemp_user = parseFloat(document.getElementById("surface_temp").value) || 80;
             let finalTemp_user = baseTemp_user + (depth_user / 100) * grad_user;
-            
             tempCell.innerText = finalTemp_user.toFixed(1);
         } else {
             tempCell.contentEditable = "true";
@@ -370,14 +451,14 @@ function applyGeothermal() {
 }
 
 function getPPFGProfile() {
-    let rows = document.getElementById("ppfgTable").rows;
+    let rows = document.getElementById("ppfgBody").rows;
     let data = { top: [], bottom: [], pp: [], fp: [], temp: [] };
-    for (let i = 1; i < rows.length; i++) {
+    for (let i = 0; i < rows.length; i++) {
         data.top.push(parseFloat(rows[i].cells[0].innerText) || 0);
         data.bottom.push(parseFloat(rows[i].cells[1].innerText) || 0);
-        data.pp.push(parseFloat(rows[i].cells[2].innerText) || null);
-        data.fp.push(parseFloat(rows[i].cells[4].innerText) || null);
-        data.temp.push(parseFloat(rows[i].cells[6].innerText) || null);
+        data.pp.push(parseFloat(rows[i].cells[2].innerText)); // Can be NaN
+        data.fp.push(parseFloat(rows[i].cells[4].innerText));
+        data.temp.push(parseFloat(rows[i].cells[6].innerText));
     }
     return data;
 }
@@ -390,13 +471,12 @@ function updateSubsurfaceChart() {
     let profile = getPPFGProfile();
     let ppData = [], fpData = [], tempData = [];
 
-    // Create step-like points for depth mapping
     for (let i = 0; i < profile.bottom.length; i++) {
-        if(profile.pp[i] !== null) { ppData.push({x: profile.pp[i], y: profile.top[i]}); ppData.push({x: profile.pp[i], y: profile.bottom[i]}); }
-        if(profile.fp[i] !== null) { fpData.push({x: profile.fp[i], y: profile.top[i]}); fpData.push({x: profile.fp[i], y: profile.bottom[i]}); }
-        if(profile.temp[i] !== null){ tempData.push({x: profile.temp[i], y: profile.bottom[i]}); }
+        if(!isNaN(profile.pp[i])) { ppData.push({x: profile.pp[i], y: profile.top[i]}); ppData.push({x: profile.pp[i], y: profile.bottom[i]}); }
+        if(!isNaN(profile.fp[i])) { fpData.push({x: profile.fp[i], y: profile.top[i]}); fpData.push({x: profile.fp[i], y: profile.bottom[i]}); }
+        if(!isNaN(profile.temp[i])){ tempData.push({x: profile.temp[i], y: profile.bottom[i]}); }
     }
-    // Add surface temp to temp array for nice visual origin
+    
     let surfTemp = parseFloat(document.getElementById("surface_temp").value) || 80;
     tempData.unshift({x: surfTemp, y: 0});
 
@@ -504,9 +584,9 @@ function buildPayload(){
         bha.push({ name: c[0].innerText, od: converters.diam.toBase(Number(c[1].children[0].value), currentUnits.diam), id: converters.diam.toBase(Number(c[2].children[0].value), currentUnits.diam), length: converters.length.toBase(Number(c[3].children[0].value), currentUnits.length) });
     }
 
-    // Grab Max Temp for backend bhct
     let ppfg = getPPFGProfile();
-    let maxTempUser = ppfg.temp.length > 0 ? ppfg.temp[ppfg.temp.length-1] : 150;
+    let validTemps = ppfg.temp.filter(t => !isNaN(t));
+    let maxTempUser = validTemps.length > 0 ? validTemps[validTemps.length-1] : 150;
 
     return {
         flowrate: converters.flow.toBase(Number(document.getElementById("flowrate").value), currentUnits.flow),
@@ -555,16 +635,14 @@ function replotChart(){
     const ctx = document.getElementById("chart");
     if(chartInstance) chartInstance.destroy();
 
-    // Hydraulics Data
     const ecdData = profile.depth.map((d,i) => ({x: fromBaseDens(profile.ecd[i]), y: fromBaseLength(d)}));
     const esdData = profile.depth.map((d,i) => ({x: fromBaseDens(profile.esd[i]), y: fromBaseLength(d)}));
 
-    // PPFG Data Overlay
     let ppfgProfile = getPPFGProfile();
     let ppData = [], fpData = [];
     for (let i = 0; i < ppfgProfile.bottom.length; i++) {
-        if(ppfgProfile.pp[i] !== null) { ppData.push({x: ppfgProfile.pp[i], y: ppfgProfile.top[i]}); ppData.push({x: ppfgProfile.pp[i], y: ppfgProfile.bottom[i]}); }
-        if(ppfgProfile.fp[i] !== null) { fpData.push({x: ppfgProfile.fp[i], y: ppfgProfile.top[i]}); fpData.push({x: ppfgProfile.fp[i], y: ppfgProfile.bottom[i]}); }
+        if(!isNaN(ppfgProfile.pp[i])) { ppData.push({x: ppfgProfile.pp[i], y: ppfgProfile.top[i]}); ppData.push({x: ppfgProfile.pp[i], y: ppfgProfile.bottom[i]}); }
+        if(!isNaN(ppfgProfile.fp[i])) { fpData.push({x: ppfgProfile.fp[i], y: ppfgProfile.top[i]}); fpData.push({x: ppfgProfile.fp[i], y: ppfgProfile.bottom[i]}); }
     }
 
     let scaleMode = document.getElementById("chartScale").value;
@@ -596,7 +674,6 @@ function replotChart(){
     });
 }
 
-// Init
 window.onload = function() { updateSchematics(); updateSubsurfaceChart(); };
 
 </script>
