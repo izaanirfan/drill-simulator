@@ -59,6 +59,7 @@
         .badge { position: absolute; top: 15px; right: 15px; font-size: 0.7em; color: #94a3b8; font-weight: bold; }
         
         .results-bar { background-color: #f1f5f9; padding: 12px; border-radius: 5px; border: 1px solid #cbd5e1; margin-top: 15px; display: flex; gap: 20px; align-items: center; font-size: 0.95em; color: #333; }
+        .warning-bar { display: none; background-color: #fffbeb; color: #b45309; padding: 10px; border-radius: 5px; border: 1px solid #fde68a; margin-top: 10px; font-weight: bold; text-align: center; }
     </style>
 </head>
 
@@ -91,10 +92,10 @@
 <div id="simulation" class="tab active">
     
     <div class="controls-row">
-        <div><label>Flowrate (<span class="lbl-flow">gpm</span>):</label><br><input id="flowrate" class="val-flow" value="400"></div>
+        <div><label>Flowrate (<span class="lbl-flow">gpm</span>):</label><br><input id="flowrate" class="val-flow" value="400" onkeyup="triggerWellDesignChange()"></div>
         <div><label>Depth (<span class="lbl-length">ft</span>):</label><br><input id="depth" class="val-length" value="10000" onkeyup="triggerWellDesignChange()"></div>
         <div><label>Surface Temp (<span class="lbl-temp">°F</span>):</label><br><input id="surface_temp" class="val-temp" value="80" onchange="applyGeothermal()"></div>
-        <div><label>Bit TFA (in²):</label><br><input id="bit_tfa" value="0.994" style="width: 55px;"></div>
+        <div><label>Bit TFA (in²):</label><br><input id="bit_tfa" value="0.994" style="width: 55px;" onkeyup="triggerWellDesignChange()"></div>
         
         <div style="border-left: 2px solid #ddd; padding-left: 15px;">
             <label>Drilling Mode:</label><br>
@@ -114,13 +115,13 @@
         
         <div id="sbpInputDiv">
             <label>Surface SBP (<span class="lbl-press">psi</span>):</label><br>
-            <input id="sbp" class="val-press" value="0">
+            <input id="sbp" class="val-press" value="0" onkeyup="triggerWellDesignChange()">
         </div>
 
         <div id="sbpLimitsDiv" style="display: block; border-left: 2px solid #ddd; padding-left: 15px;">
             <label>SBP Limits (<span class="lbl-press">psi</span>):</label><br>
-            <input id="min_sbp" class="val-press" value="0" style="width: 45px;" title="Min SBP"> -
-            <input id="max_sbp" class="val-press" value="2000" style="width: 45px;" title="Max SBP">
+            <input id="min_sbp" class="val-press" value="0" style="width: 45px;" title="Min SBP" onkeyup="triggerWellDesignChange()"> -
+            <input id="max_sbp" class="val-press" value="2000" style="width: 45px;" title="Max SBP" onkeyup="triggerWellDesignChange()">
         </div>
         
         <div id="dhAnchorDiv" style="display: none; border-left: 2px solid #ddd; padding-left: 15px;">
@@ -134,7 +135,7 @@
         
         <div id="dhFixedDiv" style="display: none;">
             <label>Depth (<span class="lbl-length">ft</span>):</label><br>
-            <input id="anchorFixedVal" class="val-length" value="5000">
+            <input id="anchorFixedVal" class="val-length" value="5000" onkeyup="triggerWellDesignChange()">
         </div>
 
         <div id="dhTargetDiv" style="display: none;">
@@ -143,7 +144,19 @@
                 <option value="density">Density</option>
                 <option value="press">Pressure</option>
             </select>
-            <input id="targetVal" value="12.0" style="width: 55px;"> <span id="targetLbl" class="lbl-density" style="font-size: 0.85em; font-weight: bold;">ppg</span>
+            <input id="targetVal" value="12.0" style="width: 55px;" onkeyup="triggerWellDesignChange()"> <span id="targetLbl" class="lbl-density" style="font-size: 0.85em; font-weight: bold;">ppg</span>
+        </div>
+
+        <div style="border-left: 2px solid #ddd; padding-left: 15px;">
+            <label>Zero Flow Calc:</label><br>
+            <select id="zeroFlowMode" onchange="toggleZeroFlowTime()" style="padding: 4px; font-weight: bold;">
+                <option value="immediate" selected>Immediate (Circ Temp)</option>
+                <option value="insitu">In-Situ (Cooldown)</option>
+            </select>
+        </div>
+        <div id="zeroFlowTimeDiv" style="display: none;">
+            <label>Shut-in (hrs):</label><br>
+            <input id="zeroFlowTime" value="12" style="width: 45px;" onkeyup="triggerWellDesignChange()">
         </div>
 
         <div style="border-left: 2px solid #ddd; padding-left: 15px;">
@@ -167,6 +180,10 @@
         <span style="color: #64748b;">Ready to run simulation...</span>
     </div>
     
+    <div id="targetWarning" class="warning-bar">
+        ⚠️ Target EMW cannot be achieved. Simulating using Min SBP.
+    </div>
+    
     <div class="dash-panel">
         <div class="dash-card">
             <div class="dash-title">Standpipe</div>
@@ -185,7 +202,7 @@
             <div class="dash-val"><span id="dashAnchorPress">-</span></div>
             <div class="dash-unit lbl-press">psi</div>
             <div class="dash-footer">
-                <span>ECD: <b id="dashAnchorEcd">-</b> <span class="lbl-density">ppg</span></span>
+                <span>EMW Dyn: <b id="dashAnchorEcd">-</b> <span class="lbl-density">ppg</span></span>
                 <span>Depth: <b id="dashAnchorDep">-</b> <span class="lbl-length">ft</span></span>
             </div>
         </div>
@@ -200,8 +217,9 @@
             </div>
             <div class="dash-val"><span id="dashSbpVal">-</span></div>
             <div class="dash-unit lbl-press">psi</div>
-            <div class="dash-footer">
-                <span id="dashSbpStatus">Mode: <b>Conventional</b></span>
+            <div class="dash-footer" style="display:flex; justify-content: space-between;">
+                <div style="text-align:left;">Zero Flow<br><b id="dashZeroFlowSbp">-</b> <span class="lbl-press">psi</span></div>
+                <div style="text-align:right;" id="dashSbpStatus">Mode<br><b>-</b></div>
             </div>
         </div>
     </div>
@@ -217,7 +235,7 @@
                         <input type="number" id="scooterDepthInput" onchange="updateScooterFromInput()" style="width: 60px; padding: 2px; font-weight: bold; border: 1px solid #ccc;">
                     </div>
                     <div style="border-left: 1px solid #ddd; padding-left: 10px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: x 10px; font-size: 0.8em; line-height: 1.2;">
-                        <div style="color: #ef4444;"><b>ECD:</b> <span id="scooterEcd">-</span></div>
+                        <div style="color: #ef4444;"><b>EMW Dyn:</b> <span id="scooterEcd">-</span></div>
                         <div style="color: #737373;"><b>PP:</b> <span id="scooterPp">-</span></div>
                         <div style="color: #000;"><b>OBG:</b> <span id="scooterObg">-</span></div>
                         <div style="color: #3b82f6;"><b>ESD:</b> <span id="scooterEsd">-</span></div>
@@ -388,6 +406,7 @@ function toggleMainMode() {
         document.getElementById("cardSbp").style.display = "flex";
         toggleMpdMode();
     }
+    triggerWellDesignChange();
 }
 
 function toggleMpdMode() {
@@ -403,17 +422,26 @@ function toggleMpdMode() {
         document.getElementById("dhTargetDiv").style.display = "block";
         toggleAnchorFixed();
     }
+    triggerWellDesignChange();
 }
 
 function toggleAnchorFixed() {
     let anchor = document.getElementById("anchorType").value;
     document.getElementById("dhFixedDiv").style.display = (anchor === "fixed") ? "block" : "none";
+    triggerWellDesignChange();
+}
+
+function toggleZeroFlowTime() {
+    let zfMode = document.getElementById("zeroFlowMode").value;
+    document.getElementById("zeroFlowTimeDiv").style.display = (zfMode === "insitu") ? "block" : "none";
+    triggerWellDesignChange();
 }
 
 function updateTargetLabel() {
     let tType = document.getElementById("targetType").value;
     document.getElementById("targetLbl").innerText = tType === "density" ? currentUnits.density : currentUnits.press;
     document.getElementById("targetLbl").className = tType === "density" ? "lbl-density" : "lbl-press";
+    triggerWellDesignChange();
 }
 
 function updateDashboard(spp, sbp, anchorDep, anchorPress, anchorEcd, modeType, annLoss) {
@@ -440,7 +468,7 @@ function updateDashboard(spp, sbp, anchorDep, anchorPress, anchorEcd, modeType, 
     document.getElementById("dashAnnLoss").innerText = annLoss.toFixed(0);
 
     let modeText = modeType === "conv" ? "Conventional" : (modeType === "sbp" ? "Surface SBP" : "Target Downhole");
-    document.getElementById("dashSbpStatus").innerHTML = `Mode: <b>${modeText}</b>`;
+    document.getElementById("dashSbpStatus").innerHTML = `Mode<br><b>${modeText}</b>`;
 
     let anchorSelect = document.getElementById("anchorType").value;
     if (modeType === "dh") {
@@ -530,7 +558,7 @@ function triggerWellDesignChange() {
     enforceOpenHoleTop();
     calcBhaCumLength();
     updateSchematics();
-    if (lastSimResult) { clearTimeout(wellChangeTimer); wellChangeTimer = setTimeout(replotChart, 500); }
+    if (lastSimResult) { clearTimeout(wellChangeTimer); wellChangeTimer = setTimeout(runSimulation, 500); }
 }
 
 function enforceOpenHoleTop() {
@@ -1175,8 +1203,12 @@ function buildPayload(){
     let defaultSurfTemp = parseFloat(document.getElementById("surface_temp").value) || 80;
     let maxTempUser = validTemps.length > 0 ? validTemps[validTemps.length-1] : defaultSurfTemp; 
 
+    // Zero GPM bypass to prevent backend divide-by-zero
+    let actualFlow = Number(document.getElementById("flowrate").value);
+    if (actualFlow === 0) actualFlow = 0.0001; 
+
     return {
-        flowrate: converters.flow.toBase(Number(document.getElementById("flowrate").value), currentUnits.flow),
+        flowrate: converters.flow.toBase(actualFlow, currentUnits.flow),
         depth: toBaseLength(Number(document.getElementById("depth").value)),
         sbp: 0, 
         hole_diameter: 8.5, mpd_mode: "SBP", gradient_mode: "static",
@@ -1189,9 +1221,11 @@ function buildPayload(){
 
 async function runSimulation(){
     let resultBar = document.getElementById("result");
+    let warningDiv = document.getElementById("targetWarning");
+    warningDiv.style.display = "none";
+
     resultBar.innerHTML = `<span style="color: #3b82f6;"><b>Running Simulation...</b></span>`;
-    resultBar.style.backgroundColor = "#eff6ff";
-    resultBar.style.border = "1px solid #bfdbfe";
+    resultBar.style.backgroundColor = "#eff6ff"; resultBar.style.border = "1px solid #bfdbfe";
 
     let mainMode = document.getElementById("mainMode").value;
     let mpdMode = document.getElementById("mpdMode").value;
@@ -1200,6 +1234,7 @@ async function runSimulation(){
 
     try {
         let finalResult;
+        let targetAchieved = true;
         
         if (mainMode === "conventional") {
             payload.sbp = 0;
@@ -1251,8 +1286,17 @@ async function runSimulation(){
             let minSbpPsi = converters.press.toBase(Number(document.getElementById("min_sbp").value) || 0, currentUnits.press);
             let maxSbpPsi = converters.press.toBase(Number(document.getElementById("max_sbp").value) || 2000, currentUnits.press);
 
-            if (requiredSbpPsi < minSbpPsi) requiredSbpPsi = minSbpPsi;
-            if (requiredSbpPsi > maxSbpPsi) requiredSbpPsi = maxSbpPsi;
+            if (requiredSbpPsi < minSbpPsi) {
+                requiredSbpPsi = minSbpPsi;
+                targetAchieved = false;
+                warningDiv.innerText = `⚠️ Target EMW cannot be achieved (Requires SBP < Min SBP). Simulating using Min SBP (${document.getElementById("min_sbp").value} ${currentUnits.press}).`;
+            } else if (requiredSbpPsi > maxSbpPsi) {
+                requiredSbpPsi = maxSbpPsi;
+                targetAchieved = false;
+                warningDiv.innerText = `⚠️ Target EMW cannot be achieved (Requires SBP > Max SBP). Simulating using Max SBP (${document.getElementById("max_sbp").value} ${currentUnits.press}).`;
+            }
+            
+            if (!targetAchieved) warningDiv.style.display = "block";
             
             payload.sbp = requiredSbpPsi;
             let res2 = await fetch("/simulate", { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(payload) });
@@ -1270,8 +1314,9 @@ async function runSimulation(){
         if (backendSpp === undefined) {
             let mw = converters.density.toBase(Number(document.getElementById("mw").value), currentUnits.density);
             let flow = converters.flow.toBase(Number(document.getElementById("flowrate").value), currentUnits.flow);
+            if (flow < 0.1) flow = 0; // Don't show fake SPP for mock 0 gpm
             let tfa = Number(document.getElementById("bit_tfa").value) || 1.0;
-            let pBit = (mw * flow * flow) / (10858 * tfa * tfa);
+            let pBit = (flow > 0) ? (mw * flow * flow) / (10858 * tfa * tfa) : 0;
             let pAnn = finalResult.summary.total_annular_loss_psi || 0;
             let pPipe = pAnn * 2.5; 
             backendSpp = pBit + pAnn + pPipe;
@@ -1279,7 +1324,7 @@ async function runSimulation(){
         let displaySpp = fromBasePress(backendSpp).toFixed(1);
 
         resultBar.innerHTML = `✅ <b style="color: #166534;">Success</b> &nbsp;&nbsp;|&nbsp;&nbsp; 
-            ECD Bottom: <b style="color: #ef4444;">${displayEcd}</b> ${currentUnits.density} &nbsp;&nbsp;|&nbsp;&nbsp; 
+            EMW Dyn Bottom: <b style="color: #ef4444;">${displayEcd}</b> ${currentUnits.density} &nbsp;&nbsp;|&nbsp;&nbsp; 
             Annular Loss: <b>${displayLoss}</b> ${currentUnits.press}`;
         resultBar.style.backgroundColor = "#f0fdf4";
         resultBar.style.border = "1px solid #bbf7d0";
@@ -1317,7 +1362,48 @@ function replotChart(){
     if(chartInstance) chartInstance.destroy();
 
     const ecdData = profile.depth.map((d,i) => ({x: fromBaseDens(profile.ecd[i]), y: fromBaseLength(d)}));
-    const esdData = profile.depth.map((d,i) => ({x: fromBaseDens(profile.esd[i]), y: fromBaseLength(d)}));
+
+    // Zero Flow Geothermal Math Setup
+    let mw_base = converters.density.toBase(Number(document.getElementById("mw").value), currentUnits.density);
+    let surf_t_base = converters.temp.toBase(Number(document.getElementById("surface_temp").value), currentUnits.temp);
+    let grad_user = parseFloat(document.getElementById("geo_grad").value) || 1.5;
+    
+    let geoLine = document.getElementById("zeroFlowMode") ? document.getElementById("zeroFlowMode").value : "immediate";
+    let zfTime = geoLine === "insitu" ? (parseFloat(document.getElementById("zeroFlowTime").value) || 12) : 0;
+    let thermalFactor = 1 - Math.exp(-zfTime / 10.0);
+    
+    let d_td = profile.depth[profile.depth.length-1];
+    let cbhp_dyn = profile.ecd[profile.depth.length-1] * 0.051948 * d_td;
+    let esd_circ_td = profile.esd[profile.depth.length-1];
+    let t_geo_td = surf_t_base + (d_td / 100) * grad_user;
+    let t_avg_geo_td = (surf_t_base + t_geo_td) / 2;
+    let esd_geo_td = mw_base * (1 - 0.0003 * (t_avg_geo_td - surf_t_base));
+    let rho_t_td = esd_circ_td + (esd_geo_td - esd_circ_td) * thermalFactor;
+    
+    let new_sbp_t = cbhp_dyn - (rho_t_td * 0.051948 * d_td);
+    if(new_sbp_t < 0) new_sbp_t = 0;
+
+    let esdData = [];
+    let zfData = [];
+
+    for (let i = 0; i < profile.depth.length; i++) {
+        let d = profile.depth[i];
+        if (d === 0) continue;
+        let esd_circ = profile.esd[i];
+        let t_geo = surf_t_base + (d / 100) * grad_user;
+        let t_avg_geo = (surf_t_base + t_geo) / 2;
+        let esd_geo = mw_base * (1 - 0.0003 * (t_avg_geo - surf_t_base));
+        
+        esdData.push({x: fromBaseDens(esd_geo), y: fromBaseLength(d)});
+        
+        let rho_t = esd_circ + (esd_geo - esd_circ) * thermalFactor;
+        let hydro_t = rho_t * 0.051948 * d;
+        let zf_emw = (new_sbp_t + hydro_t) / (0.051948 * d);
+        if (d > 100) zfData.push({x: fromBaseDens(zf_emw), y: fromBaseLength(d)});
+    }
+
+    let dashZF = document.getElementById("dashZeroFlowSbp");
+    if(dashZF) dashZF.innerText = fromBasePress(new_sbp_t).toFixed(0);
 
     let maxDepthBase = toBaseLength(Number(document.getElementById("depth").value));
     let scaleMode = document.getElementById("chartScale").value;
@@ -1346,7 +1432,7 @@ function replotChart(){
     let xMinUser = undefined; let xMaxUser = undefined;
     if (scaleMode === "adjustable" || scaleMode === "open_hole") {
         let allX = [];
-        [ecdData, esdData, ppData, fpData, obgData].forEach(dataset => {
+        [ecdData, esdData, zfData, ppData, fpData, obgData].forEach(dataset => {
             dataset.forEach(pt => { if (pt.y >= yMinUser && pt.y <= yMaxUser && pt.x != null && !isNaN(pt.x)) allX.push(pt.x); });
         });
         if (allX.length > 0) {
@@ -1361,8 +1447,9 @@ function replotChart(){
         type:"scatter",
         data:{
             datasets:[
-                {label:`ECD`, data:ecdData, showLine:true, borderColor: "#ef4444", backgroundColor: "#ef4444", pointRadius: 1, normalized: true},
-                {label:`ESD`, data:esdData, showLine:true, borderColor: "#3b82f6", backgroundColor: "#3b82f6", pointRadius: 1, normalized: true},
+                {label:`EMW Dynamic`, data:ecdData, showLine:true, borderColor: "#ef4444", backgroundColor: "#ef4444", pointRadius: 1, borderWidth: 2, normalized: true},
+                {label:`Geothermal ESD`, data:esdData, showLine:true, borderColor: "#3b82f6", backgroundColor: "#3b82f6", pointRadius: 1, borderWidth: 2, normalized: true},
+                {label:`Zero Flow EMW`, data:zfData, showLine:true, borderColor: "rgba(245, 158, 11, 0.7)", backgroundColor: "rgba(245, 158, 11, 0.2)", pointRadius: 1, borderWidth: 2, borderDash: [5,5], normalized: true},
                 {label:`Pore Press`, data:ppData, showLine:true, borderColor: "#737373", borderDash: [5,5], pointRadius: 0, normalized: true},
                 {label:`Frac Press`, data:fpData, showLine:true, borderColor: "#b45309", borderDash: [5,5], pointRadius: 0, normalized: true},
                 {label:`Overburden`, data:obgData, showLine:true, borderColor: "#000", pointRadius: 0, normalized: true}
@@ -1397,6 +1484,7 @@ function initScooter() {
     
     let currentDepth = parseFloat(document.getElementById('scooterDepthInput').value);
     let bottomUserDepth = parseFloat(document.getElementById("depth").value);
+    
     if (isNaN(currentDepth)) { currentDepth = bottomUserDepth; }
     
     document.getElementById('scooterDepthInput').value = currentDepth.toFixed(0);
