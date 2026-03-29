@@ -32,7 +32,6 @@
         .upload-btn { background: #4CAF50; color: white; border: none; padding: 10px 20px; cursor: pointer; border-radius: 4px; font-weight: bold; display: inline-block; }
         .upload-btn:hover { background: #45a049; }
         .case-select { padding: 5px; font-weight: bold; border-radius: 4px; border: 1px solid #ccc; }
-        .upload-controls { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; align-items: center;}
         
         .highlight-col { background-color: #e8f5e9 !important; }
         
@@ -50,12 +49,16 @@
         .gauge { position: relative; width: 140px; height: 70px; overflow: hidden; margin-bottom: 5px; }
         .gauge-bg { position: absolute; top: 0; left: 0; width: 140px; height: 140px; border-radius: 50%; border: 15px solid #475569; box-sizing: border-box; }
         .gauge-fill { position: absolute; top: 0; left: 0; width: 140px; height: 140px; border-radius: 50%; border: 15px solid transparent; border-bottom-color: #f59e0b; border-left-color: #f59e0b; box-sizing: border-box; transform: rotate(45deg); transition: transform 0.8s ease-out; }
+        .gauge-min { position: absolute; bottom: 0; left: 5px; font-size: 0.7em; color: #94a3b8; font-weight: bold;}
+        .gauge-max { position: absolute; bottom: 0; right: 5px; font-size: 0.7em; color: #94a3b8; font-weight: bold;}
         
         .dash-val { font-size: 1.8em; font-weight: bold; color: #fff; margin-top: 5px; line-height: 1; }
         .dash-unit { font-size: 0.8em; color: #94a3b8; }
         .dash-footer { display: flex; justify-content: space-between; width: 100%; font-size: 0.75em; color: #94a3b8; margin-top: 10px; padding-top: 10px; border-top: 1px solid #475569; }
         .dash-footer span b { color: #fff; }
         .badge { position: absolute; top: 15px; right: 15px; font-size: 0.7em; color: #94a3b8; font-weight: bold; }
+        
+        .results-bar { background-color: #f1f5f9; padding: 12px; border-radius: 5px; border: 1px solid #cbd5e1; margin-top: 15px; display: flex; gap: 20px; align-items: center; font-size: 0.95em; color: #333; }
     </style>
 </head>
 
@@ -113,6 +116,12 @@
             <label>Surface SBP (<span class="lbl-press">psi</span>):</label><br>
             <input id="sbp" class="val-press" value="0">
         </div>
+
+        <div id="sbpLimitsDiv" style="display: block; border-left: 2px solid #ddd; padding-left: 15px;">
+            <label>SBP Limits (<span class="lbl-press">psi</span>):</label><br>
+            <input id="min_sbp" class="val-press" value="0" style="width: 45px;" title="Min SBP"> -
+            <input id="max_sbp" class="val-press" value="2000" style="width: 45px;" title="Max SBP">
+        </div>
         
         <div id="dhAnchorDiv" style="display: none; border-left: 2px solid #ddd; padding-left: 15px;">
             <label>Anchor Point:</label><br>
@@ -154,6 +163,10 @@
         </div>
     </div>
 
+    <div id="result" class="results-bar">
+        <span style="color: #64748b;">Ready to run simulation...</span>
+    </div>
+    
     <div class="dash-panel">
         <div class="dash-card">
             <div class="dash-title">Standpipe</div>
@@ -177,9 +190,14 @@
             </div>
         </div>
 
-        <div class="dash-card">
-            <div class="dash-title">Choke</div>
-            <div class="gauge"><div class="gauge-bg"></div><div class="gauge-fill" id="gaugeChoke"></div></div>
+        <div class="dash-card" id="cardSbp">
+            <div class="dash-title">SBP</div>
+            <div class="gauge">
+                <div class="gauge-bg"></div>
+                <div class="gauge-fill" id="gaugeSbp"></div>
+                <span class="gauge-min" id="dashSbpMinLbl">0</span>
+                <span class="gauge-max" id="dashSbpMaxLbl">2000</span>
+            </div>
             <div class="dash-val"><span id="dashSbpVal">-</span></div>
             <div class="dash-unit lbl-press">psi</div>
             <div class="dash-footer">
@@ -334,6 +352,23 @@ let chartDebounceTimer = null;
 let wellChangeTimer = null;
 let currentUnits = { length: "ft", diam: "in", density: "ppg", press: "psi", flow: "gpm", temp: "F" };
 
+// ================= GLOBAL MATH =================
+function interpolateAtDepth(targetDepth, prof) {
+    let ecd = 0, esd = 0;
+    for (let i=0; i<prof.depth.length-1; i++) {
+        if (targetDepth >= prof.depth[i] && targetDepth <= prof.depth[i+1]) {
+            let ratio = (targetDepth - prof.depth[i]) / (prof.depth[i+1] - prof.depth[i]);
+            ecd = prof.ecd[i] + ratio * (prof.ecd[i+1] - prof.ecd[i]);
+            esd = prof.esd[i] + ratio * (prof.esd[i+1] - prof.esd[i]);
+            return {ecd: ecd, esd: esd};
+        }
+    }
+    if (prof.depth.length > 0 && targetDepth >= prof.depth[prof.depth.length-1]) {
+        return {ecd: prof.ecd[prof.ecd.length-1], esd: prof.esd[prof.esd.length-1]};
+    }
+    return {ecd: 0, esd: 0};
+}
+
 // ================= UI CONTROLS & DASHBOARD =================
 function toggleMainMode() {
     let mode = document.getElementById("mainMode").value;
@@ -343,8 +378,14 @@ function toggleMainMode() {
         document.getElementById("dhAnchorDiv").style.display = "none";
         document.getElementById("dhFixedDiv").style.display = "none";
         document.getElementById("dhTargetDiv").style.display = "none";
+        document.getElementById("sbpLimitsDiv").style.display = "none";
+        document.getElementById("cardAnchor").style.display = "none";
+        document.getElementById("cardSbp").style.display = "none";
     } else {
         document.getElementById("mpdSubModeDiv").style.display = "block";
+        document.getElementById("sbpLimitsDiv").style.display = "block";
+        document.getElementById("cardAnchor").style.display = "flex";
+        document.getElementById("cardSbp").style.display = "flex";
         toggleMpdMode();
     }
 }
@@ -376,18 +417,19 @@ function updateTargetLabel() {
 }
 
 function updateDashboard(spp, sbp, anchorDep, anchorPress, anchorEcd, modeType, annLoss) {
-    // Limits for rotation scaling (can be tweaked)
+    let maxSbpUser = Number(document.getElementById("max_sbp").value) || 2000;
     let maxSpp = 6000;
-    let maxSbp = 2000;
     let maxPress = 10000;
 
     let rotSpp = Math.min(180, Math.max(0, (spp / maxSpp) * 180));
-    let rotSbp = Math.min(180, Math.max(0, (sbp / maxSbp) * 180));
+    let rotSbp = Math.min(180, Math.max(0, (sbp / maxSbpUser) * 180));
     let rotAnch = Math.min(180, Math.max(0, (anchorPress / maxPress) * 180));
 
     document.getElementById("gaugeSpp").style.transform = `rotate(${45 + rotSpp}deg)`;
-    document.getElementById("gaugeChoke").style.transform = `rotate(${45 + rotSbp}deg)`;
+    document.getElementById("gaugeSbp").style.transform = `rotate(${45 + rotSbp}deg)`;
     document.getElementById("gaugeAnchor").style.transform = `rotate(${45 + rotAnch}deg)`;
+    document.getElementById("dashSbpMinLbl").innerText = Number(document.getElementById("min_sbp").value) || 0;
+    document.getElementById("dashSbpMaxLbl").innerText = maxSbpUser;
 
     document.getElementById("dashSppVal").innerText = spp.toFixed(0);
     document.getElementById("dashSbpVal").innerText = sbp.toFixed(0);
@@ -400,38 +442,20 @@ function updateDashboard(spp, sbp, anchorDep, anchorPress, anchorEcd, modeType, 
     let modeText = modeType === "conv" ? "Conventional" : (modeType === "sbp" ? "Surface SBP" : "Target Downhole");
     document.getElementById("dashSbpStatus").innerHTML = `Mode: <b>${modeText}</b>`;
 
-    let anchorMap = { bh: "BH", shoe: "SHOE", fixed: "FIXED" };
     let anchorSelect = document.getElementById("anchorType").value;
-    document.getElementById("dashAnchorBadge").innerText = modeType === "dh" ? anchorMap[anchorSelect] : "BH";
-
-    let cardAnchor = document.getElementById("cardAnchor");
-    let titleAnchor = document.getElementById("dashAnchorTitle");
     if (modeType === "dh") {
-        cardAnchor.classList.add("active-anchor");
-        titleAnchor.classList.add("active-anchor");
+        if (anchorSelect === 'bh') document.getElementById("dashAnchorBadge").innerText = "BH";
+        else if (anchorSelect === 'shoe') document.getElementById("dashAnchorBadge").innerText = "SHOE";
+        else document.getElementById("dashAnchorBadge").innerText = anchorDep.toFixed(0) + " " + currentUnits.length;
+        
+        document.getElementById("cardAnchor").classList.add("active-anchor");
+        document.getElementById("dashAnchorTitle").classList.add("active-anchor");
     } else {
-        cardAnchor.classList.remove("active-anchor");
-        titleAnchor.classList.remove("active-anchor");
+        document.getElementById("dashAnchorBadge").innerText = "BH";
+        document.getElementById("cardAnchor").classList.remove("active-anchor");
+        document.getElementById("dashAnchorTitle").classList.remove("active-anchor");
     }
 }
-
-function interpolateAtDepth(targetDepth, prof) {
-    let ecd = 0, esd = 0;
-    for (let i=0; i<prof.depth.length-1; i++) {
-        if (targetDepth >= prof.depth[i] && targetDepth <= prof.depth[i+1]) {
-            let ratio = (targetDepth - prof.depth[i]) / (prof.depth[i+1] - prof.depth[i]);
-            ecd = prof.ecd[i] + ratio * (prof.ecd[i+1] - prof.ecd[i]);
-            esd = prof.esd[i] + ratio * (prof.esd[i+1] - prof.esd[i]);
-            break;
-        }
-    }
-    if (targetDepth >= prof.depth[prof.depth.length-1]) {
-        ecd = prof.ecd[prof.ecd.length-1];
-        esd = prof.esd[prof.esd.length-1];
-    }
-    return {ecd: ecd, esd: esd};
-}
-
 
 // ================= UTILS & PERFORMANCE DOM EVENT DELEGATION =================
 function parseSafe(val) {
@@ -546,7 +570,8 @@ function addBhaRow(){
 }
 function addSubsurfaceRow(top="", md="", tvddf="", tvdss="", pp="", pp_psi="", fp="", fp_psi="", obg="", obg_psi="", temp=""){
     const tbody = document.getElementById("ppfgBody"); const row = tbody.insertRow();
-    row.innerHTML = `<td contenteditable="false">${top}</td><td contenteditable>${md}</td><td contenteditable>${tvddf}</td><td contenteditable>${tvdss}</td><td contenteditable>${pp}</td><td contenteditable>${pp_psi}</td><td contenteditable>${fp}</td><td contenteditable>${fp_psi}</td><td contenteditable>${obg}</td><td contenteditable>${obg_psi}</td><td contenteditable>${temp}</td>`;
+    let isMD = getCalcDepthCol() === 1 ? 'highlight-col' : ''; let isDF = getCalcDepthCol() === 2 ? 'highlight-col' : ''; let isSS = getCalcDepthCol() === 3 ? 'highlight-col' : '';
+    row.innerHTML = `<td contenteditable="false" class="val-length">${top}</td><td contenteditable class="val-length ${isMD}" onkeyup="triggerPPFGCalc(this)">${md}</td><td contenteditable class="val-length ${isDF}" onkeyup="triggerPPFGCalc(this)">${tvddf}</td><td contenteditable class="val-length ${isSS}" onkeyup="triggerPPFGCalc(this)">${tvdss}</td><td contenteditable class="val-density" onkeyup="calcPPFG(this, 'pp_dens')">${pp}</td><td contenteditable class="val-press" onkeyup="calcPPFG(this, 'pp_press')">${pp_psi}</td><td contenteditable class="val-density" onkeyup="calcPPFG(this, 'fp_dens')">${fp}</td><td contenteditable class="val-press" onkeyup="calcPPFG(this, 'fp_press')">${fp_psi}</td><td contenteditable class="val-density" onkeyup="calcPPFG(this, 'obg_dens')">${obg}</td><td contenteditable class="val-press" onkeyup="calcPPFG(this, 'obg_press')">${obg_psi}</td><td contenteditable class="val-temp" onkeyup="debouncedUpdateSubsurfaceChart()">${temp}</td>`;
     let prevDepth = 0; let col = getCalcDepthCol();
     for(let i=0; i<tbody.rows.length; i++) { tbody.rows[i].cells[0].textContent = prevDepth.toFixed(0); let botDepth = parseFloat(tbody.rows[i].cells[col].textContent); if(!isNaN(botDepth)) prevDepth = botDepth; }
     applyGeothermal(); 
@@ -886,6 +911,7 @@ function handleFileUpload(event) {
                 });
                 tempData.unshift({x: baseTemp_user, y: 0});
 
+                let isMD = activeType === 'md' ? 'highlight-col' : ''; let isDF = activeType === 'tvddf' ? 'highlight-col' : ''; let isSS = activeType === 'tvdss' ? 'highlight-col' : '';
                 let htmlString = "";
                 parsedRows.forEach(r => {
                     let mdStr = r.md !== null ? r.md.toFixed(0) : ""; let dfStr = r.tvddf !== null ? r.tvddf.toFixed(0) : ""; let ssStr = r.tvdss !== null ? r.tvdss.toFixed(0) : "";
@@ -1152,7 +1178,7 @@ function buildPayload(){
     return {
         flowrate: converters.flow.toBase(Number(document.getElementById("flowrate").value), currentUnits.flow),
         depth: toBaseLength(Number(document.getElementById("depth").value)),
-        sbp: 0, // Injected down below
+        sbp: 0, 
         hole_diameter: 8.5, mpd_mode: "SBP", gradient_mode: "static",
         fluid: { mw: converters.density.toBase(Number(document.getElementById("mw").value), currentUnits.density), fann_600: Number(document.getElementById("f600").value), fann_300: Number(document.getElementById("f300").value), fann_200: Number(document.getElementById("f200").value), fann_100: Number(document.getElementById("f100").value), fann_6: Number(document.getElementById("f6").value), fann_3: Number(document.getElementById("f3").value) },
         temperature: { surface_temp: converters.temp.toBase(defaultSurfTemp, currentUnits.temp), bhct: converters.temp.toBase(maxTempUser, currentUnits.temp), geothermal_grad: 1.5, beta: 0.0003 },
@@ -1164,7 +1190,8 @@ function buildPayload(){
 async function runSimulation(){
     let resultBar = document.getElementById("result");
     resultBar.innerHTML = `<span style="color: #3b82f6;"><b>Running Simulation...</b></span>`;
-    resultBar.style.backgroundColor = "#eff6ff"; resultBar.style.border = "1px solid #bfdbfe";
+    resultBar.style.backgroundColor = "#eff6ff";
+    resultBar.style.border = "1px solid #bfdbfe";
 
     let mainMode = document.getElementById("mainMode").value;
     let mpdMode = document.getElementById("mpdMode").value;
@@ -1220,7 +1247,12 @@ async function runSimulation(){
 
             let baseDynamicPress = baseEcdAtAnchor * anchorDepthBase * 0.051948;
             let requiredSbpPsi = targetPressBase - baseDynamicPress;
-            if (requiredSbpPsi < 0) requiredSbpPsi = 0;
+            
+            let minSbpPsi = converters.press.toBase(Number(document.getElementById("min_sbp").value) || 0, currentUnits.press);
+            let maxSbpPsi = converters.press.toBase(Number(document.getElementById("max_sbp").value) || 2000, currentUnits.press);
+
+            if (requiredSbpPsi < minSbpPsi) requiredSbpPsi = minSbpPsi;
+            if (requiredSbpPsi > maxSbpPsi) requiredSbpPsi = maxSbpPsi;
             
             payload.sbp = requiredSbpPsi;
             let res2 = await fetch("/simulate", { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(payload) });
@@ -1230,11 +1262,10 @@ async function runSimulation(){
 
         lastSimResult = finalResult;
         
-        let displayEcd = fromBaseDens(finalResult.summary.ecd_bottom);
-        let displayLoss = fromBasePress(finalResult.summary.total_annular_loss_psi);
-        let appliedSbp = fromBasePress(payload.sbp);
+        let displayEcd = fromBaseDens(finalResult.summary.ecd_bottom).toFixed(3);
+        let displayLoss = fromBasePress(finalResult.summary.total_annular_loss_psi).toFixed(1);
+        let appliedSbp = fromBasePress(payload.sbp).toFixed(1);
 
-        // Fallback SPP
         let backendSpp = finalResult.summary.spp || finalResult.summary.standpipe_pressure || finalResult.summary.pump_pressure_psi;
         if (backendSpp === undefined) {
             let mw = converters.density.toBase(Number(document.getElementById("mw").value), currentUnits.density);
@@ -1245,13 +1276,15 @@ async function runSimulation(){
             let pPipe = pAnn * 2.5; 
             backendSpp = pBit + pAnn + pPipe;
         }
-        let displaySpp = fromBasePress(backendSpp);
+        let displaySpp = fromBasePress(backendSpp).toFixed(1);
 
-        resultBar.innerHTML = `<span style="color: #166534;"><b>Simulation Complete</b></span>`;
-        resultBar.style.backgroundColor = "#f0fdf4"; resultBar.style.border = "1px solid #bbf7d0";
+        resultBar.innerHTML = `✅ <b style="color: #166534;">Success</b> &nbsp;&nbsp;|&nbsp;&nbsp; 
+            ECD Bottom: <b style="color: #ef4444;">${displayEcd}</b> ${currentUnits.density} &nbsp;&nbsp;|&nbsp;&nbsp; 
+            Annular Loss: <b>${displayLoss}</b> ${currentUnits.press}`;
+        resultBar.style.backgroundColor = "#f0fdf4";
+        resultBar.style.border = "1px solid #bbf7d0";
 
-        // Calculate final Anchor info for Dashboard
-        let anchorDepthUser = fromBaseLength(payload.depth); // default
+        let anchorDepthUser = fromBaseLength(payload.depth); 
         if (displayMode === "dh") {
             let anchorType = document.getElementById("anchorType").value;
             if (anchorType === 'shoe') {
@@ -1266,12 +1299,13 @@ async function runSimulation(){
         let anchorPressUser = fromBasePress(anchorStats.ecd * anchorDepthBase * 0.051948);
         let anchorEcdUser = fromBaseDens(anchorStats.ecd);
 
-        updateDashboard(displaySpp, appliedSbp, anchorDepthUser, anchorPressUser, anchorEcdUser, displayMode, displayLoss);
+        updateDashboard(parseFloat(displaySpp), parseFloat(appliedSbp), anchorDepthUser, anchorPressUser, anchorEcdUser, displayMode, parseFloat(displayLoss));
         replotChart();
 
     } catch (error) { 
-        resultBar.innerHTML = `❌ <b style="color: #991b1b;">Failed to run simulation.</b> Check console for errors.`;
-        resultBar.style.backgroundColor = "#fef2f2"; resultBar.style.border = "1px solid #fecaca";
+        resultBar.innerHTML = `❌ <b style="color: #991b1b;">Failed to run simulation.</b> ${error.message}`;
+        resultBar.style.backgroundColor = "#fef2f2";
+        resultBar.style.border = "1px solid #fecaca";
         console.error(error);
     }
 }
@@ -1363,7 +1397,6 @@ function initScooter() {
     
     let currentDepth = parseFloat(document.getElementById('scooterDepthInput').value);
     let bottomUserDepth = parseFloat(document.getElementById("depth").value);
-    
     if (isNaN(currentDepth)) { currentDepth = bottomUserDepth; }
     
     document.getElementById('scooterDepthInput').value = currentDepth.toFixed(0);
@@ -1391,14 +1424,11 @@ function updateScooterFromInput() {
 
 function updateScooterValues(depthBase) {
     let prof = lastSimResult.profile; let ecd = "-", esd = "-";
-    for (let i=0; i<prof.depth.length-1; i++) {
-        if (depthBase >= prof.depth[i] && depthBase <= prof.depth[i+1]) {
-            let ratio = (depthBase - prof.depth[i]) / (prof.depth[i+1] - prof.depth[i]);
-            ecd = fromBaseDens(prof.ecd[i] + ratio * (prof.ecd[i+1] - prof.ecd[i])).toFixed(3);
-            esd = fromBaseDens(prof.esd[i] + ratio * (prof.esd[i+1] - prof.esd[i])).toFixed(3); break;
-        }
+    let stats = interpolateAtDepth(depthBase, prof);
+    if(stats.ecd > 0) {
+        ecd = fromBaseDens(stats.ecd).toFixed(3);
+        esd = fromBaseDens(stats.esd).toFixed(3);
     }
-    if (depthBase >= prof.depth[prof.depth.length-1]) { ecd = fromBaseDens(prof.ecd[prof.ecd.length-1]).toFixed(3); esd = fromBaseDens(prof.esd[prof.esd.length-1]).toFixed(3); }
 
     let ppfg = getPPFGProfile(); let depthUser = fromBaseLength(depthBase);
     let pp = "-", fp = "-", obg = "-", temp = "-";
