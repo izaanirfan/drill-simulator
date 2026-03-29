@@ -21,7 +21,6 @@ def build_bha_profile(bha, depth):
     profile = []
     current_bottom = depth
     for comp in reversed(bha):
-        # Reverted to dot notation for your SimulationInput object
         top = max(current_bottom - float(comp.length), 0)
         profile.append({"top": top, "bottom": current_bottom, "od": float(comp.od)})
         current_bottom = top
@@ -47,7 +46,6 @@ def get_tvd(trajectory_profile, md):
     if not trajectory_profile:
         return md
     
-    # Interpolate TVD between survey points
     for i in range(len(trajectory_profile) - 1):
         p1 = trajectory_profile[i]
         p2 = trajectory_profile[i+1]
@@ -57,49 +55,34 @@ def get_tvd(trajectory_profile, md):
             ratio = (md - p1["md"]) / (p2["md"] - p1["md"])
             return p1["tvd"] + ratio * (p2["tvd"] - p1["tvd"])
             
-    # Fallback if MD is past the last survey point
     return trajectory_profile[-1]["tvd"] if md >= trajectory_profile[-1]["md"] else md
 
 # -----------------------------
 # TRUE HERSCHEL-BULKLEY PRESSURE LOSS MODEL
 # -----------------------------
 def calculate_annular_pressure_loss(mw, flowrate, Do, Di, tau_y, K, n, length):
-    """
-    Calculates frictional pressure drop using the Highly Accurate 
-    Generalized Reynolds Number (Re_G) for Yield-Power Law fluids.
-    """
-    # ZERO FLOW BYPASS: Prevents mathematical crashes for static EMW calculations
     if flowrate <= 0.1:
         return 0.0
         
     dh = max(Do - Di, 0.1)
-    
-    # Annular velocity in ft/sec
     v_ft_min = (24.48 * flowrate) / (Do**2 - Di**2)
     v_ft_sec = v_ft_min / 60.0
     
     if v_ft_sec <= 0:
         return 0.0
 
-    # Generalized Reynolds Number (Re_G) for Non-Newtonian Fluids
-    # 89100 is the standard API constant for oilfield units
     re_g = (89100 * mw * (v_ft_sec ** (2 - n))) / (K * ((144 / dh) ** n))
-    re_g = max(re_g, 1.0) # Prevent zero division
+    re_g = max(re_g, 1.0) 
     
-    # Calculate Critical Reynolds Number (Point of turbulent transition)
     re_critical = 3470 - (1370 * n)
     
-    # Friction Factor Selection
     if re_g < re_critical:
-        # LAMINAR FLOW REGIME
         f = 24.0 / re_g 
     else:
-        # TURBULENT FLOW REGIME (Dodge-Metzner empirical correlation)
         a = (math.log10(n) + 3.93) / 50.0
         b = (1.75 - math.log10(n)) / 7.0
         f = a / (re_g ** b)
     
-    # Final Pressure Drop for this segment
     dp_psi = (f * length * mw * (v_ft_sec**2)) / (25.81 * dh)
     
     return max(dp_psi, 0.0)
@@ -109,29 +92,25 @@ def calculate_annular_pressure_loss(mw, flowrate, Do, Di, tau_y, K, n, length):
 # -----------------------------
 def run_simulation(data):
     try:
-        # Reverted back to strict dot notation to match your SimulationInput object
         Q = float(data.flowrate or 400)
         total_depth = max(float(data.depth or 10000), 100)
         mw = float(data.fluid.mw or 10)
         sbp = float(data.sbp or 0.0) 
         precision_const = 0.051948
 
-        # 1. Use external rheology.py for HB Fit
         fann_readings = [
             data.fluid.fann_600, data.fluid.fann_300, data.fluid.fann_200, 
             data.fluid.fann_100, data.fluid.fann_6, data.fluid.fann_3
         ]
         tau_y, K, n = hb_fit(fann_readings)
         
-        # Protect fluid parameters from extreme math bounds
         n = max(min(n, 1.0), 0.1)
         K = max(K, 0.0001)
         
-        # 2. Build trajectory using trajectory.py
         traj_profile = build_trajectory(data.trajectory)
         bha_profile = build_bha_profile(data.bha, total_depth)
 
-        depths, ecd_profile, esd_profile = [], [], []
+        depths, ecd_profile, esd_profile, temp_profile = [], [], [], []
         cumulative_annular_loss = 0.0
         
         step = max(int(total_depth / 100), 50)
@@ -143,32 +122,27 @@ def run_simulation(data):
             Do = get_annulus_id(data.well_sections, md)
             Di = get_pipe_od(bha_profile, md)
             
-            # Calculate friction using the UPGRADED Herschel-Bulkley model
             dp = calculate_annular_pressure_loss(mw, Q, Do, Di, tau_y, K, n, step)
             cumulative_annular_loss += dp
 
-            # 3. Interpolate EXACT TVD for this step
             tvd = get_tvd(traj_profile, md)
-            if tvd <= 0.1: 
-                tvd = 0.1 # Prevent Division by Zero at surface
+            if tvd <= 0.1: tvd = 0.1 
 
-            # 4. ECD/ESD = MW + ((Sum of dP + SBP) / (Constant * TVD))
             ecd_base = mw + ((cumulative_annular_loss + sbp) / (precision_const * tvd))
             esd_base = mw + (sbp / (precision_const * tvd))
 
-            # 5. Use temperature.py for transient temp correction
             Tsurf = data.temperature.surface_temp
             Tbh = data.temperature.bhct
-            
-            # Safe beta check in case your temperature object doesn't have it defined
             beta = getattr(data.temperature, 'beta', 0.0003)
             
+            # Dynamic Annulus Temperature
             T_current = temp_transient(md, Tsurf, Tbh, total_depth)
             temp_factor = 1 - beta * (T_current - Tsurf)
 
             depths.append(md)
             ecd_profile.append(round(ecd_base * temp_factor, 3))
             esd_profile.append(round(esd_base * temp_factor, 3))
+            temp_profile.append(round(T_current, 1))
 
         return {
             "summary": {
@@ -179,10 +153,11 @@ def run_simulation(data):
             "profile": {
                 "depth": depths,
                 "ecd": ecd_profile,
-                "esd": esd_profile
+                "esd": esd_profile,
+                "temp": temp_profile
             }
         }
     except Exception as e:
         import traceback
-        traceback.print_exc() # Prints stack trace to your server logs
+        traceback.print_exc() 
         return {"error": str(e)}
