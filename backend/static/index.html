@@ -4,6 +4,8 @@
     <title>Drilling Hydraulics Simulator</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    <script>pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';</script>
 
     <style>
         body { font-family: sans-serif; margin: 20px; color: #333; }
@@ -157,8 +159,8 @@
 
 <div id="bha" class="tab">
     <div class="upload-box">
-        <div><strong>Import BHA Profile</strong><br><span style="font-size: 0.85em; color: #555;">Upload an Excel (.xlsx) file. Must contain Name, Type, OD, ID, Max OD, and Length.</span></div>
-        <label class="upload-btn">Choose Excel/CSV File<input type="file" id="bhaUpload" accept=".xlsx, .xls, .csv" onchange="handleBhaUpload(event)"></label>
+        <div><strong>Import BHA Profile</strong><br><span style="font-size: 0.85em; color: #555;">Upload an Excel (.xlsx, .csv) or PDF (.pdf) file. Must contain Name, OD, ID, and Length.</span></div>
+        <label class="upload-btn">Choose Excel/PDF File<input type="file" id="bhaUpload" accept=".xlsx, .xls, .csv, .pdf" onchange="handleBhaUpload(event)"></label>
     </div>
     
     <div style="display: flex; gap: 40px; align-items: flex-start;">
@@ -171,7 +173,7 @@
                 <tbody id="bhaBody">
                     <tr>
                         <td contenteditable>Drill Pipe</td>
-                        <td><select><option>Pipe</option><option>HWDP</option><option>Collar</option><option>Bit</option><option>Other</option></select></td>
+                        <td><select><option selected>Pipe</option><option>HWDP</option><option>Collar</option><option>Bit</option><option>Other</option></select></td>
                         <td><input class="val-diam" value="5"></td><td><input class="val-diam" value="4"></td><td><input class="val-diam" value="6.5"></td><td><input class="val-length" value="8000" onkeyup="triggerWellDesignChange()"></td>
                     </tr>
                     <tr>
@@ -257,20 +259,6 @@ function highlightActiveDepth() {
     let tbody = document.getElementById("ppfgBody");
     for(let r=0; r<tbody.rows.length; r++) tbody.rows[r].cells[colIndex].classList.add('highlight-col');
 }
-function switchCalcDepth() {
-    let col = getCalcDepthCol();
-    let tbody = document.getElementById("ppfgBody");
-    let prevDepth = 0;
-    highlightActiveDepth();
-    for (let i = 0; i < tbody.rows.length; i++) {
-        let row = tbody.rows[i];
-        row.cells[0].textContent = prevDepth.toFixed(0);
-        let botDepth = parseFloat(row.cells[col].textContent);
-        if (!isNaN(botDepth)) prevDepth = botDepth;
-        calcPPFG(row.cells[4], 'pp_dens', true); calcPPFG(row.cells[6], 'fp_dens', true); calcPPFG(row.cells[8], 'obg_dens', true);
-    }
-    applyGeothermal(true); debouncedUpdateSubsurfaceChart();
-}
 
 // ================= UI NAVIGATION & TRIGGERS =================
 function showTab(tab, btn) {
@@ -284,10 +272,27 @@ function showTab(tab, btn) {
 }
 
 function triggerWellDesignChange() {
+    enforceOpenHoleTop();
     updateSchematics();
     if (lastSimResult) {
         clearTimeout(wellChangeTimer);
         wellChangeTimer = setTimeout(replotChart, 500); 
+    }
+}
+
+function enforceOpenHoleTop() {
+    let table = document.getElementById("wellTable");
+    if (!table) return; let rows = table.rows;
+    for (let i = 1; i < rows.length; i++) {
+        let typeSelect = rows[i].cells[0].querySelector("select");
+        if (!typeSelect) continue;
+        let type = typeSelect.value; let topCell = rows[i].cells[2];
+        if (type === "open hole") {
+            topCell.setAttribute("contenteditable", "false"); topCell.style.backgroundColor = "#ddd"; topCell.style.color = "#666";
+            if (i > 1) { let prevBotCell = rows[i-1].cells[3]; if (topCell.textContent !== prevBotCell.textContent) topCell.textContent = prevBotCell.textContent; }
+        } else {
+            topCell.setAttribute("contenteditable", "true"); topCell.style.backgroundColor = ""; topCell.style.color = "";
+        }
     }
 }
 
@@ -322,51 +327,150 @@ function addSubsurfaceRow(top="", md="", tvddf="", tvdss="", pp="", pp_psi="", f
     applyGeothermal(); 
 }
 
-// ================= EXCEL PARSING (BHA & SUBSURFACE) =================
-function handleBhaUpload(event) {
-    const file = event.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = function(e) {
-        const data = new Uint8Array(e.target.result);
-        const workbook = XLSX.read(data, {type: 'array'});
-        const rawData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], {header: 1});
-        if (rawData.length < 2) return;
+// ================= BHA PARSING (PDF + EXCEL) =================
+async function extractTextFromPDF(pdfData) {
+    const pdf = await pdfjsLib.getDocument({data: pdfData}).promise;
+    let rows = [];
+    for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const textContent = await page.getTextContent();
         
-        let headers = rawData[0].map(h => String(h).toLowerCase());
-        let map = { name: -1, type: -1, od: -1, id: -1, maxOd: -1, len: -1 };
-        headers.forEach((h, i) => {
-            if (/name|item|desc/i.test(h)) map.name = i;
-            if (/type|class/i.test(h)) map.type = i;
-            if (/od|outer/i.test(h) && !/max/i.test(h) && map.od === -1) map.od = i;
-            if (/id|inner/i.test(h)) map.id = i;
-            if (/max.*od|conn/i.test(h)) map.maxOd = i;
-            if (/len|length/i.test(h)) map.len = i;
+        // Group items by Y coordinate to recreate rows
+        let yMap = new Map();
+        textContent.items.forEach(item => {
+            let y = Math.round(item.transform[5] / 4) * 4; // 4pt tolerance grouping
+            if (!yMap.has(y)) yMap.set(y, []);
+            yMap.get(y).push(item);
         });
-
-        if (map.od === -1 || map.len === -1) { alert("Could not find OD or Length columns."); return; }
-
-        document.getElementById("bhaBody").innerHTML = "";
-        for (let i = 1; i < rawData.length; i++) {
-            let row = rawData[i];
-            if (!row || row[map.len] === undefined) continue;
-            let tbody = document.getElementById("bhaBody");
-            let tr = tbody.insertRow();
-            let nm = map.name !== -1 ? (row[map.name] || "Item") : "Item";
-            let ty = map.type !== -1 ? (row[map.type] || "Pipe") : "Pipe";
-            let od = map.od !== -1 ? (parseFloat(row[map.od]) || 0) : 0;
-            let id = map.id !== -1 ? (parseFloat(row[map.id]) || 0) : 0;
-            let mod = map.maxOd !== -1 ? (parseFloat(row[map.maxOd]) || od) : od;
-            let len = parseFloat(row[map.len]) || 0;
-
-            tr.innerHTML = `<td contenteditable>${nm}</td><td><select><option ${ty.includes('Pipe')?'selected':''}>Pipe</option><option ${ty.includes('HWDP')?'selected':''}>HWDP</option><option ${ty.includes('Collar')?'selected':''}>Collar</option><option ${ty.includes('Bit')?'selected':''}>Bit</option><option>Other</option></select></td><td><input class="val-diam" value="${od}"></td><td><input class="val-diam" value="${id}"></td><td><input class="val-diam" value="${mod}"></td><td><input class="val-length" value="${len}" onkeyup="triggerWellDesignChange()"></td>`;
-        }
-        triggerWellDesignChange();
-        document.getElementById("bhaUpload").value = "";
-    };
-    reader.readAsArrayBuffer(file);
+        
+        let yKeys = Array.from(yMap.keys()).sort((a,b) => b - a); // Top to bottom
+        yKeys.forEach(y => {
+            let lineItems = yMap.get(y).sort((a,b) => a.transform[4] - b.transform[4]); // Left to right
+            rows.push(lineItems.map(item => item.str)); 
+        });
+    }
+    return rows;
 }
 
+function askUnitIfNeeded(detectedDiam, detectedLen) {
+    let finalDiam = detectedDiam;
+    let finalLen = detectedLen;
+    
+    if(!finalDiam) {
+        let resp = prompt("Could not detect Diameter unit in file. Enter 'in' or 'mm':", currentUnits.diam);
+        finalDiam = resp ? resp.toLowerCase().trim() : currentUnits.diam;
+    }
+    if(!finalLen) {
+        let resp = prompt("Could not detect Length unit in file. Enter 'ft' or 'm':", currentUnits.length);
+        finalLen = resp ? resp.toLowerCase().trim() : currentUnits.length;
+    }
+    return {diam: finalDiam, len: finalLen};
+}
+
+async function handleBhaUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    document.getElementById("bhaBody").innerHTML = `<tr><td colspan="6" style="text-align:center;"><b>Parsing BHA File... Please wait.</b></td></tr>`;
+
+    let rawData = [];
+    
+    if (file.name.toLowerCase().endsWith('.pdf')) {
+        const arrayBuffer = await file.arrayBuffer();
+        rawData = await extractTextFromPDF(new Uint8Array(arrayBuffer));
+    } else {
+        const arrayBuffer = await file.arrayBuffer();
+        const workbook = XLSX.read(new Uint8Array(arrayBuffer), {type: 'array'});
+        rawData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], {header: 1});
+    }
+
+    if (rawData.length < 2) { 
+        alert("File appears to be empty or unreadable."); 
+        document.getElementById("bhaBody").innerHTML = "";
+        return; 
+    }
+
+    // Flatten and Search for Headers
+    let map = { name: -1, type: -1, od: -1, id: -1, maxOd: -1, len: -1 };
+    let headerRowIndex = 0;
+    let detectedDiam = null; let detectedLen = null;
+
+    for (let r=0; r < Math.min(20, rawData.length); r++) {
+        let rowStrs = rawData[r].map(cell => String(cell).toLowerCase().trim());
+        let matches = 0;
+        
+        rowStrs.forEach((h, i) => {
+            if (/(in|inch|inches|mm|milimeter)/.test(h)) detectedDiam = /mm/.test(h) ? 'mm' : 'in';
+            if (/(ft|feet|m|meter)/.test(h)) detectedLen = /m|meter/.test(h) ? 'm' : 'ft';
+
+            if (/name|item|desc/i.test(h)) { map.name = i; matches++; }
+            else if (/type|class/i.test(h)) { map.type = i; matches++; }
+            else if (/^od|outer.*d/i.test(h) && !/max|conn|tj/i.test(h)) { map.od = i; matches++; }
+            else if (/^id|inner.*d/i.test(h)) { map.id = i; matches++; }
+            else if (/max.*od|conn.*od|tj.*od/i.test(h)) { map.maxOd = i; matches++; }
+            else if (/len|length/i.test(h)) { map.len = i; matches++; }
+        });
+        
+        if (matches >= 2) { headerRowIndex = r; break; }
+    }
+
+    if (map.od === -1 || map.len === -1) { 
+        alert("Could not cleanly detect OD and Length columns. Please ensure headers are clear."); 
+        document.getElementById("bhaBody").innerHTML = "";
+        return; 
+    }
+
+    // Prompt for missing units
+    let units = askUnitIfNeeded(detectedDiam, detectedLen);
+
+    let htmlString = "";
+    for (let i = headerRowIndex + 1; i < rawData.length; i++) {
+        let row = rawData[i];
+        if (!row || !row[map.len] || isNaN(parseFloat(row[map.len]))) continue;
+
+        let nm = map.name !== -1 && row[map.name] ? row[map.name] : "Component";
+        let tyStr = map.type !== -1 && row[map.type] ? String(row[map.type]).toLowerCase() : "";
+        
+        let tyOpt = "Other";
+        if (/pipe|dp/i.test(tyStr) || /pipe|dp/i.test(nm.toLowerCase())) tyOpt = "Pipe";
+        if (/hwdp|heavy/i.test(tyStr) || /hwdp|heavy/i.test(nm.toLowerCase())) tyOpt = "HWDP";
+        if (/collar|dc/i.test(tyStr) || /collar|dc/i.test(nm.toLowerCase())) tyOpt = "Collar";
+        if (/bit|pdc/i.test(tyStr) || /bit|pdc/i.test(nm.toLowerCase())) tyOpt = "Bit";
+
+        // Extract numbers and convert to Base (which backend needs), then back to UI units
+        let rawOd = map.od !== -1 ? parseFloat(row[map.od]) : 0;
+        let rawId = map.id !== -1 ? parseFloat(row[map.id]) : 0;
+        let rawMod = map.maxOd !== -1 ? parseFloat(row[map.maxOd]) : rawOd;
+        let rawLen = parseFloat(row[map.len]) || 0;
+
+        let baseOd = converters.diam.toBase(rawOd, units.diam);
+        let baseId = converters.diam.toBase(rawId, units.diam);
+        let baseMod = converters.diam.toBase(rawMod, units.diam);
+        let baseLen = converters.length.toBase(rawLen, units.len);
+
+        let uiOd = converters.diam.fromBase(baseOd, currentUnits.diam).toFixed(3);
+        let uiId = converters.diam.fromBase(baseId, currentUnits.diam).toFixed(3);
+        let uiMod = converters.diam.fromBase(baseMod, currentUnits.diam).toFixed(3);
+        let uiLen = converters.length.fromBase(baseLen, currentUnits.length).toFixed(1);
+
+        htmlString += `
+            <tr>
+                <td contenteditable>${nm}</td>
+                <td><select><option ${tyOpt==='Pipe'?'selected':''}>Pipe</option><option ${tyOpt==='HWDP'?'selected':''}>HWDP</option><option ${tyOpt==='Collar'?'selected':''}>Collar</option><option ${tyOpt==='Bit'?'selected':''}>Bit</option><option ${tyOpt==='Other'?'selected':''}>Other</option></select></td>
+                <td><input class="val-diam" value="${uiOd}"></td>
+                <td><input class="val-diam" value="${uiId}"></td>
+                <td><input class="val-diam" value="${uiMod}"></td>
+                <td><input class="val-length" value="${uiLen}" onkeyup="triggerWellDesignChange()"></td>
+            </tr>`;
+    }
+
+    document.getElementById("bhaBody").innerHTML = htmlString;
+    triggerWellDesignChange();
+    document.getElementById("bhaUpload").value = "";
+}
+
+
+// ================= SUBSURFACE PARSING =================
 function handleFileUpload(event) {
     const file = event.target.files[0];
     if (!file) return;
@@ -498,32 +602,6 @@ function handleFileUpload(event) {
     reader.readAsArrayBuffer(file);
 }
 
-// ================= UNITS =================
-const converters = {
-    length: { toBase: (v, u) => u === "m" ? v * 3.28084 : v,  fromBase: (v, u) => u === "m" ? v / 3.28084 : v },
-    diam:   { toBase: (v, u) => u === "mm" ? v / 25.4 : v,    fromBase: (v, u) => u === "mm" ? v * 25.4 : v },
-    density:{ toBase: (v, u) => u === "sg" ? v * 8.33 : (u === "kg/m3" ? v / 119.826 : v), fromBase: (v, u) => u === "sg" ? v / 8.33 : (u === "kg/m3" ? v * 119.826 : v) },
-    press:  { toBase: (v, u) => u === "bar" ? v * 14.5038 : (u === "kPa" ? v * 0.145038 : v), fromBase: (v, u) => u === "bar" ? v / 14.5038 : (u === "kPa" ? v / 0.145038 : v) },
-    flow:   { toBase: (v, u) => u === "lpm" ? v * 0.264172 : v, fromBase: (v, u) => u === "lpm" ? v / 0.264172 : v },
-    temp:   { toBase: (v, u) => u === "C" ? (v * 9/5) + 32 : v, fromBase: (v, u) => u === "C" ? (v - 32) * 5/9 : v }
-};
-function changeUnit(category, selectElement) {
-    const newUnit = selectElement.value; const oldUnit = currentUnits[category]; if (oldUnit === newUnit) return;
-    document.querySelectorAll(`.val-${category}`).forEach(el => {
-        let isInput = el.tagName === 'INPUT'; let valStr = isInput ? el.value : el.textContent;
-        if (valStr.trim() !== "") {
-            let val = parseFloat(valStr);
-            if (!isNaN(val)) { let baseVal = converters[category].toBase(val, oldUnit); let newVal = converters[category].fromBase(baseVal, newUnit); if (isInput) el.value = newVal.toFixed(3); else el.textContent = newVal.toFixed(3); }
-        }
-    });
-    document.querySelectorAll(`.lbl-${category}`).forEach(el => el.textContent = category === "temp" ? "°" + newUnit : newUnit);
-    currentUnits[category] = newUnit;
-    debouncedUpdateSubsurfaceChart(); if (lastSimResult) replotChart(); updateSchematics();
-}
-function toBaseLength(v) { return converters.length.toBase(v, currentUnits.length); } function toBaseDiam(v)   { return converters.diam.toBase(v, currentUnits.diam); }
-function toBaseDens(v)   { return converters.density.toBase(v, currentUnits.density); } function toBasePress(v)  { return converters.press.toBase(v, currentUnits.press); }
-function fromBaseLength(v) { return converters.length.fromBase(v, currentUnits.length); } function fromBaseDens(v)   { return converters.density.fromBase(v, currentUnits.density); } function fromBasePress(v)  { return converters.press.fromBase(v, currentUnits.press); }
-
 // ================= SUBSURFACE CALCS =================
 function triggerPPFGCalc(depthCell) {
     let tbody = document.getElementById("ppfgBody"); let col = getCalcDepthCol(); let prevDepth = 0;
@@ -607,33 +685,34 @@ function drawWellCanvas(canvasId, yMinBase, yMaxBase, drawString=false) {
     let maxOD = Math.max(...sections.map(s => s.od));
     
     let drawAreaH = h - 30; let yOffset = 15;
+    const centerX = w / 2;
 
     sections.forEach((sec, idx) => {
         if (sec.bottom <= yMinBase || sec.top >= yMaxBase) return;
         let drawTop = Math.max(sec.top, yMinBase); let drawBottom = Math.min(sec.bottom, yMaxBase);
         let y1 = ((drawTop - yMinBase) / (yMaxBase - yMinBase)) * drawAreaH + yOffset;
         let y2 = ((drawBottom - yMinBase) / (yMaxBase - yMinBase)) * drawAreaH + yOffset;
-        let secH = y2 - y1; let secW = (sec.id / maxOD) * (w * 0.4); let x = (w - secW) / 2 + 30;
+        let secH = y2 - y1; let secW = (sec.id / maxOD) * (w * 0.4); let x = centerX - secW / 2;
 
         if (sec.type === "open hole") {
             ctx.fillStyle = "#d4c5b9"; ctx.fillRect(x, y1, secW, secH); ctx.strokeStyle = "#8c7b6c"; ctx.strokeRect(x, y1, secW, secH);
         } else {
-            ctx.fillStyle = "#555"; ctx.fillRect(x, y1, secW, secH); let idW = secW * 0.75; let idX = (w - idW) / 2 + 30;
+            ctx.fillStyle = "#555"; ctx.fillRect(x, y1, secW, secH); let idW = secW * 0.75; let idX = centerX - idW / 2;
             ctx.fillStyle = "#f4f7f6"; ctx.fillRect(idX, y1, idW, secH);
         }
         
         ctx.fillStyle = "#555"; ctx.font = "bold 11px sans-serif"; ctx.textAlign = "right";
         let isShoe = sec.type !== "open hole" && (idx === sections.length - 1 || sections[idx+1].type === "open hole");
         let isTD = idx === sections.length - 1;
-        let textX = x - 5; let textY = y2 + 4; if (textY > h - 2) textY = y2 - 4; 
+        let textX = centerX - (secW / 2) - 5; let textY = y2 + 4; if (textY > h - 2) textY = y2 - 4; 
 
         if (isShoe && sec.bottom <= yMaxBase && sec.bottom >= yMinBase) {
             ctx.fillText(`${fromBaseLength(sec.bottom).toFixed(0)} (Shoe)`, textX, textY);
-            ctx.beginPath(); ctx.moveTo(x - 5, y2); ctx.lineTo(x, y2); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(textX + 2, y2); ctx.lineTo(x, y2); ctx.stroke();
         }
         if (isTD && sec.type === "open hole" && sec.bottom <= yMaxBase && sec.bottom >= yMinBase) {
             ctx.fillText(`${fromBaseLength(sec.bottom).toFixed(0)} (TD)`, textX, textY);
-            ctx.beginPath(); ctx.moveTo(x - 5, y2); ctx.lineTo(x, y2); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(textX + 2, y2); ctx.lineTo(x, y2); ctx.stroke();
         }
     });
 
@@ -645,9 +724,9 @@ function drawWellCanvas(canvasId, yMinBase, yMaxBase, drawString=false) {
             let drawTop = Math.max(top, yMinBase); let drawBot = Math.min(bot, yMaxBase);
             let y1 = ((drawTop - yMinBase) / (yMaxBase - yMinBase)) * drawAreaH + yOffset;
             let y2 = ((drawBot - yMinBase) / (yMaxBase - yMinBase)) * drawAreaH + yOffset;
-            let secH = y2 - y1; let secW = (comp.od / maxOD) * (w * 0.4); let x = (w - secW) / 2 + 30;
+            let secH = y2 - y1; let secW = (comp.od / maxOD) * (w * 0.4); let x = centerX - secW / 2;
             ctx.fillStyle = "#1e3a8a"; ctx.fillRect(x, y1, secW, secH); 
-            let idW = (comp.id / maxOD) * (w * 0.4); let idX = (w - idW) / 2 + 30;
+            let idW = (comp.id / maxOD) * (w * 0.4); let idX = centerX - idW / 2;
             ctx.fillStyle = "#bfdbfe"; ctx.fillRect(idX, y1, idW, secH); 
         }
     }
@@ -659,14 +738,14 @@ function drawBHACanvas() {
     let bha = getBHAForDrawing(); if(bha.length === 0) return;
     let totalLen = bha.reduce((sum, comp) => sum + comp.lengthBase, 0); if(totalLen <= 0) return;
     let maxOD = Math.max(...bha.map(c => c.od));
-    let drawAreaH = h - 30; let yOffset = 15; let currentTop = 0;
+    let drawAreaH = h - 30; let yOffset = 15; let currentTop = 0; const centerX = w / 2;
 
     bha.forEach(comp => {
         let y1 = (currentTop / totalLen) * drawAreaH + yOffset;
         let y2 = ((currentTop + comp.lengthBase) / totalLen) * drawAreaH + yOffset;
-        let secH = y2 - y1; let secW = (comp.od / maxOD) * (w * 0.5); let x = (w - secW) / 2 + 30;
+        let secH = y2 - y1; let secW = (comp.od / maxOD) * (w * 0.5); let x = centerX - secW / 2;
         ctx.fillStyle = "#1e3a8a"; ctx.fillRect(x, y1, secW, secH);
-        let idW = (comp.id / maxOD) * (w * 0.5); let idX = (w - idW) / 2 + 30;
+        let idW = (comp.id / maxOD) * (w * 0.5); let idX = centerX - idW / 2;
         ctx.fillStyle = "#bfdbfe"; ctx.fillRect(idX, y1, idW, secH);
         currentTop += comp.lengthBase;
     });
@@ -687,7 +766,6 @@ function updateSchematics() {
     
     drawWellCanvas("wellCanvasSim", minDepthBase, maxDepthBase, true); 
     
-    // Retain scooter state perfectly
     if (lastSimResult && document.getElementById('showScooter').checked) {
         let oldVal = document.getElementById('scooterDepthInput').value;
         initScooter();
@@ -891,7 +969,12 @@ scooterLine.addEventListener('mousedown', (e) => { isDraggingScooter = true; e.p
 document.addEventListener('mousemove', (e) => { if (!isDraggingScooter || !chartInstance) return; let rect = chartWrapper.getBoundingClientRect(); moveScooterTo(e.clientY - rect.top); });
 document.addEventListener('mouseup', () => { isDraggingScooter = false; });
 
-window.onload = function() { highlightActiveDepth(); updateSchematics(); debouncedUpdateSubsurfaceChart(); };
+window.onload = function() { 
+    enforceOpenHoleTop();
+    highlightActiveDepth(); 
+    updateSchematics(); 
+    debouncedUpdateSubsurfaceChart(); 
+};
 </script>
 </body>
 </html>
