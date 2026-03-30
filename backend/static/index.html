@@ -42,6 +42,7 @@
         #scooterBox { position: absolute; left: 10px; top: -45px; background: rgba(255,255,255,0.95); border: 1px solid #999; padding: 5px 15px; border-radius: 4px; box-shadow: 0px 2px 10px rgba(0,0,0,0.2); display: flex; align-items: center; gap: 15px; cursor: default; pointer-events: auto; }
         .scooter-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px 15px; font-size: 0.85em; line-height: 1.3; }
         
+        /* Dashboard Layout */
         .dash-panel { display: flex; gap: 15px; background: #334155; padding: 15px; border-radius: 8px; margin-top: 15px; align-items: stretch; justify-content: center; }
         .dash-card { flex: 1; max-width: 300px; background: #1e293b; border: 1px solid #475569; border-radius: 6px; padding: 15px; display: flex; flex-direction: column; align-items: center; position: relative; }
         .dash-card.active-anchor { border-color: #4ade80; box-shadow: 0 0 10px rgba(74, 222, 128, 0.2); }
@@ -275,15 +276,6 @@
                 </tr>
             </table>
             <button onclick="addWellRow()">Add Row</button>
-            
-            <div style="margin-top: 25px; padding: 15px; background: #eef2ff; border-radius: 6px; border: 1px solid #bfdbfe; max-width: 600px;">
-                <h4 style="margin-top: 0; color: #1e3a8a;">Global Thermal Boundary Properties</h4>
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; font-size: 0.85em;">
-                    <div><b>Casing / Liner</b><br> Cond (BTU/hr-ft-F): <input id="k_casing" value="25.0" style="width: 50px;" onkeyup="triggerWellDesignChange()"><br> Cp (BTU/lb-F): <input id="cp_casing" value="0.12" style="width: 50px;" onkeyup="triggerWellDesignChange()"></div>
-                    <div><b>Cement</b><br> Cond (BTU/hr-ft-F): <input id="k_cement" value="0.5" style="width: 50px;" onkeyup="triggerWellDesignChange()"><br> Cp (BTU/lb-F): <input id="cp_cement" value="0.2" style="width: 50px;" onkeyup="triggerWellDesignChange()"></div>
-                    <div><b>Formation / Rock</b><br> Cond (BTU/hr-ft-F): <input id="k_form" value="1.3" style="width: 50px;" onkeyup="triggerWellDesignChange()"><br> Cp (BTU/lb-F): <input id="cp_form" value="0.2" style="width: 50px;" onkeyup="triggerWellDesignChange()"></div>
-                </div>
-            </div>
         </div>
         <div style="background: #f4f7f6; padding: 10px; border: 1px solid #ccc;"><h4 style="margin-top: 0; text-align: center;">Schematic</h4><canvas id="wellCanvasDesign" width="200" height="400"></canvas></div>
     </div>
@@ -362,7 +354,7 @@
             <div>Target Case: <select id="importCase" class="case-select"><option value="mid">Mid Case (Default)</option><option value="low">Low Case</option><option value="high">High Case</option><option value="base">Base Case</option><option value=".*">Any/Not Specified</option></select></div>
             <div>Import As: <select id="importUnit" class="case-select"><option value="ppg" selected>Density (ppg / sg)</option><option value="psi">Pressure (psi / bar)</option></select></div>
             <div>Import Depth As: <select id="importDepthUnit" class="case-select"><option value="auto">Auto-Detect</option><option value="ft">Feet (ft)</option><option value="m">Meters (m)</option></select></div>
-            <div>DF Elev (<span class="lbl-length">ft</span>): <input id="df_elev" type="number" value="100" style="width: 70px; padding: 4px;" onkeyup="switchCalcDepth()"></div>
+            <div>DF Elev (<span class="lbl-length">ft</span>): <input id="df_elev" type="number" value="100" style="width: 70px; padding: 4px;" onkeyup="applyDfElev()" onchange="applyDfElev()"></div>
         </div>
         <label class="upload-btn">Choose Excel/CSV File<input type="file" id="excelUpload" accept=".xlsx, .xls, .csv" onchange="handleFileUpload(event)"></label>
     </div>
@@ -394,6 +386,7 @@
 </div>
 
 <script>
+// GLOBAL VARIABLES
 let chartDensityInstance = null;
 let chartPressureInstance = null;
 let chartTempInstance = null;
@@ -606,6 +599,26 @@ function highlightActiveDepth() {
     table.classList.remove("active-col-1", "active-col-2", "active-col-3"); table.classList.add("active-col-" + colIndex);
 }
 
+function applyDfElev() {
+    let df_elev_user = parseFloat(document.getElementById("df_elev").value) || 0;
+    let df_elev_base = toBaseLength(df_elev_user);
+    let tbody = document.getElementById("ppfgBody");
+    for (let i = 0; i < tbody.rows.length; i++) {
+        let row = tbody.rows[i];
+        let tvddf = parseFloat(row.cells[2].textContent.replace(/,/g,''));
+        let tvdss = parseFloat(row.cells[3].textContent.replace(/,/g,''));
+        
+        if (!isNaN(tvddf) && !isNaN(tvdss)) {
+            row.cells[3].textContent = (tvddf - df_elev_base).toFixed(0);
+        } else if (!isNaN(tvddf)) {
+            row.cells[3].textContent = (tvddf - df_elev_base).toFixed(0);
+        } else if (!isNaN(tvdss)) {
+            row.cells[2].textContent = (tvdss + df_elev_base).toFixed(0);
+        }
+    }
+    switchCalcDepth();
+}
+
 function handleTableKeyup(e) {
     let td = e.target; if (td.tagName !== 'TD') return; let cellIndex = td.cellIndex;
     if (cellIndex >= 1 && cellIndex <= 3) triggerPPFGCalc(td);
@@ -624,6 +637,7 @@ function switchCalcDepth() {
         let row = tbody.rows[i]; row.cells[0].textContent = prevDepth.toFixed(0);
         let botDepth = parseFloat(row.cells[col].textContent); if (!isNaN(botDepth)) prevDepth = botDepth;
         
+        // Priority recalculation based on original data type
         if (unitPref === 'psi') {
             calcPPFG(row.cells[5], 'pp_press', true); 
             calcPPFG(row.cells[7], 'fp_press', true); 
@@ -679,7 +693,7 @@ function askUnitIfNeeded(detectedDiam, detectedLen) {
 function handleBhaUpload(event) {
     const file = event.target.files[0];
     if (!file) return;
-    document.getElementById("bhaBody").innerHTML = `<tr><td colspan="7" style="text-align:center;"><b>Parsing BHA File... Please wait.</b></td></tr>`;
+    document.getElementById("bhaBody").innerHTML = `<tr><td colspan="7" style="text-align:center;"><b>Parsing Excel/CSV File... Please wait.</b></td></tr>`;
     
     const reader = new FileReader();
     reader.onload = function(e) {
@@ -1152,49 +1166,23 @@ function buildPayload(){
     }
 
     let actualFlow = Number(document.getElementById("flowrate").value);
-    
     let mainMode = document.getElementById("mainMode").value;
     let mpdMode = document.getElementById("mpdMode").value;
     let anchorType = document.getElementById("anchorType").value;
     let zfMode = document.getElementById("zeroFlowMode").value;
-    
-    let el_k_casing = document.getElementById("k_casing");
-    let el_cp_casing = document.getElementById("cp_casing");
-    let el_k_cement = document.getElementById("k_cement");
-    let el_cp_cement = document.getElementById("cp_cement");
-    let el_k_form = document.getElementById("k_form");
-    let el_cp_form = document.getElementById("cp_form");
-    let el_geo_grad = document.getElementById("geo_grad");
 
     return {
         flowrate: converters.flow.toBase(actualFlow, currentUnits.flow),
         depth: toBaseLength(Number(document.getElementById("depth").value)),
         sbp: converters.press.toBase(Number(document.getElementById("sbp").value), currentUnits.press),
-        main_mode: mainMode,
-        mpd_mode: mpdMode,
-        anchor_type: anchorType,
-        anchor_fixed_val: toBaseLength(Number(document.getElementById("anchorFixedVal").value)),
-        target_type: document.getElementById("targetType").value,
-        target_val: Number(document.getElementById("targetVal").value),
-        min_sbp: converters.press.toBase(Number(document.getElementById("min_sbp").value) || 0, currentUnits.press),
-        max_sbp: converters.press.toBase(Number(document.getElementById("max_sbp").value) || 2000, currentUnits.press),
-        zero_flow_mode: zfMode,
-        zero_flow_time: Number(document.getElementById("zeroFlowTime").value) || 0,
-        bit_tfa: Number(document.getElementById("bit_tfa").value) || 1.0,
         fluid: { 
             mw: converters.density.toBase(Number(document.getElementById("mw").value), currentUnits.density), 
             fann_600: Number(document.getElementById("f600").value), fann_300: Number(document.getElementById("f300").value), fann_200: Number(document.getElementById("f200").value), fann_100: Number(document.getElementById("f100").value), fann_6: Number(document.getElementById("f6").value), fann_3: Number(document.getElementById("f3").value) 
         },
         temperature: { 
             surface_temp: converters.temp.toBase(Number(document.getElementById("surface_temp").value), currentUnits.temp), 
-            geothermal_grad: el_geo_grad ? parseFloat(el_geo_grad.value) : 1.5,
-            beta: 0.0003, 
-            k_casing: el_k_casing ? parseFloat(el_k_casing.value) : 25.0, 
-            cp_casing: el_cp_casing ? parseFloat(el_cp_casing.value) : 0.12, 
-            k_cement: el_k_cement ? parseFloat(el_k_cement.value) : 0.5, 
-            cp_cement: el_cp_cement ? parseFloat(el_cp_cement.value) : 0.2, 
-            k_form: el_k_form ? parseFloat(el_k_form.value) : 1.3, 
-            cp_form: el_cp_form ? parseFloat(el_cp_form.value) : 0.2 
+            geothermal_grad: parseFloat(document.getElementById("geo_grad").value) || 1.5,
+            beta: 0.0003
         },
         trajectory: trajectory, well_sections: well_sections, bha: bha
     };
@@ -1209,42 +1197,123 @@ async function runSimulation(){
     resultBar.style.backgroundColor = "#eff6ff"; resultBar.style.border = "1px solid #bfdbfe";
 
     let payload = buildPayload();
+    let mainMode = document.getElementById("mainMode").value;
+    let mpdMode = document.getElementById("mpdMode").value;
 
     try {
-        let res = await fetch("/simulate", { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(payload) });
-        let finalResult = await res.json();
-        
-        if (!finalResult || !finalResult.summary || finalResult.error) {
-            throw new Error(finalResult ? finalResult.error : "Unknown Server Error. Check inputs.");
+        let appliedSbpBase = 0.0;
+        let displayMode = "conv";
+
+        // PASS 1 for Downhole Target Solver
+        if (mainMode === "mpd" && mpdMode === "downhole") {
+            displayMode = "dh";
+            payload.sbp = 0.0;
+            let res1 = await fetch("/simulate", { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(payload) });
+            let data1 = await res1.json();
+            if (!data1 || !data1.summary || data1.error) throw new Error(data1?.error || "Pass 1 Server Error.");
+
+            let anchorType = document.getElementById("anchorType").value;
+            let anchorDepthBase = payload.depth;
+            if (anchorType === 'shoe') {
+                let sections = getWellSectionsForDrawing(); let openHoles = sections.filter(s => s.type === "open hole");
+                anchorDepthBase = openHoles.length > 0 ? openHoles[0].top : payload.depth;
+            } else if (anchorType === 'fixed') {
+                anchorDepthBase = toBaseLength(Number(document.getElementById("anchorFixedVal").value));
+            }
+
+            let baseEcdAtAnchor = 0;
+            for (let i=0; i<data1.profile.depth.length-1; i++) {
+                if (anchorDepthBase >= data1.profile.depth[i] && anchorDepthBase <= data1.profile.depth[i+1]) {
+                    let ratio = (anchorDepthBase - data1.profile.depth[i]) / (data1.profile.depth[i+1] - data1.profile.depth[i]);
+                    baseEcdAtAnchor = data1.profile.ecd[i] + ratio * (data1.profile.ecd[i+1] - data1.profile.ecd[i]);
+                    break;
+                }
+            }
+            if (anchorDepthBase >= data1.profile.depth[data1.profile.depth.length-1]) baseEcdAtAnchor = data1.profile.ecd[data1.profile.ecd.length-1];
+
+            let targetType = document.getElementById("targetType").value;
+            let targetValUser = Number(document.getElementById("targetVal").value);
+            let targetPressBase = targetType === "density" ? converters.density.toBase(targetValUser, currentUnits.density) * anchorDepthBase * 0.051948 : converters.press.toBase(targetValUser, currentUnits.press);
+
+            let baseDynamicPress = baseEcdAtAnchor * anchorDepthBase * 0.051948;
+            let requiredSbpPsi = targetPressBase - baseDynamicPress;
+            
+            let minSbpPsi = converters.press.toBase(Number(document.getElementById("min_sbp").value) || 0, currentUnits.press);
+            let maxSbpPsi = converters.press.toBase(Number(document.getElementById("max_sbp").value) || 2000, currentUnits.press);
+
+            if (requiredSbpPsi < minSbpPsi) {
+                requiredSbpPsi = minSbpPsi;
+                warningDiv.innerText = `⚠️ Target EMW cannot be achieved (Requires SBP < Min). Simulating at Min SBP.`;
+                warningDiv.style.display = "block";
+            } else if (requiredSbpPsi > maxSbpPsi) {
+                requiredSbpPsi = maxSbpPsi;
+                warningDiv.innerText = `⚠️ Target EMW cannot be achieved (Requires SBP > Max). Simulating at Max SBP.`;
+                warningDiv.style.display = "block";
+            }
+            appliedSbpBase = requiredSbpPsi;
+        } else if (mainMode === "mpd" && mpdMode === "sbp") {
+            displayMode = "sbp";
+            appliedSbpBase = payload.sbp;
         }
+
+        // PASS 2: Final Run
+        payload.sbp = appliedSbpBase;
+        let res2 = await fetch("/simulate", { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(payload) });
+        let finalResult = await res2.json();
+        if (!finalResult || !finalResult.summary || finalResult.error) throw new Error(finalResult?.error || "Final Pass Server Error.");
+
+        // Calculate Zero Flow Curve locally to avoid requiring API Schema Changes
+        let mw_base = payload.fluid.mw;
+        let t_surf = payload.temperature.surface_temp;
+        let geo_grad = payload.temperature.geothermal_grad / 100.0;
+        let beta = payload.temperature.beta;
+        
+        let zfMode = document.getElementById("zeroFlowMode").value;
+        let zfTime = zfMode === "insitu" ? (Number(document.getElementById("zeroFlowTime").value) || 12) : 0;
+        let thermal_factor = 1 - Math.exp(-zfTime / 10.0);
+        
+        let t_rock_td = t_surf + (geo_grad * payload.depth);
+        let cbhp_dyn = finalResult.profile.ecd[finalResult.profile.ecd.length-1] * 0.051948 * payload.depth;
+        let esd_circ_td = finalResult.profile.esd[finalResult.profile.esd.length-1];
+        let t_avg_geo_td = (t_surf + t_rock_td) / 2.0;
+        let esd_geo_td = mw_base * (1 - beta * (t_avg_geo_td - t_surf));
+        let rho_t_td = esd_circ_td + (esd_geo_td - esd_circ_td) * thermal_factor;
+        
+        let zf_req_sbp = Math.max(cbhp_dyn - (rho_t_td * 0.051948 * payload.depth), 0);
+        
+        let zf_emw_prof = [];
+        for (let i = 0; i < finalResult.profile.depth.length; i++) {
+            let md = finalResult.profile.depth[i];
+            if (md < 0.1) { zf_emw_prof.push(mw_base); continue; }
+            let t_geo = t_surf + geo_grad * md;
+            let t_avg = (t_surf + t_geo) / 2.0;
+            let esd_geo = mw_base * (1 - beta * (t_avg - t_surf));
+            let rho_t = finalResult.profile.esd[i] + (esd_geo - finalResult.profile.esd[i]) * thermal_factor;
+            let hydro = rho_t * 0.051948 * md;
+            zf_emw_prof.push((zf_req_sbp + hydro) / (0.051948 * md));
+        }
+        finalResult.profile.zf_emw = zf_emw_prof;
 
         lastSimResult = finalResult;
         
         let displayEcd = fromBaseDens(finalResult.summary.ecd_bottom).toFixed(3);
         let displayLoss = fromBasePress(finalResult.summary.total_annular_loss_psi).toFixed(1);
-        let appliedSbp = fromBasePress(finalResult.summary.applied_sbp).toFixed(1);
+        let appliedSbp = fromBasePress(appliedSbpBase).toFixed(1);
         let displaySpp = fromBasePress(finalResult.summary.spp).toFixed(1);
-        let zfSbp = fromBasePress(finalResult.summary.zf_req_sbp);
+        let displayZfSbp = fromBasePress(zf_req_sbp);
 
-        if (finalResult.summary.target_warning) {
-            warningDiv.innerText = finalResult.summary.target_warning;
-            warningDiv.style.display = "block";
-        }
-
-        resultBar.innerHTML = `✅ <b style="color: #166534;">Success</b> &nbsp;&nbsp;|&nbsp;&nbsp; 
-            EMW Dyn Bottom: <b style="color: #ef4444;">${displayEcd}</b> ${currentUnits.density} &nbsp;&nbsp;|&nbsp;&nbsp; 
-            Annular Loss: <b>${displayLoss}</b> ${currentUnits.press}`;
+        resultBar.innerHTML = `✅ <b style="color: #166534;">Success</b> &nbsp;&nbsp;|&nbsp;&nbsp; EMW Dyn Bottom: <b style="color: #ef4444;">${displayEcd}</b> ${currentUnits.density} &nbsp;&nbsp;|&nbsp;&nbsp; Annular Loss: <b>${displayLoss}</b> ${currentUnits.press}`;
         resultBar.style.backgroundColor = "#f0fdf4";
         resultBar.style.border = "1px solid #bbf7d0";
 
         let anchorDepthUser = fromBaseLength(payload.depth); 
-        let displayMode = payload.main_mode === "conventional" ? "conv" : payload.mpd_mode;
-        if (displayMode === "downhole") {
-            if (payload.anchor_type === 'shoe') {
+        if (displayMode === "dh") {
+            let anchorType = document.getElementById("anchorType").value;
+            if (anchorType === 'shoe') {
                 let sections = getWellSectionsForDrawing(); let openHoles = sections.filter(s => s.type === "open hole");
                 anchorDepthUser = fromBaseLength(openHoles.length > 0 ? openHoles[0].top : payload.depth);
-            } else if (payload.anchor_type === 'fixed') {
-                anchorDepthUser = fromBaseLength(payload.anchor_fixed_val);
+            } else if (anchorType === 'fixed') {
+                anchorDepthUser = Number(document.getElementById("anchorFixedVal").value);
             }
         }
         
@@ -1262,7 +1331,7 @@ async function runSimulation(){
         let anchorPressUser = fromBasePress(anchorEcdBase * anchorDepthBase * 0.051948);
         let anchorEcdUser = fromBaseDens(anchorEcdBase);
 
-        updateDashboard(parseFloat(displaySpp), parseFloat(appliedSbp), anchorDepthUser, anchorPressUser, anchorEcdUser, displayMode, parseFloat(displayLoss), zfSbp);
+        updateDashboard(parseFloat(displaySpp), parseFloat(appliedSbp), anchorDepthUser, anchorPressUser, anchorEcdUser, displayMode, parseFloat(displayLoss), displayZfSbp);
         replotChart();
 
     } catch (error) { 
@@ -1292,7 +1361,10 @@ function replotChart(){
     const ecdPressData = profile.depth.map((d,i) => ({x: fromBasePress(profile.ecd[i] * 0.051948 * d), y: fromBaseLength(d)}));
     const zfPressData = profile.depth.map((d,i) => ({x: fromBasePress(profile.zf_emw[i] * 0.051948 * d), y: fromBaseLength(d)}));
     
-    const staticTempData = profile.depth.map((d,i) => ({x: converters.temp.fromBase(profile.t_geo[i], currentUnits.temp), y: fromBaseLength(d)}));
+    let t_surf_user = parseFloat(document.getElementById("surface_temp").value) || 80;
+    let geo_grad_user = parseFloat(document.getElementById("geo_grad").value) || 1.5;
+
+    const staticTempData = profile.depth.map((d,i) => ({x: t_surf_user + (fromBaseLength(d)/100)*geo_grad_user, y: fromBaseLength(d)}));
     const dynTempData = profile.depth.map((d,i) => ({x: converters.temp.fromBase(profile.temp[i], currentUnits.temp), y: fromBaseLength(d)}));
 
     let maxDepthBase = toBaseLength(Number(document.getElementById("depth").value));
@@ -1475,7 +1547,7 @@ function updateScooterValues(depthBase) {
     }
     if (depthBase >= prof.depth[prof.depth.length-1]) { idx = prof.depth.length-1; ratio = 0; }
     
-    if(prof.ecd.length > 0) {
+    if(prof.ecd && prof.ecd.length > 0) {
         let ecdBase = prof.ecd[idx] + ratio * ((prof.ecd[idx+1]||prof.ecd[idx]) - prof.ecd[idx]);
         let esdBase = prof.esd[idx] + ratio * ((prof.esd[idx+1]||prof.esd[idx]) - prof.esd[idx]);
         let zfBase = prof.zf_emw[idx] + ratio * ((prof.zf_emw[idx+1]||prof.zf_emw[idx]) - prof.zf_emw[idx]);
