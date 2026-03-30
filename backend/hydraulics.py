@@ -1,6 +1,7 @@
 import math
 from trajectory import build_trajectory
 from rheology import hb_fit
+from temperature import temp_transient
 
 def annular_area(Do_in, Di_in):
     return max((math.pi / 4) * (Do_in**2 - Di_in**2), 0.1)
@@ -12,8 +13,10 @@ def build_bha_profile(bha, depth):
     profile = []
     current_bottom = depth
     for comp in reversed(bha):
-        top = max(current_bottom - float(comp.length), 0)
-        profile.append({"top": top, "bottom": current_bottom, "od": float(comp.od)})
+        length = float(getattr(comp, "length", 0))
+        od = float(getattr(comp, "od", 5.0))
+        top = max(current_bottom - length, 0)
+        profile.append({"top": top, "bottom": current_bottom, "od": od})
         current_bottom = top
     return profile
 
@@ -25,10 +28,12 @@ def get_pipe_od(profile, md):
 
 def get_annulus_id(sections, md):
     for sec in sections:
-        if sec.top_md <= md <= sec.end_md:
-            t = sec.type.lower()
-            return float(sec.hole_d if t == "open hole" else sec.casing_id)
-    return float(sections[-1].hole_d) if sections else 8.5
+        top_md = float(getattr(sec, "top_md", 0))
+        end_md = float(getattr(sec, "end_md", 0))
+        if top_md <= md <= end_md:
+            t = str(getattr(sec, "type", "")).lower()
+            return float(getattr(sec, "hole_d" if t == "open hole" else "casing_id", 8.5))
+    return float(getattr(sections[-1], "hole_d", 8.5)) if sections else 8.5
 
 def get_tvd(trajectory_profile, md):
     if not trajectory_profile: return md
@@ -64,46 +69,47 @@ def calculate_annular_pressure_loss(mw, flowrate, Do, Di, tau_y, K, n, length):
 
 def run_simulation(data):
     try:
-        Q = float(data.flowrate or 400)
-        total_depth = max(float(data.depth or 10000), 100)
-        mw = float(data.fluid.mw or 10)
-        sbp = float(data.sbp or 0.0) 
+        Q = float(getattr(data, "flowrate", 400))
+        total_depth = max(float(getattr(data, "depth", 10000)), 100)
+        
+        fluid = getattr(data, "fluid", None)
+        mw = float(getattr(fluid, "mw", 10)) if fluid else 10.0
+        f600 = float(getattr(fluid, "fann_600", 60)) if fluid else 60.0
+        f300 = float(getattr(fluid, "fann_300", 40)) if fluid else 40.0
+        f200 = float(getattr(fluid, "fann_200", 30)) if fluid else 30.0
+        f100 = float(getattr(fluid, "fann_100", 20)) if fluid else 20.0
+        f6 = float(getattr(fluid, "fann_6", 10)) if fluid else 10.0
+        f3 = float(getattr(fluid, "fann_3", 5)) if fluid else 5.0
+
+        sbp = float(getattr(data, "sbp", 0.0)) 
         precision_const = 0.051948
 
-        fann_readings = [
-            data.fluid.fann_600, data.fluid.fann_300, data.fluid.fann_200, 
-            data.fluid.fann_100, data.fluid.fann_6, data.fluid.fann_3
-        ]
-        tau_y, K, n = hb_fit(fann_readings)
+        tau_y, K, n = hb_fit([f600, f300, f200, f100, f6, f3])
         n = max(min(n, 1.0), 0.1)
         K = max(K, 0.0001)
         
-        traj_profile = build_trajectory(data.trajectory)
-        bha_profile = build_bha_profile(data.bha, total_depth)
+        trajectory_list = getattr(data, "trajectory", [])
+        traj_profile = build_trajectory(trajectory_list)
+        
+        bha_list = getattr(data, "bha", [])
+        bha_profile = build_bha_profile(bha_list, total_depth)
+        
+        well_sections = getattr(data, "well_sections", [])
 
         depths, ecd_profile, esd_profile, temp_profile = [], [], [], []
         cumulative_annular_loss = 0.0
         
         step = max(int(total_depth / 100), 50)
         md_points = list(range(step, int(total_depth) + step, step))
-        if md_points[-1] < total_depth:
-            md_points.append(total_depth)
+        if md_points[-1] < total_depth: md_points.append(total_depth)
 
-        # Thermal Defaults
-        Tsurf = float(data.temperature.surface_temp or 80)
-        Tbh = float(data.temperature.bhct or 150)
-        beta = getattr(data.temperature, 'beta', 0.0003)
-        geo_grad = (Tbh - Tsurf) / max(total_depth, 1)
-
-        t_rock_td = Tsurf + (geo_grad * total_depth)
-        cooling_factor = 0.85 if Q > 100 else 0.95
-        t_bhct_dyn = Tsurf + ((t_rock_td - Tsurf) * cooling_factor)
-        
-        friction_heat_factor = 0.061 / max(mw, 1.0)
-        t_surf_return_base = Tsurf + ((t_rock_td - Tsurf) * 0.2)
+        temperature_obj = getattr(data, "temperature", None)
+        Tsurf = float(getattr(temperature_obj, "surface_temp", 80)) if temperature_obj else 80.0
+        Tbh = float(getattr(temperature_obj, "bhct", 150)) if temperature_obj else 150.0
+        beta = float(getattr(temperature_obj, "beta", 0.0003)) if temperature_obj else 0.0003
 
         for md in md_points:
-            Do = get_annulus_id(data.well_sections, md)
+            Do = get_annulus_id(well_sections, md)
             Di = get_pipe_od(bha_profile, md)
             
             actual_step = md if len(depths) == 0 else md - depths[-1]
@@ -116,22 +122,17 @@ def run_simulation(data):
             ecd_base = mw + ((cumulative_annular_loss + sbp) / (precision_const * tvd))
             esd_base = mw + (sbp / (precision_const * tvd))
 
-            norm_z = md / total_depth
-            t_base_convective = t_surf_return_base + (t_bhct_dyn - t_surf_return_base) * (norm_z ** 0.6)
-            
-            t_dyn_annulus = t_base_convective + (cumulative_annular_loss * friction_heat_factor) if Q > 0.1 else (Tsurf + geo_grad * md)
-
-            temp_factor = 1 - beta * (t_dyn_annulus - Tsurf)
+            T_current = temp_transient(md, Tsurf, Tbh, total_depth)
+            temp_factor = 1 - beta * (T_current - Tsurf)
 
             depths.append(md)
             ecd_profile.append(round(ecd_base * temp_factor, 3))
             esd_profile.append(round(esd_base * temp_factor, 3))
-            temp_profile.append(round(t_dyn_annulus, 1))
+            temp_profile.append(round(T_current, 1))
 
-        # SPP Calc (Approximated if not passed)
+        # SPP Approximation
         p_bit = (mw * Q**2) / 10858 if Q > 0 else 0
-        p_pipe = cumulative_annular_loss * 2.5 
-        spp = p_bit + cumulative_annular_loss + p_pipe
+        spp = p_bit + cumulative_annular_loss + (cumulative_annular_loss * 2.5)
 
         return {
             "summary": {
