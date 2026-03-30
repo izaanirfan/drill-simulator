@@ -42,7 +42,6 @@
         #scooterBox { position: absolute; left: 10px; top: -45px; background: rgba(255,255,255,0.95); border: 1px solid #999; padding: 5px 15px; border-radius: 4px; box-shadow: 0px 2px 10px rgba(0,0,0,0.2); display: flex; align-items: center; gap: 15px; cursor: default; pointer-events: auto; }
         .scooter-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px 15px; font-size: 0.85em; line-height: 1.3; }
         
-        /* Dashboard Layout */
         .dash-panel { display: flex; gap: 15px; background: #334155; padding: 15px; border-radius: 8px; margin-top: 15px; align-items: stretch; justify-content: center; }
         .dash-card { flex: 1; max-width: 300px; background: #1e293b; border: 1px solid #475569; border-radius: 6px; padding: 15px; display: flex; flex-direction: column; align-items: center; position: relative; }
         .dash-card.active-anchor { border-color: #4ade80; box-shadow: 0 0 10px rgba(74, 222, 128, 0.2); }
@@ -276,6 +275,15 @@
                 </tr>
             </table>
             <button onclick="addWellRow()">Add Row</button>
+            
+            <div style="margin-top: 25px; padding: 15px; background: #eef2ff; border-radius: 6px; border: 1px solid #bfdbfe; max-width: 600px;">
+                <h4 style="margin-top: 0; color: #1e3a8a;">Global Thermal Boundary Properties</h4>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; font-size: 0.85em;">
+                    <div><b>Casing / Liner</b><br> Cond (BTU/hr-ft-F): <input id="k_casing" value="25.0" style="width: 50px;" onkeyup="triggerWellDesignChange()"><br> Cp (BTU/lb-F): <input id="cp_casing" value="0.12" style="width: 50px;" onkeyup="triggerWellDesignChange()"></div>
+                    <div><b>Cement</b><br> Cond (BTU/hr-ft-F): <input id="k_cement" value="0.5" style="width: 50px;" onkeyup="triggerWellDesignChange()"><br> Cp (BTU/lb-F): <input id="cp_cement" value="0.2" style="width: 50px;" onkeyup="triggerWellDesignChange()"></div>
+                    <div><b>Formation / Rock</b><br> Cond (BTU/hr-ft-F): <input id="k_form" value="1.3" style="width: 50px;" onkeyup="triggerWellDesignChange()"><br> Cp (BTU/lb-F): <input id="cp_form" value="0.2" style="width: 50px;" onkeyup="triggerWellDesignChange()"></div>
+                </div>
+            </div>
         </div>
         <div style="background: #f4f7f6; padding: 10px; border: 1px solid #ccc;"><h4 style="margin-top: 0; text-align: center;">Schematic</h4><canvas id="wellCanvasDesign" width="200" height="400"></canvas></div>
     </div>
@@ -693,11 +701,11 @@ function askUnitIfNeeded(detectedDiam, detectedLen) {
 function handleBhaUpload(event) {
     const file = event.target.files[0];
     if (!file) return;
-    document.getElementById("bhaBody").innerHTML = `<tr><td colspan="7" style="text-align:center;"><b>Parsing Excel/CSV File... Please wait.</b></td></tr>`;
+    document.getElementById("bhaBody").innerHTML = '<tr><td colspan="7" style="text-align:center;"><b>Parsing Excel/CSV File... Please wait.</b></td></tr>';
     
     const reader = new FileReader();
     reader.onload = function(e) {
-        setTimeout(() => {
+        setTimeout(function() {
             try {
                 const data = new Uint8Array(e.target.result);
                 const workbook = XLSX.read(data, {type: 'array'});
@@ -705,7 +713,11 @@ function handleBhaUpload(event) {
                 
                 if (!rawData || rawData.length < 2) { alert("File empty or unreadable."); document.getElementById("bhaBody").innerHTML = ""; return; }
 
-                let numCols = 0; rawData.slice(0, 30).forEach(r => { if(r && r.length > numCols) numCols = r.length; });
+                let numCols = 0;
+                for(let r=0; r < Math.min(30, rawData.length); r++) {
+                    if (rawData[r] && rawData[r].length > numCols) numCols = rawData[r].length;
+                }
+                
                 let headerMatrix = [];
                 for(let r=0; r < Math.min(30, rawData.length); r++) {
                     let rowVals = []; let lastVal = "";
@@ -720,24 +732,28 @@ function handleBhaUpload(event) {
                 let flattenedHeaders = []; let detectedDiam = null; let detectedLen = null;
                 for(let c=0; c < numCols; c++) {
                     let colHeaderParts = [];
-                    for(let r=0; r < headerMatrix.length; r++) { let val = headerMatrix[r][c]; if(val && !colHeaderParts.includes(val)) colHeaderParts.push(val); }
+                    for(let r=0; r < headerMatrix.length; r++) { 
+                        let val = headerMatrix[r][c]; 
+                        if(val && colHeaderParts.indexOf(val) === -1) colHeaderParts.push(val); 
+                    }
                     let fullHeader = colHeaderParts.join(" | "); flattenedHeaders.push(fullHeader);
                     if (/(in|inch|inches|mm|milimeter)/i.test(fullHeader)) detectedDiam = /mm/i.test(fullHeader) ? 'mm' : 'in';
                     if (/(ft|feet|m|meter)/i.test(fullHeader) && !/item|name|desc/i.test(fullHeader)) detectedLen = /m|meter/i.test(fullHeader) ? 'm' : 'ft';
                 }
 
                 let map = { name: -1, type: -1, od: -1, id: -1, maxOd: -1, len: -1 };
-                flattenedHeaders.forEach((h, i) => {
+                for(let i=0; i<flattenedHeaders.length; i++) {
+                    let h = flattenedHeaders[i];
                     if (/name|item|desc|component/i.test(h)) map.name = i;
                     else if (/type|class/i.test(h)) map.type = i;
                     else if (/\bod\b|outer.*d/i.test(h) && !/max|conn|tj/i.test(h)) map.od = i;
                     else if (/\bid\b|inner.*d/i.test(h)) map.id = i;
                     else if (/max.*od|conn.*od|tj.*od|gauge/i.test(h)) map.maxOd = i;
                     else if (/len|length/i.test(h)) map.len = i;
-                });
+                }
 
                 if (map.od === -1 || map.len === -1) { 
-                    alert(`Could not cleanly detect OD and Length columns.`); document.getElementById("bhaBody").innerHTML = ""; return; 
+                    alert("Could not cleanly detect OD and Length columns."); document.getElementById("bhaBody").innerHTML = ""; return; 
                 }
 
                 let units = askUnitIfNeeded(detectedDiam, detectedLen);
@@ -777,13 +793,14 @@ function handleBhaUpload(event) {
                 }
 
                 let htmlString = "";
-                parsedRows.forEach(r => {
+                for(let i=0; i<parsedRows.length; i++) {
+                    let r = parsedRows[i];
                     let baseOd = converters.diam.toBase(r.rawOd, units.diam); let baseId = converters.diam.toBase(r.rawId, units.diam);
                     let baseMod = converters.diam.toBase(r.rawMod, units.diam); let baseLen = converters.length.toBase(r.rawLen, units.len);
                     let uiOd = converters.diam.fromBase(baseOd, currentUnits.diam).toFixed(3); let uiId = converters.diam.fromBase(baseId, currentUnits.diam).toFixed(3);
                     let uiMod = converters.diam.fromBase(baseMod, currentUnits.diam).toFixed(3); let uiLen = converters.length.fromBase(baseLen, currentUnits.length).toFixed(1);
-                    htmlString += `<tr><td contenteditable>${r.nm}</td><td><select><option ${r.tyOpt==='Pipe'?'selected':''}>Pipe</option><option ${r.tyOpt==='HWDP'?'selected':''}>HWDP</option><option ${r.tyOpt==='Collar'?'selected':''}>Collar</option><option ${r.tyOpt==='MWD'?'selected':''}>MWD</option><option ${r.tyOpt==='Underreamer'?'selected':''}>Underreamer</option><option ${r.tyOpt==='Circ Sub'?'selected':''}>Circ Sub</option><option ${r.tyOpt==='Stabilizer'?'selected':''}>Stabilizer</option><option ${r.tyOpt==='Crossover'?'selected':''}>Crossover</option><option ${r.tyOpt==='Bit'?'selected':''}>Bit</option><option ${r.tyOpt==='Other'?'selected':''}>Other</option></select></td><td><input class="val-diam" value="${uiOd}"></td><td><input class="val-diam" value="${uiId}"></td><td><input class="val-diam" value="${uiMod}"></td><td><input class="val-length" value="${uiLen}" onkeyup="triggerWellDesignChange()"></td><td><input class="val-length" disabled></td></tr>`;
-                });
+                    htmlString += '<tr><td contenteditable>' + r.nm + '</td><td><select><option ' + (r.tyOpt==='Pipe'?'selected':'') + '>Pipe</option><option ' + (r.tyOpt==='HWDP'?'selected':'') + '>HWDP</option><option ' + (r.tyOpt==='Collar'?'selected':'') + '>Collar</option><option ' + (r.tyOpt==='MWD'?'selected':'') + '>MWD</option><option ' + (r.tyOpt==='Underreamer'?'selected':'') + '>Underreamer</option><option ' + (r.tyOpt==='Circ Sub'?'selected':'') + '>Circ Sub</option><option ' + (r.tyOpt==='Stabilizer'?'selected':'') + '>Stabilizer</option><option ' + (r.tyOpt==='Crossover'?'selected':'') + '>Crossover</option><option ' + (r.tyOpt==='Bit'?'selected':'') + '>Bit</option><option ' + (r.tyOpt==='Other'?'selected':'') + '>Other</option></select></td><td><input class="val-diam" value="' + uiOd + '"></td><td><input class="val-diam" value="' + uiId + '"></td><td><input class="val-diam" value="' + uiMod + '"></td><td><input class="val-length" value="' + uiLen + '" onkeyup="triggerWellDesignChange()"></td><td><input class="val-length" disabled></td></tr>';
+                }
                 document.getElementById("bhaBody").innerHTML = htmlString; triggerWellDesignChange(); document.getElementById("bhaUpload").value = "";
             } catch (err) { console.error(err); alert("Error processing BHA file: " + err.message); document.getElementById("bhaBody").innerHTML = ""; }
         }, 100);
@@ -878,32 +895,62 @@ function handleFileUpload(event) {
                 }
                 parsedRows.sort((a, b) => (a[activeType] || 0) - (b[activeType] || 0));
 
+                // SMART DFE CALCULATION
+                let diffs = [];
+                parsedRows.forEach(r => { if (r.tvddf !== null && r.tvdss !== null) diffs.push(r.tvddf - r.tvdss); });
+                let avg_diff = 0;
+                if (diffs.length > 0) {
+                    let sum = 0; for(let i=0; i<diffs.length; i++) sum += diffs[i];
+                    avg_diff = sum / diffs.length;
+                    let hasDiscrepancy = false;
+                    for(let i=0; i<diffs.length; i++) { if(Math.abs(diffs[i] - avg_diff) > 1.0) hasDiscrepancy = true; }
+                    if (hasDiscrepancy) {
+                        alert("Discrepancy found in TVDDF - TVDSS. Using calculated average DFE: " + fromBaseLength(avg_diff).toFixed(1) + " to align data.");
+                    }
+                    document.getElementById("df_elev").value = fromBaseLength(avg_diff).toFixed(1);
+                } else {
+                    let dfInput = document.getElementById("df_elev");
+                    avg_diff = toBaseLength(parseFloat(dfInput.value) || 0);
+                }
+
                 const c = 0.051948; let prevDepth = 0;
                 let useGrad = document.getElementById("use_geo_grad").checked; let grad_user = parseFloat(document.getElementById("geo_grad").value) || 0; let baseTemp_user = parseFloat(document.getElementById("surface_temp").value) || 80;
-                let df_elev_user = parseFloat(document.getElementById("df_elev").value) || 0;
-                let df_elev_base = toBaseLength(df_elev_user);
 
                 parsedRows.forEach(r => {
-                    if (r.tvddf !== null && r.tvdss !== null) {
-                        df_elev_base = r.tvddf - r.tvdss;
-                        document.getElementById("df_elev").value = fromBaseLength(df_elev_base).toFixed(1);
-                    } else if (r.tvddf !== null) {
-                        r.tvdss = r.tvddf - df_elev_base;
-                    } else if (r.tvdss !== null) {
-                        r.tvddf = r.tvdss + df_elev_base;
-                    }
+                    if (r.tvddf !== null) { r.tvdss = r.tvddf - avg_diff; }
+                    else if (r.tvdss !== null) { r.tvddf = r.tvdss + avg_diff; }
+                    else if (r.md !== null) { r.tvddf = r.md; r.tvdss = r.md - avg_diff; }
                     
                     let activeBot = r[activeType] !== null ? r[activeType] : 0;
                     r.top = prevDepth; prevDepth = activeBot;
+                    
+                    let tvd_ft = r.tvddf !== null ? r.tvddf : activeBot;
+                    
+                    if (tvd_ft > 0.1) {
+                        if (r.pp === null && r.pp_psi !== null) r.pp = toBasePress(r.pp_psi) / (tvd_ft * c);
+                        if (r.pp_psi === null && r.pp !== null) r.pp_psi = fromBasePress(r.pp * tvd_ft * c);
+                        if (r.fp === null && r.fp_psi !== null) r.fp = toBasePress(r.fp_psi) / (tvd_ft * c);
+                        if (r.fp_psi === null && r.fp !== null) r.fp_psi = fromBasePress(r.fp * tvd_ft * c);
+                        if (r.obg === null && r.obg_psi !== null) r.obg = toBasePress(r.obg_psi) / (tvd_ft * c);
+                        if (r.obg_psi === null && r.obg !== null) r.obg_psi = fromBasePress(r.obg * tvd_ft * c);
+                    }
+                    if (useGrad) r.temp = baseTemp_user + (activeBot / 100) * grad_user;
                 });
+                
+                // Patch Depth 0 Infinity/NaN values from PSI Conversion by cloning second row densities
+                if (parsedRows.length > 1 && (parsedRows[0].tvddf === null || parsedRows[0].tvddf <= 0.1)) {
+                    if (parsedRows[0].pp === null && parsedRows[1].pp !== null) parsedRows[0].pp = parsedRows[1].pp;
+                    if (parsedRows[0].fp === null && parsedRows[1].fp !== null) parsedRows[0].fp = parsedRows[1].fp;
+                    if (parsedRows[0].obg === null && parsedRows[1].obg !== null) parsedRows[0].obg = parsedRows[1].obg;
+                }
 
                 let htmlString = "";
                 parsedRows.forEach(r => {
                     let mdStr = r.md !== null ? r.md.toFixed(0) : ""; let dfStr = r.tvddf !== null ? r.tvddf.toFixed(0) : ""; let ssStr = r.tvdss !== null ? r.tvdss.toFixed(0) : "";
                     
-                    let ppStr = r.pp !== null ? r.pp.toFixed(3) : ""; let ppPsiStr = r.pp_psi !== null ? r.pp_psi.toFixed(1) : "";
-                    let fpStr = r.fp !== null ? r.fp.toFixed(3) : ""; let fpPsiStr = r.fp_psi !== null ? r.fp_psi.toFixed(1) : "";
-                    let obgStr = r.obg !== null ? r.obg.toFixed(3) : ""; let obgPsiStr = r.obg_psi !== null ? r.obg_psi.toFixed(1) : "";
+                    let ppStr = r.pp !== null && r.pp !== Infinity ? r.pp.toFixed(3) : ""; let ppPsiStr = r.pp_psi !== null ? r.pp_psi.toFixed(1) : "";
+                    let fpStr = r.fp !== null && r.fp !== Infinity ? r.fp.toFixed(3) : ""; let fpPsiStr = r.fp_psi !== null ? r.fp_psi.toFixed(1) : "";
+                    let obgStr = r.obg !== null && r.obg !== Infinity ? r.obg.toFixed(3) : ""; let obgPsiStr = r.obg_psi !== null ? r.obg_psi.toFixed(1) : "";
                     let tempStr = r.temp !== null ? r.temp.toFixed(1) : "";
 
                     htmlString += `<tr><td contenteditable="false">${r.top.toFixed(0)}</td><td contenteditable class="val-length" onkeyup="calcPPFG(this,'md')">${mdStr}</td><td contenteditable class="val-length" onkeyup="calcPPFG(this,'tvddf')">${dfStr}</td><td contenteditable class="val-length" onkeyup="calcPPFG(this,'tvdss')">${ssStr}</td><td contenteditable class="val-density" onkeyup="calcPPFG(this,'pp_dens')">${ppStr}</td><td contenteditable class="val-press" onkeyup="calcPPFG(this,'pp_press')">${ppPsiStr}</td><td contenteditable class="val-density" onkeyup="calcPPFG(this,'fp_dens')">${fpStr}</td><td contenteditable class="val-press" onkeyup="calcPPFG(this,'fp_press')">${fpPsiStr}</td><td contenteditable class="val-density" onkeyup="calcPPFG(this,'obg_dens')">${obgStr}</td><td contenteditable class="val-press" onkeyup="calcPPFG(this,'obg_press')">${obgPsiStr}</td><td contenteditable class="val-temp" onkeyup="debouncedUpdateSubsurfaceChart()">${tempStr}</td></tr>`;
@@ -1151,7 +1198,7 @@ function updateSchematics() {
     }
 }
 
-// ================= SIMULATION LOGIC =================
+// ================= SIMULATION EXECUTION =================
 function buildPayload(){
     let well_sections = []; let rows = document.getElementById("wellTable").rows;
     for (let i = 1; i < rows.length; i++) { let c = rows[i].cells; let type = c[0].children[0].value;
@@ -1166,10 +1213,13 @@ function buildPayload(){
     }
 
     let actualFlow = Number(document.getElementById("flowrate").value);
-    let mainMode = document.getElementById("mainMode").value;
-    let mpdMode = document.getElementById("mpdMode").value;
-    let anchorType = document.getElementById("anchorType").value;
-    let zfMode = document.getElementById("zeroFlowMode").value;
+    let el_k_casing = document.getElementById("k_casing");
+    let el_cp_casing = document.getElementById("cp_casing");
+    let el_k_cement = document.getElementById("k_cement");
+    let el_cp_cement = document.getElementById("cp_cement");
+    let el_k_form = document.getElementById("k_form");
+    let el_cp_form = document.getElementById("cp_form");
+    let el_geo_grad = document.getElementById("geo_grad");
 
     return {
         flowrate: converters.flow.toBase(actualFlow, currentUnits.flow),
@@ -1181,8 +1231,14 @@ function buildPayload(){
         },
         temperature: { 
             surface_temp: converters.temp.toBase(Number(document.getElementById("surface_temp").value), currentUnits.temp), 
-            geothermal_grad: parseFloat(document.getElementById("geo_grad").value) || 1.5,
-            beta: 0.0003
+            geothermal_grad: el_geo_grad ? parseFloat(el_geo_grad.value) : 1.5,
+            beta: 0.0003, 
+            k_casing: el_k_casing ? parseFloat(el_k_casing.value) : 25.0, 
+            cp_casing: el_cp_casing ? parseFloat(el_cp_casing.value) : 0.12, 
+            k_cement: el_k_cement ? parseFloat(el_k_cement.value) : 0.5, 
+            cp_cement: el_cp_cement ? parseFloat(el_cp_cement.value) : 0.2, 
+            k_form: el_k_form ? parseFloat(el_k_form.value) : 1.3, 
+            cp_form: el_cp_form ? parseFloat(el_cp_form.value) : 0.2 
         },
         trajectory: trajectory, well_sections: well_sections, bha: bha
     };
@@ -1192,25 +1248,24 @@ async function runSimulation(){
     let resultBar = document.getElementById("result");
     let warningDiv = document.getElementById("targetWarning");
     warningDiv.style.display = "none";
-
     resultBar.innerHTML = `<span style="color: #3b82f6;"><b>Running Simulation...</b></span>`;
     resultBar.style.backgroundColor = "#eff6ff"; resultBar.style.border = "1px solid #bfdbfe";
 
-    let payload = buildPayload();
-    let mainMode = document.getElementById("mainMode").value;
-    let mpdMode = document.getElementById("mpdMode").value;
-
     try {
+        let payload = buildPayload();
+        let mainMode = document.getElementById("mainMode").value;
+        let mpdMode = document.getElementById("mpdMode").value;
+        
         let appliedSbpBase = 0.0;
         let displayMode = "conv";
 
-        // PASS 1 for Downhole Target Solver
+        // PROPRIETARY MPD LOGIC (Kept in JS to protect FastAPI Schema)
         if (mainMode === "mpd" && mpdMode === "downhole") {
             displayMode = "dh";
             payload.sbp = 0.0;
             let res1 = await fetch("/simulate", { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(payload) });
             let data1 = await res1.json();
-            if (!data1 || !data1.summary || data1.error) throw new Error(data1?.error || "Pass 1 Server Error.");
+            if (!data1 || !data1.profile || data1.error) throw new Error(data1 ? data1.error : "Server Error on Pass 1.");
 
             let anchorType = document.getElementById("anchorType").value;
             let anchorDepthBase = payload.depth;
@@ -1221,7 +1276,7 @@ async function runSimulation(){
                 anchorDepthBase = toBaseLength(Number(document.getElementById("anchorFixedVal").value));
             }
 
-            let baseEcdAtAnchor = 0;
+            let baseEcdAtAnchor = data1.profile.ecd[data1.profile.ecd.length-1];
             for (let i=0; i<data1.profile.depth.length-1; i++) {
                 if (anchorDepthBase >= data1.profile.depth[i] && anchorDepthBase <= data1.profile.depth[i+1]) {
                     let ratio = (anchorDepthBase - data1.profile.depth[i]) / (data1.profile.depth[i+1] - data1.profile.depth[i]);
@@ -1229,7 +1284,6 @@ async function runSimulation(){
                     break;
                 }
             }
-            if (anchorDepthBase >= data1.profile.depth[data1.profile.depth.length-1]) baseEcdAtAnchor = data1.profile.ecd[data1.profile.ecd.length-1];
 
             let targetType = document.getElementById("targetType").value;
             let targetValUser = Number(document.getElementById("targetVal").value);
@@ -1237,7 +1291,7 @@ async function runSimulation(){
 
             let baseDynamicPress = baseEcdAtAnchor * anchorDepthBase * 0.051948;
             let requiredSbpPsi = targetPressBase - baseDynamicPress;
-            
+
             let minSbpPsi = converters.press.toBase(Number(document.getElementById("min_sbp").value) || 0, currentUnits.press);
             let maxSbpPsi = converters.press.toBase(Number(document.getElementById("max_sbp").value) || 2000, currentUnits.press);
 
@@ -1256,13 +1310,25 @@ async function runSimulation(){
             appliedSbpBase = payload.sbp;
         }
 
-        // PASS 2: Final Run
+        // FINAL PASS
         payload.sbp = appliedSbpBase;
         let res2 = await fetch("/simulate", { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(payload) });
         let finalResult = await res2.json();
-        if (!finalResult || !finalResult.summary || finalResult.error) throw new Error(finalResult?.error || "Final Pass Server Error.");
+        if (!finalResult || !finalResult.profile || finalResult.error) throw new Error(finalResult ? finalResult.error : "Server Error on Final Pass.");
 
-        // Calculate Zero Flow Curve locally to avoid requiring API Schema Changes
+        // ROBUST FALLBACKS (If user is using older python backend without temp/spp)
+        if (!finalResult.profile.temp) {
+            let tsurf = payload.temperature.surface_temp;
+            let grad = payload.temperature.geothermal_grad;
+            finalResult.profile.temp = finalResult.profile.depth.map(function(d) { return tsurf + (d/100)*grad; });
+        }
+        if (finalResult.summary.spp === undefined) {
+            let mw = payload.fluid.mw; let Q = payload.flowrate; let tfa = Number(document.getElementById("bit_tfa").value) || 1.0;
+            let pb = (Q>0) ? (mw*Q*Q)/(10858*tfa*tfa) : 0;
+            finalResult.summary.spp = pb + finalResult.summary.total_annular_loss_psi * 3.5;
+        }
+
+        // ZERO FLOW CALCULATION (Local to protect FastAPI Schema)
         let mw_base = payload.fluid.mw;
         let t_surf = payload.temperature.surface_temp;
         let geo_grad = payload.temperature.geothermal_grad / 100.0;
@@ -1318,7 +1384,7 @@ async function runSimulation(){
         }
         
         let anchorDepthBase = toBaseLength(anchorDepthUser);
-        let anchorEcdBase = 0; let anchorPressBase = 0;
+        let anchorEcdBase = finalResult.profile.ecd[finalResult.profile.ecd.length-1];
         for (let i=0; i<finalResult.profile.depth.length-1; i++) {
             if (anchorDepthBase >= finalResult.profile.depth[i] && anchorDepthBase <= finalResult.profile.depth[i+1]) {
                 let ratio = (anchorDepthBase - finalResult.profile.depth[i]) / (finalResult.profile.depth[i+1] - finalResult.profile.depth[i]);
@@ -1326,7 +1392,6 @@ async function runSimulation(){
                 break;
             }
         }
-        if (anchorDepthBase >= finalResult.profile.depth[finalResult.profile.depth.length-1]) anchorEcdBase = finalResult.profile.ecd[finalResult.profile.ecd.length-1];
         
         let anchorPressUser = fromBasePress(anchorEcdBase * anchorDepthBase * 0.051948);
         let anchorEcdUser = fromBaseDens(anchorEcdBase);
@@ -1489,24 +1554,11 @@ function replotChart(){
     if(document.getElementById('showScooter').checked) initScooter();
 }
 
-// INTERACTIVE SCOOTER
-let scooterLine = document.getElementById('scooterLine');
-let chartWrapper = document.getElementById('chartWrapper');
-let isDraggingScooter = false;
-
-function toggleScooter() {
-    if (document.getElementById('showScooter').checked && chartDensityInstance && lastSimResult) {
-        initScooter();
-    } else { scooterLine.style.display = 'none'; }
-}
-
 function initScooter() {
     scooterLine.style.display = 'block';
-    
     let currentDepth = parseFloat(document.getElementById('scooterDepthInput').value);
     let bottomUserDepth = parseFloat(document.getElementById("depth").value);
     if (isNaN(currentDepth)) { currentDepth = bottomUserDepth; }
-    
     document.getElementById('scooterDepthInput').value = currentDepth.toFixed(0);
     updateScooterFromInput();
 }
@@ -1534,7 +1586,6 @@ function updateScooterValues(depthBase) {
     if(!lastSimResult) return;
     let prof = lastSimResult.profile; 
     let ecd = "-", esd = "-", tempDyn = "-", pdyn = "-", zfEcd = "-";
-    
     let depthUser = fromBaseLength(depthBase);
     
     let idx = 0; let ratio = 0;
@@ -1581,10 +1632,6 @@ function updateScooterValues(depthBase) {
     document.getElementById('scooterObg').innerText = obg; 
 }
 
-scooterLine.addEventListener('mousedown', (e) => { isDraggingScooter = true; e.preventDefault(); });
-document.addEventListener('mousemove', (e) => { if (!isDraggingScooter || !chartDensityInstance) return; let rect = chartWrapper.getBoundingClientRect(); moveScooterTo(e.clientY - rect.top); });
-document.addEventListener('mouseup', () => { isDraggingScooter = false; });
-
 window.onload = function() { 
     toggleMainMode();
     enforceOpenHoleTop();
@@ -1592,6 +1639,7 @@ window.onload = function() {
     calcBhaCumLength();
     updateSchematics(); 
     updateMudProperties();
+    updateSubsurfaceChart();
 };
 </script>
 </body>
