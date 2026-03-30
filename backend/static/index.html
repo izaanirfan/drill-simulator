@@ -36,14 +36,12 @@
         .case-select { padding: 5px; font-weight: bold; border-radius: 4px; border: 1px solid #ccc; }
         .highlight-col { background-color: #e8f5e9 !important; }
         
-        /* Universal Scooter Line */
         #scooterLine { position: absolute; height: 2px; background: #eab308; cursor: ns-resize; display: none; z-index: 20; box-shadow: 0px 0px 5px rgba(0,0,0,0.3); pointer-events: none; left: 10px; right: 10px;}
         #scooterLine::before { content: "↔"; position: absolute; left: -10px; top: -8px; font-size: 14px; color: #eab308; font-weight: bold; transform: rotate(90deg); }
         
         #scooterBox { position: absolute; left: 10px; top: -45px; background: rgba(255,255,255,0.95); border: 1px solid #999; padding: 5px 15px; border-radius: 4px; box-shadow: 0px 2px 10px rgba(0,0,0,0.2); display: flex; align-items: center; gap: 15px; cursor: default; pointer-events: auto; }
         .scooter-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px 15px; font-size: 0.85em; line-height: 1.3; }
         
-        /* Dark Mode Gauges Dashboard */
         .dash-panel { display: flex; gap: 15px; background: #334155; padding: 15px; border-radius: 8px; margin-top: 15px; align-items: stretch; justify-content: center; }
         .dash-card { flex: 1; max-width: 300px; background: #1e293b; border: 1px solid #475569; border-radius: 6px; padding: 15px; display: flex; flex-direction: column; align-items: center; position: relative; }
         .dash-card.active-anchor { border-color: #4ade80; box-shadow: 0 0 10px rgba(74, 222, 128, 0.2); }
@@ -364,7 +362,7 @@
             <div>Target Case: <select id="importCase" class="case-select"><option value="mid">Mid Case (Default)</option><option value="low">Low Case</option><option value="high">High Case</option><option value="base">Base Case</option><option value=".*">Any/Not Specified</option></select></div>
             <div>Import As: <select id="importUnit" class="case-select"><option value="ppg" selected>Density (ppg / sg)</option><option value="psi">Pressure (psi / bar)</option></select></div>
             <div>Import Depth As: <select id="importDepthUnit" class="case-select"><option value="auto">Auto-Detect</option><option value="ft">Feet (ft)</option><option value="m">Meters (m)</option></select></div>
-            <div>DF Elev (<span class="lbl-length">ft</span>): <input id="df_elev" type="number" value="100" style="width: 70px; padding: 4px;"></div>
+            <div>DF Elev (<span class="lbl-length">ft</span>): <input id="df_elev" type="number" value="100" style="width: 70px; padding: 4px;" onkeyup="switchCalcDepth()"></div>
         </div>
         <label class="upload-btn">Choose Excel/CSV File<input type="file" id="excelUpload" accept=".xlsx, .xls, .csv" onchange="handleFileUpload(event)"></label>
     </div>
@@ -396,7 +394,6 @@
 </div>
 
 <script>
-// GLOBAL VARIABLES
 let chartDensityInstance = null;
 let chartPressureInstance = null;
 let chartTempInstance = null;
@@ -627,7 +624,6 @@ function switchCalcDepth() {
         let row = tbody.rows[i]; row.cells[0].textContent = prevDepth.toFixed(0);
         let botDepth = parseFloat(row.cells[col].textContent); if (!isNaN(botDepth)) prevDepth = botDepth;
         
-        // Priority recalculation based on original data type
         if (unitPref === 'psi') {
             calcPPFG(row.cells[5], 'pp_press', true); 
             calcPPFG(row.cells[7], 'fp_press', true); 
@@ -900,7 +896,7 @@ function handleFileUpload(event) {
                 });
 
                 document.getElementById("ppfgBody").innerHTML = htmlString; 
-                switchCalcDepth(); // This safely cross-calculates all missing psi/ppg fields using the selected UI metric
+                switchCalcDepth(); 
                 document.getElementById("excelUpload").value = ""; 
             } catch (err) { console.error(err); alert("Error processing Subsurface file: " + err.message); document.getElementById("ppfgBody").innerHTML = ""; }
         }, 100); 
@@ -964,11 +960,11 @@ function calcPPFG(inputCell, type, skipChart=false) {
     let mdStr = row.cells[col].textContent.replace(/,/g,'');
     let md = toBaseLength(parseFloat(mdStr) || 0);
     
-    // Safely fallback to MD if TVDDF is empty to prevent NaN errors
     let tvddfStr = row.cells[2].textContent.replace(/,/g,'');
-    let tvddf = toBaseLength(parseFloat(tvddfStr) || parseFloat(mdStr) || 0);
-    
+    let tvddf = toBaseLength(parseFloat(tvddfStr));
+    if(isNaN(tvddf) || tvddf <= 0.1) tvddf = md;
     if (tvddf <= 0.1) return; 
+    
     let c = 0.051948;
     let parseCell = (td) => parseFloat(td.textContent.replace(/,/g,''));
 
@@ -1161,13 +1157,14 @@ function buildPayload(){
     let mpdMode = document.getElementById("mpdMode").value;
     let anchorType = document.getElementById("anchorType").value;
     let zfMode = document.getElementById("zeroFlowMode").value;
-
+    
     let el_k_casing = document.getElementById("k_casing");
     let el_cp_casing = document.getElementById("cp_casing");
     let el_k_cement = document.getElementById("k_cement");
     let el_cp_cement = document.getElementById("cp_cement");
     let el_k_form = document.getElementById("k_form");
     let el_cp_form = document.getElementById("cp_form");
+    let el_geo_grad = document.getElementById("geo_grad");
 
     return {
         flowrate: converters.flow.toBase(actualFlow, currentUnits.flow),
@@ -1190,7 +1187,7 @@ function buildPayload(){
         },
         temperature: { 
             surface_temp: converters.temp.toBase(Number(document.getElementById("surface_temp").value), currentUnits.temp), 
-            geothermal_grad: parseFloat(document.getElementById("geo_grad").value) || 1.5,
+            geothermal_grad: el_geo_grad ? parseFloat(el_geo_grad.value) : 1.5,
             beta: 0.0003, 
             k_casing: el_k_casing ? parseFloat(el_k_casing.value) : 25.0, 
             cp_casing: el_cp_casing ? parseFloat(el_cp_casing.value) : 0.12, 
@@ -1217,9 +1214,8 @@ async function runSimulation(){
         let res = await fetch("/simulate", { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(payload) });
         let finalResult = await res.json();
         
-        // Catch python crash and missing object safety
         if (!finalResult || !finalResult.summary || finalResult.error) {
-            throw new Error(finalResult?.error || "Unknown Server Error. Check inputs.");
+            throw new Error(finalResult ? finalResult.error : "Unknown Server Error. Check inputs.");
         }
 
         lastSimResult = finalResult;
@@ -1421,11 +1417,24 @@ function replotChart(){
     if(document.getElementById('showScooter').checked) initScooter();
 }
 
+// INTERACTIVE SCOOTER
+let scooterLine = document.getElementById('scooterLine');
+let chartWrapper = document.getElementById('chartWrapper');
+let isDraggingScooter = false;
+
+function toggleScooter() {
+    if (document.getElementById('showScooter').checked && chartDensityInstance && lastSimResult) {
+        initScooter();
+    } else { scooterLine.style.display = 'none'; }
+}
+
 function initScooter() {
     scooterLine.style.display = 'block';
+    
     let currentDepth = parseFloat(document.getElementById('scooterDepthInput').value);
     let bottomUserDepth = parseFloat(document.getElementById("depth").value);
     if (isNaN(currentDepth)) { currentDepth = bottomUserDepth; }
+    
     document.getElementById('scooterDepthInput').value = currentDepth.toFixed(0);
     updateScooterFromInput();
 }
@@ -1453,6 +1462,7 @@ function updateScooterValues(depthBase) {
     if(!lastSimResult) return;
     let prof = lastSimResult.profile; 
     let ecd = "-", esd = "-", tempDyn = "-", pdyn = "-", zfEcd = "-";
+    
     let depthUser = fromBaseLength(depthBase);
     
     let idx = 0; let ratio = 0;
