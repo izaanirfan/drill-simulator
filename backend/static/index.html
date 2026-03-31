@@ -96,7 +96,6 @@
 </div>
 
 <div id="simulation" class="tab active">
-    
     <div class="controls-row">
         <div><label>Flowrate (<span class="lbl-flow">gpm</span>):</label><br><input id="flowrate" class="val-flow" value="400" onkeyup="triggerWellDesignChange()"></div>
         <div><label>Depth (<span class="lbl-length">ft</span>):</label><br><input id="depth" class="val-length" value="10000" onkeyup="triggerWellDesignChange()"></div>
@@ -362,7 +361,7 @@
             <div>Target Case: <select id="importCase" class="case-select"><option value="mid">Mid Case (Default)</option><option value="low">Low Case</option><option value="high">High Case</option><option value="base">Base Case</option><option value=".*">Any/Not Specified</option></select></div>
             <div>Import As: <select id="importUnit" class="case-select"><option value="ppg" selected>Density (ppg / sg)</option><option value="psi">Pressure (psi / bar)</option></select></div>
             <div>Import Depth As: <select id="importDepthUnit" class="case-select"><option value="auto">Auto-Detect</option><option value="ft">Feet (ft)</option><option value="m">Meters (m)</option></select></div>
-            <div>DF Elev (<span class="lbl-length">ft</span>): <input id="df_elev" type="number" value="100" style="width: 70px; padding: 4px;" onkeyup="applyDfElev()" onchange="applyDfElev()"></div>
+            <div>DF Elev (<span class="lbl-length">ft</span>): <input id="df_elev" type="number" value="100" style="width: 70px; padding: 4px; background-color: #eee;" disabled></div>
         </div>
         <label class="upload-btn">Choose Excel/CSV File<input type="file" id="excelUpload" accept=".xlsx, .xls, .csv" onchange="handleFileUpload(event)"></label>
     </div>
@@ -404,7 +403,7 @@ let chartDebounceTimer = null;
 let wellChangeTimer = null;
 let currentUnits = { length: "ft", diam: "in", density: "ppg", press: "psi", flow: "gpm", temp: "F" };
 
-// ================= UI HELPERS (RESTORED) =================
+// UI HELPERS (Restored for Table and Form Syncing)
 function triggerWellDesignChange() {
     enforceOpenHoleTop();
     calcBhaCumLength();
@@ -478,7 +477,6 @@ function debouncedUpdateSubsurfaceChart() {
     clearTimeout(chartDebounceTimer);
     chartDebounceTimer = setTimeout(updateSubsurfaceChart, 400);
 }
-
 
 // MUD PROPERTIES & VOLUMETRICS
 function updateOwrWater() {
@@ -683,26 +681,6 @@ function highlightActiveDepth() {
     table.classList.remove("active-col-1", "active-col-2", "active-col-3"); table.classList.add("active-col-" + colIndex);
 }
 
-function applyDfElev() {
-    let df_elev_user = parseFloat(document.getElementById("df_elev").value) || 0;
-    let df_elev_base = toBaseLength(df_elev_user);
-    let tbody = document.getElementById("ppfgBody");
-    for (let i = 0; i < tbody.rows.length; i++) {
-        let row = tbody.rows[i];
-        let tvddf = parseFloat(row.cells[2].textContent.replace(/,/g,''));
-        let tvdss = parseFloat(row.cells[3].textContent.replace(/,/g,''));
-        
-        if (!isNaN(tvddf) && !isNaN(tvdss)) {
-            row.cells[3].textContent = (tvddf - df_elev_base).toFixed(0);
-        } else if (!isNaN(tvddf)) {
-            row.cells[3].textContent = (tvddf - df_elev_base).toFixed(0);
-        } else if (!isNaN(tvdss)) {
-            row.cells[2].textContent = (tvdss + df_elev_base).toFixed(0);
-        }
-    }
-    switchCalcDepth();
-}
-
 function handleTableKeyup(e) {
     let td = e.target; if (td.tagName !== 'TD') return; let cellIndex = td.cellIndex;
     if (cellIndex >= 1 && cellIndex <= 3) triggerPPFGCalc(td);
@@ -721,7 +699,6 @@ function switchCalcDepth() {
         let row = tbody.rows[i]; row.cells[0].textContent = prevDepth.toFixed(0);
         let botDepth = parseFloat(row.cells[col].textContent); if (!isNaN(botDepth)) prevDepth = botDepth;
         
-        // Priority recalculation based on original data type
         if (unitPref === 'psi') {
             calcPPFG(row.cells[5], 'pp_press', true); 
             calcPPFG(row.cells[7], 'fp_press', true); 
@@ -826,7 +803,7 @@ function handleBhaUpload(event) {
                     else if (/\bod\b|outer.*d/i.test(h) && !/max|conn|tj/i.test(h)) map.od = i;
                     else if (/\bid\b|inner.*d/i.test(h)) map.id = i;
                     else if (/max.*od|conn.*od|tj.*od|gauge/i.test(h)) map.maxOd = i;
-                    else if (/len|length/i.test(h)) map.len = i;
+                    else if (/len|length/i.test(h) && !/cum/i.test(h)) map.len = i;
                 }
 
                 if (map.od === -1 || map.len === -1) { 
@@ -983,6 +960,12 @@ function handleFileUpload(event) {
                     }
                 }
                 let avg_df = 0;
+                let hasTvddf = false, hasTvdss = false;
+                for(let i=0; i<parsedRows.length; i++) {
+                    if (parsedRows[i].tvddf !== null) hasTvddf = true;
+                    if (parsedRows[i].tvdss !== null) hasTvdss = true;
+                }
+
                 if (diffs.length > 0) {
                     let sum = 0; for(let i=0; i<diffs.length; i++) sum += diffs[i];
                     avg_df = sum / diffs.length;
@@ -991,11 +974,12 @@ function handleFileUpload(event) {
                         if(Math.abs(diffs[i] - avg_df) > maxDiffFromAvg) maxDiffFromAvg = Math.abs(diffs[i] - avg_df);
                     }
                     if (maxDiffFromAvg > 3.28) {
-                        alert("Discrepancy found in TVDDF - TVDSS (> 1m difference). Using calculated average DFE: " + fromBaseLength(avg_df).toFixed(1) + " " + currentUnits.length + " to strictly align data.");
-                        for(let i=0; i<parsedRows.length; i++) {
-                            if(parsedRows[i].tvddf !== null) parsedRows[i].tvdss = parsedRows[i].tvddf - avg_df;
-                        }
+                        alert("Discrepancy found in TVDDF - TVDSS (> 1m). Using calculated average DFE: " + fromBaseLength(avg_df).toFixed(1) + " " + currentUnits.length);
                     }
+                    document.getElementById("df_elev").value = fromBaseLength(avg_df).toFixed(1);
+                } else if (!hasTvddf && hasTvdss) {
+                    let userDf = prompt("No TVDDF found in file. Please enter DF Elevation (" + currentUnits.length + ") to calculate TVDDF:", "100");
+                    avg_df = toBaseLength(parseFloat(userDf) || 0);
                     document.getElementById("df_elev").value = fromBaseLength(avg_df).toFixed(1);
                 } else {
                     let dfInput = document.getElementById("df_elev");
@@ -1295,6 +1279,7 @@ function updateSchematics() {
 
 // ================= SIMULATION EXECUTION =================
 function buildBasePayload(sbp_val) {
+    // Sends exact Pydantic-compatible schema
     let well_sections = []; let rows = document.getElementById("wellTable").rows;
     for (let i = 1; i < rows.length; i++) { let c = rows[i].cells; let type = c[0].children[0].value;
         well_sections.push({ type: type, top_md: toBaseLength(Number(c[2].textContent)), end_md: toBaseLength(Number(c[3].textContent)), casing_id: toBaseDiam(Number(c[5].querySelector("input").value)), hole_d: type === "open hole" ? toBaseDiam(Number(c[5].querySelector("input").value)) : toBaseDiam(Number(c[4].querySelector("input").value)) });
@@ -1320,6 +1305,9 @@ function buildBasePayload(sbp_val) {
         flowrate: converters.flow.toBase(actualFlow, currentUnits.flow),
         depth: d,
         sbp: sbp_val,
+        hole_diameter: 8.5,
+        mpd_mode: "SBP",
+        gradient_mode: "static",
         fluid: { 
             mw: converters.density.toBase(Number(document.getElementById("mw").value), currentUnits.density), 
             fann_600: Number(document.getElementById("f600").value), fann_300: Number(document.getElementById("f300").value), fann_200: Number(document.getElementById("f200").value), fann_100: Number(document.getElementById("f100").value), fann_6: Number(document.getElementById("f6").value), fann_3: Number(document.getElementById("f3").value) 
@@ -1327,9 +1315,11 @@ function buildBasePayload(sbp_val) {
         temperature: { 
             surface_temp: t_surf, 
             bhct: t_surf + ((bhct - t_surf) * cooling),
+            geothermal_grad: 1.5,
             beta: 0.0003
         },
-        trajectory: trajectory, well_sections: well_sections, bha: bha
+        trajectory: trajectory, well_sections: well_sections, bha: bha,
+        cuttings: { rop: 50.0, size: 0.2, density: 22.1, rpm: 120 }
     };
 }
 
@@ -1348,12 +1338,12 @@ async function runSimulation(){
         let appliedSbpBase = 0.0;
         let displayMode = "conv";
 
-        // FRONTEND MPD SOLVER (Bypasses Schema issues)
         if (mainMode === "mpd" && mpdMode === "downhole") {
             displayMode = "dh";
             let payload0 = buildBasePayload(0.0); 
             
             let res1 = await fetch("/simulate", { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(payload0) });
+            if (!res1.ok) { let errText = await res1.text(); throw new Error("API Check Failed: " + res1.status + " " + errText); }
             let data1 = await res1.json();
             if (!data1 || !data1.profile || data1.error) throw new Error(data1 ? data1.error : "Server Error on Pass 1.");
 
@@ -1401,14 +1391,13 @@ async function runSimulation(){
             appliedSbpBase = converters.press.toBase(Number(document.getElementById("sbp").value), currentUnits.press);
         }
 
-        // PASS 2: Final Run
         let finalPayload = buildBasePayload(appliedSbpBase);
         let res2 = await fetch("/simulate", { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(finalPayload) });
+        if (!res2.ok) { let errText = await res2.text(); throw new Error("API Check Failed: " + res2.status + " " + errText); }
         let finalResult = await res2.json();
         if (!finalResult || !finalResult.profile || finalResult.error) throw new Error(finalResult ? finalResult.error : "Server Error on Final Pass.");
 
         let el_geo_grad = document.getElementById("geo_grad");
-        
         let mw_base = finalPayload.fluid.mw;
         let t_surf = finalPayload.temperature.surface_temp;
         let geo_grad = (el_geo_grad ? parseFloat(el_geo_grad.value) : 1.5) / 100.0;
@@ -1426,7 +1415,6 @@ async function runSimulation(){
             finalResult.summary.spp = pb + finalResult.summary.total_annular_loss_psi * 3.5;
         }
 
-        // ZERO FLOW CALCULATION
         let zfMode = document.getElementById("zeroFlowMode").value;
         let zfTime = zfMode === "insitu" ? (Number(document.getElementById("zeroFlowTime").value) || 12) : 0;
         let thermal_factor = 1 - Math.exp(-zfTime / 10.0);
