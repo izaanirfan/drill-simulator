@@ -42,7 +42,6 @@
         #scooterBox { position: absolute; left: 10px; top: -45px; background: rgba(255,255,255,0.95); border: 1px solid #999; padding: 5px 15px; border-radius: 4px; box-shadow: 0px 2px 10px rgba(0,0,0,0.2); display: flex; align-items: center; gap: 15px; cursor: default; pointer-events: auto; }
         .scooter-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px 15px; font-size: 0.85em; line-height: 1.3; }
         
-        /* Dark Mode Gauges Dashboard */
         .dash-panel { display: flex; gap: 15px; background: #334155; padding: 15px; border-radius: 8px; margin-top: 15px; align-items: stretch; justify-content: center; }
         .dash-card { flex: 1; max-width: 300px; background: #1e293b; border: 1px solid #475569; border-radius: 6px; padding: 15px; display: flex; flex-direction: column; align-items: center; position: relative; }
         .dash-card.active-anchor { border-color: #4ade80; box-shadow: 0 0 10px rgba(74, 222, 128, 0.2); }
@@ -405,6 +404,82 @@ let chartDebounceTimer = null;
 let wellChangeTimer = null;
 let currentUnits = { length: "ft", diam: "in", density: "ppg", press: "psi", flow: "gpm", temp: "F" };
 
+// ================= UI HELPERS (RESTORED) =================
+function triggerWellDesignChange() {
+    enforceOpenHoleTop();
+    calcBhaCumLength();
+    updateSchematics();
+    if (lastSimResult) { clearTimeout(wellChangeTimer); wellChangeTimer = setTimeout(runSimulation, 500); }
+}
+
+function enforceOpenHoleTop() {
+    let table = document.getElementById("wellTable");
+    if (!table) return; let rows = table.rows;
+    for (let i = 1; i < rows.length; i++) {
+        let typeSelect = rows[i].cells[0].querySelector("select");
+        if (!typeSelect) continue;
+        let type = typeSelect.value; let topCell = rows[i].cells[2];
+        if (type === "open hole") {
+            topCell.setAttribute("contenteditable", "false"); topCell.style.backgroundColor = "#ddd"; topCell.style.color = "#666";
+            if (i > 1) { let prevBotCell = rows[i-1].cells[3]; if (topCell.textContent !== prevBotCell.textContent) topCell.textContent = prevBotCell.textContent; }
+        } else {
+            topCell.setAttribute("contenteditable", "true"); topCell.style.backgroundColor = ""; topCell.style.color = "";
+        }
+    }
+}
+
+function calcBhaCumLength() {
+    let tbody = document.getElementById("bhaBody");
+    if (!tbody) return;
+    let cum = 0;
+    for (let i = tbody.rows.length - 1; i >= 0; i--) {
+        let lenInput = tbody.rows[i].cells[5].querySelector("input");
+        let cumInput = tbody.rows[i].cells[6].querySelector("input");
+        if(lenInput && cumInput) {
+            let l = parseFloat(lenInput.value.replace(/,/g, '')) || 0;
+            cum += l;
+            cumInput.value = cum.toFixed(1);
+        }
+    }
+}
+
+function toggleOD(select){
+    const row = select.parentElement.parentElement;
+    const odInput = row.cells[4].querySelector("input");
+    if(select.value === "open hole"){ odInput.disabled = true; odInput.value = ""; } else { odInput.disabled = false; }
+    triggerWellDesignChange();
+}
+
+function addWellRow(){
+    const table = document.getElementById("wellTable"); const row = table.insertRow();
+    row.innerHTML = `<td><select onchange="toggleOD(this)"><option value="casing">Casing</option><option value="liner">Liner</option><option value="open hole">Open Hole</option></select></td><td contenteditable>New Section</td><td contenteditable class="val-length"></td><td contenteditable class="val-length"></td><td><input class="val-diam"></td><td><input class="val-diam"></td>`;
+}
+
+function addTrajectoryRow(){
+    const table = document.getElementById("trajectoryTable"); const row = table.insertRow();
+    row.innerHTML = `<td contenteditable class="val-length"></td><td contenteditable></td><td contenteditable></td>`;
+}
+
+function addBhaRow(){
+    const tbody = document.getElementById("bhaBody"); const row = tbody.insertRow();
+    row.innerHTML = `<td contenteditable>New Item</td><td><select><option>Pipe</option><option>HWDP</option><option>Collar</option><option>MWD</option><option>Underreamer</option><option>Circ Sub</option><option>Stabilizer</option><option>Crossover</option><option>Bit</option><option>Other</option></select></td><td><input class="val-diam"></td><td><input class="val-diam"></td><td><input class="val-diam"></td><td><input class="val-length" onkeyup="triggerWellDesignChange()"></td><td><input class="val-length" disabled></td>`;
+    triggerWellDesignChange();
+}
+
+function addSubsurfaceRow(){
+    const tbody = document.getElementById("ppfgBody"); const row = tbody.insertRow();
+    let col = getCalcDepthCol();
+    let isMD = col === 1 ? 'highlight-col' : ''; let isDF = col === 2 ? 'highlight-col' : ''; let isSS = col === 3 ? 'highlight-col' : '';
+    row.innerHTML = `<td contenteditable="false" class="val-length"></td><td contenteditable class="val-length ${isMD}" onkeyup="calcPPFG(this,'md')"></td><td contenteditable class="val-length ${isDF}" onkeyup="calcPPFG(this,'tvddf')"></td><td contenteditable class="val-length ${isSS}" onkeyup="calcPPFG(this,'tvdss')"></td><td contenteditable class="val-density" onkeyup="calcPPFG(this,'pp_dens')"></td><td contenteditable class="val-press" onkeyup="calcPPFG(this,'pp_press')"></td><td contenteditable class="val-density" onkeyup="calcPPFG(this,'fp_dens')"></td><td contenteditable class="val-press" onkeyup="calcPPFG(this,'fp_press')"></td><td contenteditable class="val-density" onkeyup="calcPPFG(this,'obg_dens')"></td><td contenteditable class="val-press" onkeyup="calcPPFG(this,'obg_press')"></td><td contenteditable class="val-temp" onkeyup="debouncedUpdateSubsurfaceChart()"></td>`;
+    switchCalcDepth(); 
+}
+
+function debouncedUpdateSubsurfaceChart() {
+    clearTimeout(chartDebounceTimer);
+    chartDebounceTimer = setTimeout(updateSubsurfaceChart, 400);
+}
+
+
 // MUD PROPERTIES & VOLUMETRICS
 function updateOwrWater() {
     let oil = parseFloat(document.getElementById('owr_oil').value) || 0;
@@ -445,6 +520,7 @@ function updateMudProperties() {
     document.getElementById('mud_k').value = k_mud.toFixed(3);
 
     drawRheologyChart();
+    triggerWellDesignChange();
 }
 
 function drawRheologyChart() {
@@ -509,6 +585,7 @@ function toggleMainMode() {
         document.getElementById("cardSbp").style.display = "flex";
         toggleMpdMode();
     }
+    triggerWellDesignChange();
 }
 
 function toggleMpdMode() {
@@ -524,22 +601,26 @@ function toggleMpdMode() {
         document.getElementById("dhTargetDiv").style.display = "block";
         toggleAnchorFixed();
     }
+    triggerWellDesignChange();
 }
 
 function toggleAnchorFixed() {
     let anchor = document.getElementById("anchorType").value;
     document.getElementById("dhFixedDiv").style.display = (anchor === "fixed") ? "block" : "none";
+    triggerWellDesignChange();
 }
 
 function toggleZeroFlowTime() {
     let zfMode = document.getElementById("zeroFlowMode").value;
     document.getElementById("zeroFlowTimeDiv").style.display = (zfMode === "insitu") ? "block" : "none";
+    triggerWellDesignChange();
 }
 
 function updateTargetLabel() {
     let tType = document.getElementById("targetType").value;
     document.getElementById("targetLbl").innerText = tType === "density" ? currentUnits.density : currentUnits.press;
     document.getElementById("targetLbl").className = tType === "density" ? "lbl-density" : "lbl-press";
+    triggerWellDesignChange();
 }
 
 function updateDashboard(spp, sbp, anchorDep, anchorPress, anchorEcd, modeType, annLoss, zfSbp) {
@@ -628,7 +709,7 @@ function handleTableKeyup(e) {
     else if (cellIndex === 4) calcPPFG(td, 'pp_dens'); else if (cellIndex === 5) calcPPFG(td, 'pp_press');
     else if (cellIndex === 6) calcPPFG(td, 'fp_dens'); else if (cellIndex === 7) calcPPFG(td, 'fp_press');
     else if (cellIndex === 8) calcPPFG(td, 'obg_dens'); else if (cellIndex === 9) calcPPFG(td, 'obg_press');
-    else if (cellIndex === 10) { clearTimeout(chartDebounceTimer); chartDebounceTimer = setTimeout(updateSubsurfaceChart, 400); }
+    else if (cellIndex === 10) { debouncedUpdateSubsurfaceChart(); }
 }
 
 function switchCalcDepth() {
@@ -651,7 +732,7 @@ function switchCalcDepth() {
             calcPPFG(row.cells[8], 'obg_dens', true);
         }
     }
-    applyGeothermal(true); clearTimeout(chartDebounceTimer); chartDebounceTimer = setTimeout(updateSubsurfaceChart, 400);
+    applyGeothermal(true); debouncedUpdateSubsurfaceChart();
 }
 
 function showTab(tab, btn) {
@@ -849,8 +930,7 @@ function handleFileUpload(event) {
                 let importDepthUnit = document.getElementById("importDepthUnit").value;
                 if (importDepthUnit === 'auto') importDepthUnit = detectedDepthUnit || 'ft';
 
-                for(let i=0; i<flattenedHeaders.length; i++) {
-                    let h = flattenedHeaders[i];
+                flattenedHeaders.forEach((h, i) => {
                     let isTargetCase = casePref === '.*' ? true : caseRegex.test(h);
                     let hasNoCase = !/low|mid|high/i.test(h); let caseMatch = isTargetCase || hasNoCase;
                     if (/tvdss|tvd.*ss/i.test(h) && map.tvdss === -1) map.tvdss = i;
@@ -864,10 +944,10 @@ function handleFileUpload(event) {
                         if (/obg|overburden/i.test(h)) { if (unitPref === 'ppg' && map.obg === -1) map.obg = i; else if (unitPref === 'psi' && map.obg_psi === -1) map.obg_psi = i; }
                     }
                     if (/temp/i.test(h) && map.temp === -1) map.temp = i;
-                }
+                });
 
                 if (map.md === -1 && map.tvddf === -1 && map.tvdss === -1) {
-                    let fallback = flattenedHeaders.findIndex(function(h) { return /depth|bot/i.test(h); });
+                    let fallback = flattenedHeaders.findIndex(h => /depth|bot/i.test(h));
                     if (fallback !== -1) map.tvddf = fallback; else { alert("Could not find any Depth columns."); document.getElementById("ppfgBody").innerHTML = ""; return; }
                 }
 
@@ -893,21 +973,28 @@ function handleFileUpload(event) {
                     if (mdRaw === null && tvddfRaw === null && tvdssRaw === null) continue;
                     parsedRows.push({ md: conformDepth(mdRaw), tvddf: conformDepth(tvddfRaw), tvdss: conformDepth(tvdssRaw), pp: map.pp !== -1 ? parseSafe(row[keys[map.pp]]) : null, pp_psi: map.pp_psi !== -1 ? parseSafe(row[keys[map.pp_psi]]) : null, fp: map.fp !== -1 ? parseSafe(row[keys[map.fp]]) : null, fp_psi: map.fp_psi !== -1 ? parseSafe(row[keys[map.fp_psi]]) : null, obg: map.obg !== -1 ? parseSafe(row[keys[map.obg]]) : null, obg_psi: map.obg_psi !== -1 ? parseSafe(row[keys[map.obg_psi]]) : null, temp: map.temp !== -1 ? parseSafe(row[keys[map.temp]]) : null });
                 }
-                parsedRows.sort(function(a, b) { return (a[activeType] || 0) - (b[activeType] || 0); });
+                parsedRows.sort((a, b) => (a[activeType] || 0) - (b[activeType] || 0));
 
                 // SMART DFE CALCULATION
                 let diffs = [];
                 for(let i=0; i<parsedRows.length; i++) {
-                    if (parsedRows[i].tvddf !== null && parsedRows[i].tvdss !== null) diffs.push(parsedRows[i].tvddf - parsedRows[i].tvdss);
+                    if (parsedRows[i].tvddf !== null && parsedRows[i].tvdss !== null) {
+                        diffs.push(parsedRows[i].tvddf - parsedRows[i].tvdss);
+                    }
                 }
                 let avg_df = 0;
                 if (diffs.length > 0) {
                     let sum = 0; for(let i=0; i<diffs.length; i++) sum += diffs[i];
                     avg_df = sum / diffs.length;
-                    let discrepancy = false;
-                    for(let i=0; i<diffs.length; i++) { if(Math.abs(diffs[i] - avg_df) > 1.0) discrepancy = true; }
-                    if (discrepancy) {
-                        alert("Discrepancy found in TVDDF - TVDSS. Using calculated average DFE: " + fromBaseLength(avg_df).toFixed(1) + " to align data.");
+                    let maxDiffFromAvg = 0;
+                    for(let i=0; i<diffs.length; i++) {
+                        if(Math.abs(diffs[i] - avg_df) > maxDiffFromAvg) maxDiffFromAvg = Math.abs(diffs[i] - avg_df);
+                    }
+                    if (maxDiffFromAvg > 3.28) {
+                        alert("Discrepancy found in TVDDF - TVDSS (> 1m difference). Using calculated average DFE: " + fromBaseLength(avg_df).toFixed(1) + " " + currentUnits.length + " to strictly align data.");
+                        for(let i=0; i<parsedRows.length; i++) {
+                            if(parsedRows[i].tvddf !== null) parsedRows[i].tvdss = parsedRows[i].tvddf - avg_df;
+                        }
                     }
                     document.getElementById("df_elev").value = fromBaseLength(avg_df).toFixed(1);
                 } else {
@@ -920,9 +1007,9 @@ function handleFileUpload(event) {
 
                 for(let i=0; i<parsedRows.length; i++) {
                     let r = parsedRows[i];
-                    if (r.tvddf !== null) { r.tvdss = r.tvddf - avg_df; }
-                    else if (r.tvdss !== null) { r.tvddf = r.tvdss + avg_df; }
-                    else if (r.md !== null) { r.tvddf = r.md; r.tvdss = r.md - avg_df; }
+                    if (r.tvddf !== null && r.tvdss === null) { r.tvdss = r.tvddf - avg_df; }
+                    else if (r.tvdss !== null && r.tvddf === null) { r.tvddf = r.tvdss + avg_df; }
+                    else if (r.md !== null && r.tvddf === null && r.tvdss === null) { r.tvddf = r.md; r.tvdss = r.md - avg_df; }
                     
                     let activeBot = r[activeType] !== null ? r[activeType] : 0;
                     r.top = prevDepth; prevDepth = activeBot;
@@ -940,7 +1027,6 @@ function handleFileUpload(event) {
                     if (useGrad) r.temp = baseTemp_user + (activeBot / 100) * grad_user;
                 }
                 
-                // Patch Depth 0 Infinity/NaN values from PSI Conversion by cloning second row densities
                 if (parsedRows.length > 1 && (parsedRows[0].tvddf === null || parsedRows[0].tvddf <= 0.1)) {
                     if (parsedRows[0].pp === null && parsedRows[1].pp !== null) parsedRows[0].pp = parsedRows[1].pp;
                     if (parsedRows[0].fp === null && parsedRows[1].fp !== null) parsedRows[0].fp = parsedRows[1].fp;
@@ -1019,7 +1105,7 @@ function triggerPPFGCalc(depthCell) {
     let tbody = document.getElementById("ppfgBody"); let col = getCalcDepthCol(); let prevDepth = 0;
     for(let i=0; i<tbody.rows.length; i++) { tbody.rows[i].cells[0].textContent = prevDepth.toFixed(0); let botDepth = parseFloat(tbody.rows[i].cells[col].textContent); if(!isNaN(botDepth)) prevDepth = botDepth; }
     let row = depthCell.closest("tr"); calcPPFG(row.cells[4], 'pp_dens', true); calcPPFG(row.cells[6], 'fp_dens', true); calcPPFG(row.cells[8], 'obg_dens', true);
-    applyGeothermal(true); clearTimeout(chartDebounceTimer); chartDebounceTimer = setTimeout(updateSubsurfaceChart, 400);
+    applyGeothermal(true); debouncedUpdateSubsurfaceChart();
 }
 function calcPPFG(inputCell, type, skipChart=false) {
     let row = inputCell.closest("tr"); let col = getCalcDepthCol(); 
@@ -1041,7 +1127,7 @@ function calcPPFG(inputCell, type, skipChart=false) {
     else if (type === 'obg_dens') { let d = parseCell(row.cells[8]); if(!isNaN(d)) row.cells[9].textContent = fromBasePress(toBaseDens(d) * tvddf * c).toFixed(1); else row.cells[9].textContent = ""; }
     else if (type === 'obg_press') { let p = parseCell(row.cells[9]); if(!isNaN(p)) row.cells[8].textContent = fromBaseDens(toBasePress(p) / (tvddf * c)).toFixed(3); else row.cells[8].textContent = ""; }
     
-    if(!skipChart) { clearTimeout(chartDebounceTimer); chartDebounceTimer = setTimeout(updateSubsurfaceChart, 400); }
+    if(!skipChart) { debouncedUpdateSubsurfaceChart(); }
 }
 function applyGeothermal(skipChart=false) {
     let useGrad = document.getElementById("use_geo_grad").checked; document.getElementById("grad_inputs").style.display = useGrad ? "inline-block" : "none";
@@ -1053,7 +1139,7 @@ function applyGeothermal(skipChart=false) {
             tempCell.textContent = (baseTemp_user + (depth_user / 100) * grad_user).toFixed(1);
         } else { tempCell.contentEditable = "true"; }
     }
-    if(!skipChart) { clearTimeout(chartDebounceTimer); chartDebounceTimer = setTimeout(updateSubsurfaceChart, 400); }
+    if(!skipChart) { debouncedUpdateSubsurfaceChart(); }
 }
 function getPPFGProfile() {
     let rows = document.getElementById("ppfgBody").rows; let col = getCalcDepthCol(); let data = { top: [], bottom: [], pp: [], fp: [], obg: [], temp: [] };
@@ -1209,7 +1295,6 @@ function updateSchematics() {
 
 // ================= SIMULATION EXECUTION =================
 function buildBasePayload(sbp_val) {
-    // Builds the STRICT structure expected by the original FastAPI Server
     let well_sections = []; let rows = document.getElementById("wellTable").rows;
     for (let i = 1; i < rows.length; i++) { let c = rows[i].cells; let type = c[0].children[0].value;
         well_sections.push({ type: type, top_md: toBaseLength(Number(c[2].textContent)), end_md: toBaseLength(Number(c[3].textContent)), casing_id: toBaseDiam(Number(c[5].querySelector("input").value)), hole_d: type === "open hole" ? toBaseDiam(Number(c[5].querySelector("input").value)) : toBaseDiam(Number(c[4].querySelector("input").value)) });
@@ -1223,18 +1308,25 @@ function buildBasePayload(sbp_val) {
     }
 
     let actualFlow = Number(document.getElementById("flowrate").value);
+    
+    let t_surf = converters.temp.toBase(Number(document.getElementById("surface_temp").value), currentUnits.temp);
+    let el_geo_grad = document.getElementById("geo_grad");
+    let geo_grad = (el_geo_grad ? parseFloat(el_geo_grad.value) : 1.5) / 100.0;
+    let d = toBaseLength(Number(document.getElementById("depth").value));
+    let bhct = t_surf + (geo_grad * d);
+    let cooling = actualFlow > 100 ? 0.85 : 0.95;
 
     return {
         flowrate: converters.flow.toBase(actualFlow, currentUnits.flow),
-        depth: toBaseLength(Number(document.getElementById("depth").value)),
+        depth: d,
         sbp: sbp_val,
         fluid: { 
             mw: converters.density.toBase(Number(document.getElementById("mw").value), currentUnits.density), 
             fann_600: Number(document.getElementById("f600").value), fann_300: Number(document.getElementById("f300").value), fann_200: Number(document.getElementById("f200").value), fann_100: Number(document.getElementById("f100").value), fann_6: Number(document.getElementById("f6").value), fann_3: Number(document.getElementById("f3").value) 
         },
         temperature: { 
-            surface_temp: converters.temp.toBase(Number(document.getElementById("surface_temp").value), currentUnits.temp), 
-            bhct: 150.0, // Used by standard model
+            surface_temp: t_surf, 
+            bhct: t_surf + ((bhct - t_surf) * cooling),
             beta: 0.0003
         },
         trajectory: trajectory, well_sections: well_sections, bha: bha
@@ -1259,7 +1351,7 @@ async function runSimulation(){
         // FRONTEND MPD SOLVER (Bypasses Schema issues)
         if (mainMode === "mpd" && mpdMode === "downhole") {
             displayMode = "dh";
-            let payload0 = buildBasePayload(0.0); // Pass 1: Zero SBP
+            let payload0 = buildBasePayload(0.0); 
             
             let res1 = await fetch("/simulate", { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(payload0) });
             let data1 = await res1.json();
@@ -1322,7 +1414,6 @@ async function runSimulation(){
         let geo_grad = (el_geo_grad ? parseFloat(el_geo_grad.value) : 1.5) / 100.0;
         let beta = finalPayload.temperature.beta;
 
-        // ROBUST FALLBACKS (If backend doesn't have SPP or Temp natively installed)
         if (!finalResult.profile.temp) {
             finalResult.profile.temp = [];
             for(let i=0; i<finalResult.profile.depth.length; i++) {
@@ -1644,6 +1735,10 @@ function updateScooterValues(depthBase) {
     document.getElementById('scooterFp').innerText = fp;
     document.getElementById('scooterObg').innerText = obg; 
 }
+
+scooterLine.addEventListener('mousedown', (e) => { isDraggingScooter = true; e.preventDefault(); });
+document.addEventListener('mousemove', (e) => { if (!isDraggingScooter || !chartDensityInstance) return; let rect = chartWrapper.getBoundingClientRect(); moveScooterTo(e.clientY - rect.top); });
+document.addEventListener('mouseup', () => { isDraggingScooter = false; });
 
 window.onload = function() { 
     toggleMainMode();
