@@ -42,7 +42,6 @@
         #scooterBox { position: absolute; left: 10px; top: -45px; background: rgba(255,255,255,0.95); border: 1px solid #999; padding: 5px 15px; border-radius: 4px; box-shadow: 0px 2px 10px rgba(0,0,0,0.2); display: flex; align-items: center; gap: 15px; cursor: default; pointer-events: auto; }
         .scooter-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px 15px; font-size: 0.85em; line-height: 1.3; }
         
-        /* Dark Mode Gauges Dashboard */
         .dash-panel { display: flex; gap: 15px; background: #334155; padding: 15px; border-radius: 8px; margin-top: 15px; align-items: stretch; justify-content: center; }
         .dash-card { flex: 1; max-width: 300px; background: #1e293b; border: 1px solid #475569; border-radius: 6px; padding: 15px; display: flex; flex-direction: column; align-items: center; position: relative; }
         .dash-card.active-anchor { border-color: #4ade80; box-shadow: 0 0 10px rgba(74, 222, 128, 0.2); }
@@ -97,7 +96,6 @@
 </div>
 
 <div id="simulation" class="tab active">
-    
     <div class="controls-row">
         <div><label>Flowrate (<span class="lbl-flow">gpm</span>):</label><br><input id="flowrate" class="val-flow" value="400" onkeyup="triggerWellDesignChange()"></div>
         <div><label>Depth (<span class="lbl-length">ft</span>):</label><br><input id="depth" class="val-length" value="10000" onkeyup="triggerWellDesignChange()"></div>
@@ -405,7 +403,7 @@ let chartDebounceTimer = null;
 let wellChangeTimer = null;
 let currentUnits = { length: "ft", diam: "in", density: "ppg", press: "psi", flow: "gpm", temp: "F" };
 
-// ================= UI HELPERS (TABLES AND FORMS) =================
+// ================= UI HELPERS =================
 function triggerWellDesignChange() {
     enforceOpenHoleTop();
     calcBhaCumLength();
@@ -433,7 +431,6 @@ function calcBhaCumLength() {
     let tbody = document.getElementById("bhaBody");
     if (!tbody) return;
     let cum = 0;
-    // Iterate from Top to Bottom
     for (let i = 0; i < tbody.rows.length; i++) {
         let lenInput = tbody.rows[i].cells[5].querySelector("input");
         let cumInput = tbody.rows[i].cells[6].querySelector("input");
@@ -482,7 +479,7 @@ function debouncedUpdateSubsurfaceChart() {
 }
 
 
-// ================= MUD PROPERTIES & VOLUMETRICS =================
+// MUD PROPERTIES & VOLUMETRICS
 function updateOwrWater() {
     let oil = parseFloat(document.getElementById('owr_oil').value) || 0;
     if (oil > 100) oil = 100;
@@ -568,7 +565,7 @@ function drawRheologyChart() {
     });
 }
 
-// ================= MPD UI CONTROLS =================
+// UI CONTROLS & DASHBOARD
 function toggleMainMode() {
     let mode = document.getElementById("mainMode").value;
     if (mode === "conventional") {
@@ -669,6 +666,7 @@ function updateDashboard(spp, sbp, anchorDep, anchorPress, anchorEcd, modeType, 
     }
 }
 
+// UTILS & DOM DELEGATION
 function parseSafe(val) {
     if (val === undefined || val === null || String(val).trim() === "") return null;
     let parsed = parseFloat(String(val).replace(/,/g, ''));
@@ -771,15 +769,14 @@ function handleBhaUpload(event) {
 
                 let numCols = 0;
                 for(let r=0; r < Math.min(30, rawData.length); r++) {
-                    if (rawData[r] && Object.keys(rawData[r]).length > numCols) numCols = Object.keys(rawData[r]).length;
+                    if (rawData[r] && rawData[r].length > numCols) numCols = rawData[r].length;
                 }
                 
                 let headerMatrix = [];
                 for(let r=0; r < Math.min(30, rawData.length); r++) {
                     let rowVals = []; let lastVal = "";
-                    let keys = Object.keys(rawData[r] || {});
                     for(let c=0; c < numCols; c++) {
-                        let cell = (rawData[r] && rawData[r][keys[c]] !== undefined) ? rawData[r][keys[c]] : null;
+                        let cell = (rawData[r] && rawData[r][c] !== undefined) ? rawData[r][c] : null;
                         if (cell !== null && String(cell).trim() !== "") lastVal = String(cell).toLowerCase().trim();
                         rowVals.push(lastVal);
                     }
@@ -806,12 +803,12 @@ function handleBhaUpload(event) {
                     else if (/\bod\b|outer.*d/i.test(h) && !/max|conn|tj/i.test(h)) map.od = i;
                     else if (/\bid\b|inner.*d/i.test(h)) map.id = i;
                     else if (/max.*od|conn.*od|tj.*od|gauge/i.test(h)) map.maxOd = i;
-                    // STRICT REGEX: Capture length, but strictly avoid "cum" or "total"
-                    else if (/(len|length)/i.test(h) && !/(cum|total|bottom|depth)/i.test(h)) map.len = i;
+                    // STRICT REGEX: Must grab length but IGNORE "cum", "total", "location"
+                    else if (/(len|length)/i.test(h) && !/(cum|tot|bot|loc)/i.test(h)) map.len = i;
                 }
 
                 if (map.od === -1 || map.len === -1) { 
-                    alert("Could not cleanly detect individual OD and Length columns."); document.getElementById("bhaBody").innerHTML = ""; return; 
+                    alert("Could not cleanly detect Individual OD and Length columns."); document.getElementById("bhaBody").innerHTML = ""; return; 
                 }
 
                 let units = askUnitIfNeeded(detectedDiam, detectedLen);
@@ -819,13 +816,12 @@ function handleBhaUpload(event) {
 
                 for (let i = 0; i < rawData.length; i++) {
                     let row = rawData[i];
-                    let keys = Object.keys(row || {});
-                    if (!row || row[keys[map.len]] === undefined) continue;
-                    let rawLen = parseFloat(String(row[keys[map.len]]).replace(/,/g,'')); if (isNaN(rawLen)) continue;
+                    if (!row || row[map.len] === undefined) continue;
+                    let rawLen = parseFloat(String(row[map.len]).replace(/,/g,'')); if (isNaN(rawLen)) continue;
 
-                    let nm = map.name !== -1 && row[keys[map.name]] ? String(row[keys[map.name]]).trim() : "";
+                    let nm = map.name !== -1 && row[map.name] ? String(row[map.name]).trim() : "";
                     if (nm === "" && lastValidName !== "") nm = lastValidName; else if (nm !== "") lastValidName = nm;
-                    let tyStr = map.type !== -1 && row[keys[map.type]] ? String(row[keys[map.type]]).toLowerCase() : "";
+                    let tyStr = map.type !== -1 && row[map.type] ? String(row[map.type]).toLowerCase() : "";
                     let searchStr = (tyStr + " " + nm).toLowerCase();
                     
                     let tyOpt = "Other";
@@ -839,9 +835,9 @@ function handleBhaUpload(event) {
                     if (/xo|cross|x-over|xover|x\/o/i.test(searchStr)) tyOpt = "Crossover";
                     if (/bit|pdc|tricone/i.test(searchStr)) tyOpt = "Bit"; 
 
-                    let rawOd = map.od !== -1 ? parseFloat(String(row[keys[map.od]]).replace(/,/g,'')) || 0 : 0;
-                    let rawId = map.id !== -1 ? parseFloat(String(row[keys[map.id]]).replace(/,/g,'')) || 0 : 0;
-                    let rawMod = map.maxOd !== -1 ? parseFloat(String(row[keys[map.maxOd]]).replace(/,/g,'')) || rawOd : rawOd;
+                    let rawOd = map.od !== -1 ? parseFloat(String(row[map.od]).replace(/,/g,'')) || 0 : 0;
+                    let rawId = map.id !== -1 ? parseFloat(String(row[map.id]).replace(/,/g,'')) || 0 : 0;
+                    let rawMod = map.maxOd !== -1 ? parseFloat(String(row[map.maxOd]).replace(/,/g,'')) || rawOd : rawOd;
                     parsedRows.push({ nm: nm, tyOpt: tyOpt, rawOd: rawOd, rawId: rawId, rawMod: rawMod, rawLen: rawLen });
                 }
 
@@ -885,9 +881,8 @@ function handleFileUpload(event) {
                 let headerMatrix = [];
                 for(let r=0; r < Math.min(15, cleanData.length); r++) {
                     let rowVals = []; let lastVal = "";
-                    let keys = Object.keys(cleanData[r] || {});
                     for(let c=0; c < numCols; c++) {
-                        let cell = cleanData[r][keys[c]];
+                        let cell = cleanData[r][c];
                         if (cell !== undefined && cell !== null && String(cell).trim() !== "") lastVal = String(cell).toLowerCase().trim();
                         rowVals.push(lastVal);
                     }
@@ -909,7 +904,7 @@ function handleFileUpload(event) {
                 let casePref = document.getElementById("importCase").value; let caseRegex = new RegExp(casePref, 'i');
                 let unitPref = document.getElementById("importUnit").value; 
                 let importDepthUnit = document.getElementById("importDepthUnit").value;
-                if (importDepthUnit === 'auto') importDepthUnit = detectedDepthUnit || 'ft';
+                if (importDepthUnit === 'auto') importDepthUnit = detectedDepthUnit || currentUnits.length;
 
                 flattenedHeaders.forEach((h, i) => {
                     let isTargetCase = casePref === '.*' ? true : caseRegex.test(h);
@@ -932,36 +927,36 @@ function handleFileUpload(event) {
                     if (fallback !== -1) map.tvddf = fallback; else { alert("Could not find any Depth columns."); document.getElementById("ppfgBody").innerHTML = ""; return; }
                 }
 
-                if (map.tvddf !== -1) document.getElementById("calcDepthType").value = "tvddf";
-                else if (map.tvdss !== -1) document.getElementById("calcDepthType").value = "tvdss";
-                else if (map.md !== -1) document.getElementById("calcDepthType").value = "md";
-
-                let activeType = document.getElementById("calcDepthType").value;
+                let activeType = "tvddf"; // Always default to TVDDF on import per request
+                document.getElementById("calcDepthType").value = "tvddf";
+                
+                // CRITICAL FIX: Convert import explicitly to Base Unit (FT)
                 function toBaseFromImport(val) {
-                    if (val === null) return null;
-                    return importDepthUnit === 'm' ? val * 3.28084 : val; 
+                    if (val === null || val === undefined) return null;
+                    let v = parseFloat(String(val).replace(/,/g,''));
+                    if (isNaN(v)) return null;
+                    return importDepthUnit === 'm' ? v * 3.28084 : v; 
                 }
 
                 let parsedRows = [];
                 for (let i = 2; i < cleanData.length; i++) {
                     let row = cleanData[i]; if (!row) continue;
-                    let keys = Object.keys(row);
-                    let mdRaw = map.md !== -1 ? parseSafe(row[keys[map.md]]) : null;
-                    let tvddfRaw = map.tvddf !== -1 ? parseSafe(row[keys[map.tvddf]]) : null;
-                    let tvdssRaw = map.tvdss !== -1 ? parseSafe(row[keys[map.tvdss]]) : null;
+                    let mdRaw = map.md !== -1 ? parseSafe(row[map.md]) : null;
+                    let tvddfRaw = map.tvddf !== -1 ? parseSafe(row[map.tvddf]) : null;
+                    let tvdssRaw = map.tvdss !== -1 ? parseSafe(row[map.tvdss]) : null;
                     if (mdRaw === null && tvddfRaw === null && tvdssRaw === null) continue;
                     
                     parsedRows.push({ 
                         md: toBaseFromImport(mdRaw), 
                         tvddf: toBaseFromImport(tvddfRaw), 
                         tvdss: toBaseFromImport(tvdssRaw), 
-                        pp: map.pp !== -1 ? parseSafe(row[keys[map.pp]]) : null, 
-                        pp_psi: map.pp_psi !== -1 ? parseSafe(row[keys[map.pp_psi]]) : null, 
-                        fp: map.fp !== -1 ? parseSafe(row[keys[map.fp]]) : null, 
-                        fp_psi: map.fp_psi !== -1 ? parseSafe(row[keys[map.fp_psi]]) : null, 
-                        obg: map.obg !== -1 ? parseSafe(row[keys[map.obg]]) : null, 
-                        obg_psi: map.obg_psi !== -1 ? parseSafe(row[keys[map.obg_psi]]) : null, 
-                        temp: map.temp !== -1 ? parseSafe(row[keys[map.temp]]) : null 
+                        pp: map.pp !== -1 ? parseSafe(row[map.pp]) : null, 
+                        pp_psi: map.pp_psi !== -1 ? parseSafe(row[map.pp_psi]) : null, 
+                        fp: map.fp !== -1 ? parseSafe(row[map.fp]) : null, 
+                        fp_psi: map.fp_psi !== -1 ? parseSafe(row[map.fp_psi]) : null, 
+                        obg: map.obg !== -1 ? parseSafe(row[map.obg]) : null, 
+                        obg_psi: map.obg_psi !== -1 ? parseSafe(row[map.obg_psi]) : null, 
+                        temp: map.temp !== -1 ? parseSafe(row[map.temp]) : null 
                     });
                 }
                 parsedRows.sort((a, b) => (a[activeType] || 0) - (b[activeType] || 0));
@@ -970,35 +965,34 @@ function handleFileUpload(event) {
                 let diffs = [];
                 for(let i=0; i<parsedRows.length; i++) {
                     if (parsedRows[i].tvddf !== null && parsedRows[i].tvdss !== null) {
-                        diffs.push(parsedRows[i].tvddf - parsedRows[i].tvdss); // Difference strictly in Feet (Base Units)
+                        diffs.push(parsedRows[i].tvddf - parsedRows[i].tvdss); // Difference strictly in Base Units (FT)
                     }
                 }
                 
                 let dfInput = document.getElementById("df_elev");
-                dfInput.disabled = true; // Lock DFE box
+                dfInput.disabled = true; // Lock DFE box per request
                 
-                let avg_df = 0;
+                let avg_df_base = 0;
                 let hasTvddf = parsedRows.some(r => r.tvddf !== null);
                 let hasTvdss = parsedRows.some(r => r.tvdss !== null);
 
                 if (diffs.length > 0) {
                     let sum = 0; for(let i=0; i<diffs.length; i++) sum += diffs[i];
-                    avg_df = sum / diffs.length;
+                    avg_df_base = sum / diffs.length;
                     let maxDiffFromAvg = 0;
                     for(let i=0; i<diffs.length; i++) {
-                        if(Math.abs(diffs[i] - avg_df) > maxDiffFromAvg) maxDiffFromAvg = Math.abs(diffs[i] - avg_df);
+                        if(Math.abs(diffs[i] - avg_df_base) > maxDiffFromAvg) maxDiffFromAvg = Math.abs(diffs[i] - avg_df_base);
                     }
                     if (maxDiffFromAvg > 3.28) {
-                        alert("Discrepancy found in TVDDF - TVDSS (> 1m). Using calculated average DFE: " + fromBaseLength(avg_df).toFixed(1) + " " + currentUnits.length);
+                        alert("Discrepancy found in TVDDF - TVDSS (> 1m difference). Using calculated average DFE: " + fromBaseLength(avg_df_base).toFixed(1) + " " + currentUnits.length + " to strictly align data.");
                     }
-                    dfInput.value = fromBaseLength(avg_df).toFixed(1);
+                    dfInput.value = fromBaseLength(avg_df_base).toFixed(1);
                 } else if (!hasTvddf && hasTvdss) {
                     let userDf = prompt("No TVDDF found in file. Please enter DF Elevation (" + currentUnits.length + ") to calculate TVDDF:", "100");
-                    avg_df = toBaseLength(parseFloat(userDf) || 0);
-                    dfInput.value = fromBaseLength(avg_df).toFixed(1);
-                    document.getElementById("calcDepthType").value = "tvddf";
+                    avg_df_base = toBaseLength(parseFloat(userDf) || 0);
+                    dfInput.value = fromBaseLength(avg_df_base).toFixed(1);
                 } else {
-                    avg_df = toBaseLength(parseFloat(dfInput.value) || 0);
+                    avg_df_base = toBaseLength(parseFloat(dfInput.value) || 0);
                 }
 
                 const c = 0.051948; let prevDepth = 0;
@@ -1006,16 +1000,16 @@ function handleFileUpload(event) {
 
                 for(let i=0; i<parsedRows.length; i++) {
                     let r = parsedRows[i];
-                    if (r.tvddf !== null && r.tvdss === null) { r.tvdss = r.tvddf - avg_df; }
-                    else if (r.tvdss !== null && r.tvddf === null) { r.tvddf = r.tvdss + avg_df; }
-                    else if (r.md !== null && r.tvddf === null && r.tvdss === null) { r.tvddf = r.md; r.tvdss = r.md - avg_df; }
+                    if (r.tvddf !== null && r.tvdss === null) { r.tvdss = r.tvddf - avg_df_base; }
+                    else if (r.tvdss !== null && r.tvddf === null) { r.tvddf = r.tvdss + avg_df_base; }
+                    else if (r.md !== null && r.tvddf === null && r.tvdss === null) { r.tvddf = r.md; r.tvdss = r.md - avg_df_base; }
                     
                     let activeBot = r[activeType] !== null ? r[activeType] : 0;
                     r.top = prevDepth; prevDepth = activeBot;
                     
                     let tvd_ft = r.tvddf !== null ? r.tvddf : activeBot;
                     
-                    // PSI to PPG Converstion matrix - locked against zero depths
+                    // PSI to PPG Converstion matrix - strictly locked against zero depths
                     if (tvd_ft > 0.1) {
                         if (r.pp === null && r.pp_psi !== null) r.pp = toBasePress(r.pp_psi) / (tvd_ft * c);
                         if (r.pp_psi === null && r.pp !== null) r.pp_psi = fromBasePress(r.pp * tvd_ft * c);
@@ -1028,10 +1022,16 @@ function handleFileUpload(event) {
                     }
                     if (useGrad) r.temp = baseTemp_user + (activeBot / 100) * grad_user;
                 }
+                
+                // Patch Depth 0 Infinity/NaN values from PSI Conversion by cloning second row densities
+                if (parsedRows.length > 1 && (parsedRows[0].tvddf === null || parsedRows[0].tvddf <= 0.1)) {
+                    if (parsedRows[0].pp === null && parsedRows[1].pp !== null) parsedRows[0].pp = parsedRows[1].pp;
+                    if (parsedRows[0].fp === null && parsedRows[1].fp !== null) parsedRows[0].fp = parsedRows[1].fp;
+                    if (parsedRows[0].obg === null && parsedRows[1].obg !== null) parsedRows[0].obg = parsedRows[1].obg;
+                }
 
                 let htmlString = "";
-                for(let i=0; i<parsedRows.length; i++) {
-                    let r = parsedRows[i];
+                parsedRows.forEach(r => {
                     let mdStr = r.md !== null ? fromBaseLength(r.md).toFixed(0) : ""; 
                     let dfStr = r.tvddf !== null ? fromBaseLength(r.tvddf).toFixed(0) : ""; 
                     let ssStr = r.tvdss !== null ? fromBaseLength(r.tvdss).toFixed(0) : "";
@@ -1042,7 +1042,7 @@ function handleFileUpload(event) {
                     let tempStr = r.temp !== null ? r.temp.toFixed(1) : "";
 
                     htmlString += `<tr><td contenteditable="false">${fromBaseLength(r.top).toFixed(0)}</td><td contenteditable class="val-length" onkeyup="calcPPFG(this,'md')">${mdStr}</td><td contenteditable class="val-length" onkeyup="calcPPFG(this,'tvddf')">${dfStr}</td><td contenteditable class="val-length" onkeyup="calcPPFG(this,'tvdss')">${ssStr}</td><td contenteditable class="val-density" onkeyup="calcPPFG(this,'pp_dens')">${ppStr}</td><td contenteditable class="val-press" onkeyup="calcPPFG(this,'pp_press')">${ppPsiStr}</td><td contenteditable class="val-density" onkeyup="calcPPFG(this,'fp_dens')">${fpStr}</td><td contenteditable class="val-press" onkeyup="calcPPFG(this,'fp_press')">${fpPsiStr}</td><td contenteditable class="val-density" onkeyup="calcPPFG(this,'obg_dens')">${obgStr}</td><td contenteditable class="val-press" onkeyup="calcPPFG(this,'obg_press')">${obgPsiStr}</td><td contenteditable class="val-temp" onkeyup="debouncedUpdateSubsurfaceChart()">${tempStr}</td></tr>`;
-                }
+                });
 
                 document.getElementById("ppfgBody").innerHTML = htmlString; 
                 switchCalcDepth(); 
@@ -1325,7 +1325,7 @@ function getTvdLocal(trajRes, md) {
 }
 
 function buildBasePayload(sbp_val) {
-    // Sanitized Pydantic payload exactly matching your server schema
+    // Sanitized Pydantic payload exactly matching your FastAPI backend
     let well_sections = []; let rows = document.getElementById("wellTable").rows;
     for (let i = 1; i < rows.length; i++) { let c = rows[i].cells; let type = c[0].children[0].value;
         well_sections.push({ type: type, top_md: toBaseLength(Number(c[2].textContent)), end_md: toBaseLength(Number(c[3].textContent)), casing_id: toBaseDiam(Number(c[5].querySelector("input").value)), hole_d: type === "open hole" ? toBaseDiam(Number(c[5].querySelector("input").value)) : toBaseDiam(Number(c[4].querySelector("input").value)) });
@@ -1384,13 +1384,13 @@ async function runSimulation(){
         let appliedSbpBase = 0.0;
         let displayMode = "conv";
 
-        // FRONTEND MPD SOLVER
+        // FRONTEND MPD SOLVER (Bypasses FastAPI Validation Crashes)
         if (mainMode === "mpd" && mpdMode === "downhole") {
             displayMode = "dh";
             let payload0 = buildBasePayload(0.0); 
             
             let res1 = await fetch("/simulate", { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(payload0) });
-            if (!res1.ok) { let errText = await res1.text(); throw new Error("API Validation Failed: " + res1.status + " " + errText); }
+            if (!res1.ok) { let errText = await res1.text(); throw new Error("API Check Failed: " + res1.status + " " + errText); }
             let data1 = await res1.json();
             if (!data1 || !data1.profile || data1.error) throw new Error(data1 ? data1.error : "Server Error on Pass 1.");
 
@@ -1425,9 +1425,10 @@ async function runSimulation(){
 
             let targetType = document.getElementById("targetType").value;
             let targetValUser = Number(document.getElementById("targetVal").value);
-            let targetEcdBase = targetType === "density" ? converters.density.toBase(targetValUser, currentUnits.density) : (converters.press.toBase(targetValUser, currentUnits.press) / (0.051948 * anchorTvdBase));
+            let targetPressBase = targetType === "density" ? (converters.density.toBase(targetValUser, currentUnits.density) * anchorTvdBase * 0.051948) : converters.press.toBase(targetValUser, currentUnits.press);
 
-            let requiredSbpPsi = (targetEcdBase - baseEcdAtAnchor) * 0.051948 * anchorTvdBase / temp_factor;
+            let baseDynamicPress = baseEcdAtAnchor * anchorTvdBase * 0.051948;
+            let requiredSbpPsi = (targetPressBase - baseDynamicPress) / temp_factor;
 
             let minSbpPsi = converters.press.toBase(Number(document.getElementById("min_sbp").value) || 0, currentUnits.press);
             let maxSbpPsi = converters.press.toBase(Number(document.getElementById("max_sbp").value) || 2000, currentUnits.press);
@@ -1534,7 +1535,11 @@ async function runSimulation(){
             }
         }
         
-        let anchorPressUser = fromBasePress(anchorEcdBase * anchorDepthBase * 0.051948);
+        let tvdProfile = calculateTrajectoryTVD(finalPayload.trajectory);
+        let anchorTvdBase = getTvdLocal(tvdProfile, anchorDepthBase);
+        if(anchorTvdBase < 0.1) anchorTvdBase = 0.1;
+        
+        let anchorPressUser = fromBasePress(anchorEcdBase * anchorTvdBase * 0.051948);
         let anchorEcdUser = fromBaseDens(anchorEcdBase);
 
         updateDashboard(parseFloat(displaySpp), parseFloat(appliedSbp), anchorDepthUser, anchorPressUser, anchorEcdUser, displayMode, parseFloat(displayLoss), displayZfSbp);
