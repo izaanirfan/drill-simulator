@@ -10,7 +10,7 @@
         .tab { display: none; margin-top: 20px; }
         .active { display: block; }
         input { width: 70px; padding: 4px; }
-        input:disabled, [contenteditable="false"] { background-color: #ddd; color: #666; font-weight: bold;}
+        input:disabled, [contenteditable="false"] { background-color: #e5e7eb; color: #374151; font-weight: bold;}
         table { border-collapse: collapse; margin-top: 10px; width: 100%; max-width: 1200px; font-size: 0.85em; }
         th, td { padding: 6px; text-align: left; border: 1px solid #ccc; }
         th { background-color: #f4f7f6; }
@@ -97,7 +97,6 @@
 </div>
 
 <div id="simulation" class="tab active">
-    
     <div class="controls-row">
         <div><label>Flowrate (<span class="lbl-flow">gpm</span>):</label><br><input id="flowrate" class="val-flow" value="400" onkeyup="triggerWellDesignChange()"></div>
         <div><label>Depth (<span class="lbl-length">ft</span>):</label><br><input id="depth" class="val-length" value="10000" onkeyup="triggerWellDesignChange()"></div>
@@ -302,7 +301,7 @@
 
 <div id="bha" class="tab">
     <div class="upload-box">
-        <div><strong>Import BHA Profile</strong><br><span style="font-size: 0.85em; color: #555;">Upload an Excel (.xlsx, .xls) or CSV (.csv) file.</span></div>
+        <div><strong>Import BHA Profile</strong><br><span style="font-size: 0.85em; color: #555;">Upload an Excel (.xlsx) or CSV (.csv) file.</span></div>
         <label class="upload-btn">Choose Excel/CSV File<input type="file" id="bhaUpload" accept=".xlsx, .xls, .csv" onchange="handleBhaUpload(event)"></label>
     </div>
     <div style="display: flex; gap: 40px; align-items: flex-start;">
@@ -358,12 +357,12 @@
 
 <div id="subsurface" class="tab">
     <div class="upload-box">
-        <div><strong>Intelligent Subsurface Import</strong><br><span style="font-size: 0.85em; color: #555;">Upload an Excel (.xlsx) or CSV file. We will hunt for MD, TVDDF, and TVDSS columns dynamically.</span></div>
+        <div><strong>Intelligent Subsurface Import</strong><br><span style="font-size: 0.85em; color: #555;">Upload an Excel (.xlsx) file. We will hunt for MD, TVDDF, and TVDSS columns dynamically.</span></div>
         <div class="upload-controls">
             <div>Target Case: <select id="importCase" class="case-select"><option value="mid">Mid Case (Default)</option><option value="low">Low Case</option><option value="high">High Case</option><option value="base">Base Case</option><option value=".*">Any/Not Specified</option></select></div>
             <div>Import As: <select id="importUnit" class="case-select"><option value="ppg" selected>Density (ppg / sg)</option><option value="psi">Pressure (psi / bar)</option></select></div>
             <div>Import Depth As: <select id="importDepthUnit" class="case-select"><option value="auto">Auto-Detect</option><option value="ft">Feet (ft)</option><option value="m">Meters (m)</option></select></div>
-            <div>DF Elev (<span class="lbl-length">ft</span>): <input id="df_elev" type="number" value="" style="width: 70px; padding: 4px; background-color: #eee;" disabled title="Auto-calculated from TVDDF - TVDSS"></div>
+            <div>DF Elev (<span class="lbl-length">ft</span>): <input id="df_elev" class="val-length" type="number" value="" style="width: 70px; padding: 4px; background-color: #eee;" disabled title="Auto-calculated from TVDDF - TVDSS"></div>
         </div>
         <label class="upload-btn">Choose Excel/CSV File<input type="file" id="excelUpload" accept=".xlsx, .xls, .csv" onchange="handleFileUpload(event)"></label>
     </div>
@@ -405,7 +404,7 @@ let chartDebounceTimer = null;
 let wellChangeTimer = null;
 let currentUnits = { length: "ft", diam: "in", density: "ppg", press: "psi", flow: "gpm", temp: "F" };
 
-// ================= UI HELPERS (TABLES AND FORMS) =================
+// ================= UI HELPERS =================
 function triggerWellDesignChange() {
     enforceOpenHoleTop();
     calcBhaCumLength();
@@ -433,7 +432,7 @@ function calcBhaCumLength() {
     let tbody = document.getElementById("bhaBody");
     if (!tbody) return;
     let cum = 0;
-    // Iterate from Top to Bottom
+    // Calculate Top to Bottom
     for (let i = 0; i < tbody.rows.length; i++) {
         let lenInput = tbody.rows[i].cells[5].querySelector("input");
         let cumInput = tbody.rows[i].cells[6].querySelector("input");
@@ -481,7 +480,7 @@ function debouncedUpdateSubsurfaceChart() {
     chartDebounceTimer = setTimeout(updateSubsurfaceChart, 400);
 }
 
-// MUD PROPERTIES & VOLUMETRICS
+// ================= MUD PROPERTIES & VOLUMETRICS =================
 function updateOwrWater() {
     let oil = parseFloat(document.getElementById('owr_oil').value) || 0;
     if (oil > 100) oil = 100;
@@ -668,7 +667,7 @@ function updateDashboard(spp, sbp, anchorDep, anchorPress, anchorEcd, modeType, 
     }
 }
 
-// UTILS & DOM DELEGATION
+// ================= UTILS & DOM DELEGATION =================
 function parseSafe(val) {
     if (val === undefined || val === null || String(val).trim() === "") return null;
     let parsed = parseFloat(String(val).replace(/,/g, ''));
@@ -684,33 +683,13 @@ function highlightActiveDepth() {
     table.classList.remove("active-col-1", "active-col-2", "active-col-3"); table.classList.add("active-col-" + colIndex);
 }
 
-function applyDfElev() {
-    let df_elev_user = parseFloat(document.getElementById("df_elev").value) || 0;
-    // DFE logic remains strictly in UI values because table cells are in UI values
-    let tbody = document.getElementById("ppfgBody");
-    for (let i = 0; i < tbody.rows.length; i++) {
-        let row = tbody.rows[i];
-        let tvddf = parseFloat(row.cells[2].textContent.replace(/,/g,''));
-        let tvdss = parseFloat(row.cells[3].textContent.replace(/,/g,''));
-        
-        if (!isNaN(tvddf) && !isNaN(tvdss)) {
-            row.cells[3].textContent = (tvddf - df_elev_user).toFixed(0);
-        } else if (!isNaN(tvddf)) {
-            row.cells[3].textContent = (tvddf - df_elev_user).toFixed(0);
-        } else if (!isNaN(tvdss)) {
-            row.cells[2].textContent = (tvdss + df_elev_user).toFixed(0);
-        }
-    }
-    switchCalcDepth();
-}
-
 function handleTableKeyup(e) {
     let td = e.target; if (td.tagName !== 'TD') return; let cellIndex = td.cellIndex;
     if (cellIndex >= 1 && cellIndex <= 3) triggerPPFGCalc(td);
     else if (cellIndex === 4) calcPPFG(td, 'pp_dens'); else if (cellIndex === 5) calcPPFG(td, 'pp_press');
     else if (cellIndex === 6) calcPPFG(td, 'fp_dens'); else if (cellIndex === 7) calcPPFG(td, 'fp_press');
     else if (cellIndex === 8) calcPPFG(td, 'obg_dens'); else if (cellIndex === 9) calcPPFG(td, 'obg_press');
-    else if (cellIndex === 10) { clearTimeout(chartDebounceTimer); chartDebounceTimer = setTimeout(updateSubsurfaceChart, 400); }
+    else if (cellIndex === 10) { debouncedUpdateSubsurfaceChart(); }
 }
 
 function switchCalcDepth() {
@@ -722,6 +701,7 @@ function switchCalcDepth() {
         let row = tbody.rows[i]; row.cells[0].textContent = prevDepth.toFixed(0);
         let botDepth = parseFloat(row.cells[col].textContent); if (!isNaN(botDepth)) prevDepth = botDepth;
         
+        // Priority recalculation based on original data type
         if (unitPref === 'psi') {
             calcPPFG(row.cells[5], 'pp_press', true); 
             calcPPFG(row.cells[7], 'fp_press', true); 
@@ -732,7 +712,7 @@ function switchCalcDepth() {
             calcPPFG(row.cells[8], 'obg_dens', true);
         }
     }
-    applyGeothermal(true); clearTimeout(chartDebounceTimer); chartDebounceTimer = setTimeout(updateSubsurfaceChart, 400);
+    applyGeothermal(true); debouncedUpdateSubsurfaceChart();
 }
 
 function showTab(tab, btn) {
@@ -798,8 +778,8 @@ function handleBhaUpload(event) {
                 for(let r=0; r < Math.min(30, rawData.length); r++) {
                     let rowVals = [];
                     for(let c=0; c < numCols; c++) {
-                        let cell = (rawData[r] && rawData[r][c] !== undefined) ? rawData[r][c] : null;
-                        rowVals.push(cell !== null ? String(cell).toLowerCase().trim() : "");
+                        let cell = rawData[r] ? rawData[r][c] : null;
+                        rowVals.push(cell != null ? String(cell).toLowerCase().trim() : "");
                     }
                     headerMatrix.push(rowVals);
                 }
@@ -824,11 +804,12 @@ function handleBhaUpload(event) {
                     else if (/\bod\b|outer.*d/i.test(h) && !/max|conn|tj/i.test(h)) map.od = i;
                     else if (/\bid\b|inner.*d/i.test(h)) map.id = i;
                     else if (/max.*od|conn.*od|tj.*od|gauge/i.test(h)) map.maxOd = i;
-                    else if (/len|length/i.test(h) && !/cum|tot|bot|loc/i.test(h)) map.len = i;
+                    // STRICT REGEX: Must grab length but IGNORE "cum" or "total" or "bot"
+                    else if (/(len|length)/i.test(h) && !/(cum|tot|bot|loc)/i.test(h)) map.len = i;
                 }
 
                 if (map.od === -1 || map.len === -1) { 
-                    alert("Could not cleanly detect OD and Length columns."); document.getElementById("bhaBody").innerHTML = ""; return; 
+                    alert("Could not cleanly detect Individual OD and Length columns. Ensure header is 'Length'."); document.getElementById("bhaBody").innerHTML = ""; return; 
                 }
 
                 let units = askUnitIfNeeded(detectedDiam, detectedLen);
@@ -980,15 +961,16 @@ function handleFileUpload(event) {
                 }
                 parsedRows.sort((a, b) => (a[activeType] || 0) - (b[activeType] || 0));
 
+                // SMART DFE CALCULATION
                 let diffs_base = [];
                 for(let i=0; i<parsedRows.length; i++) {
                     if (parsedRows[i].tvddf !== null && parsedRows[i].tvdss !== null) {
-                        diffs_base.push(parsedRows[i].tvddf - parsedRows[i].tvdss); // Store difference strictly in Feet
+                        diffs_base.push(parsedRows[i].tvddf - parsedRows[i].tvdss); // Strictly Base Units (FT)
                     }
                 }
                 
                 let dfInput = document.getElementById("df_elev");
-                dfInput.disabled = true; // Lock DFE box per request
+                dfInput.disabled = true; // Lock DFE box
                 
                 let avg_df_base = 0;
                 let hasTvddf = parsedRows.some(r => r.tvddf !== null);
@@ -1027,7 +1009,7 @@ function handleFileUpload(event) {
                     
                     let tvd_ft = r.tvddf !== null ? r.tvddf : activeBot;
                     
-                    // PSI to PPG Converstion matrix - strictly locked against zero depths
+                    // PSI to PPG Converstion matrix - safely avoids 0 depth
                     if (tvd_ft > 0.1) {
                         if (r.pp === null && r.pp_psi !== null) r.pp = toBasePress(r.pp_psi) / (tvd_ft * c);
                         if (r.pp_psi === null && r.pp !== null) r.pp_psi = fromBasePress(r.pp * tvd_ft * c);
@@ -1048,7 +1030,8 @@ function handleFileUpload(event) {
                 }
 
                 let htmlString = "";
-                parsedRows.forEach(r => {
+                for(let i=0; i<parsedRows.length; i++) {
+                    let r = parsedRows[i];
                     let mdStr = r.md !== null ? fromBaseLength(r.md).toFixed(0) : ""; 
                     let dfStr = r.tvddf !== null ? fromBaseLength(r.tvddf).toFixed(0) : ""; 
                     let ssStr = r.tvdss !== null ? fromBaseLength(r.tvdss).toFixed(0) : "";
@@ -1059,7 +1042,7 @@ function handleFileUpload(event) {
                     let tempStr = r.temp !== null ? r.temp.toFixed(1) : "";
 
                     htmlString += `<tr><td contenteditable="false">${fromBaseLength(r.top).toFixed(0)}</td><td contenteditable class="val-length" onkeyup="calcPPFG(this,'md')">${mdStr}</td><td contenteditable class="val-length" onkeyup="calcPPFG(this,'tvddf')">${dfStr}</td><td contenteditable class="val-length" onkeyup="calcPPFG(this,'tvdss')">${ssStr}</td><td contenteditable class="val-density" onkeyup="calcPPFG(this,'pp_dens')">${ppStr}</td><td contenteditable class="val-press" onkeyup="calcPPFG(this,'pp_press')">${ppPsiStr}</td><td contenteditable class="val-density" onkeyup="calcPPFG(this,'fp_dens')">${fpStr}</td><td contenteditable class="val-press" onkeyup="calcPPFG(this,'fp_press')">${fpPsiStr}</td><td contenteditable class="val-density" onkeyup="calcPPFG(this,'obg_dens')">${obgStr}</td><td contenteditable class="val-press" onkeyup="calcPPFG(this,'obg_press')">${obgPsiStr}</td><td contenteditable class="val-temp" onkeyup="debouncedUpdateSubsurfaceChart()">${tempStr}</td></tr>`;
-                });
+                }
 
                 document.getElementById("ppfgBody").innerHTML = htmlString; 
                 switchCalcDepth(); 
@@ -1342,7 +1325,7 @@ function getTvdLocal(trajRes, md) {
 }
 
 function buildBasePayload(sbp_val) {
-    // Sanitized Pydantic payload exactly matching your server schema
+    // Sanitized Pydantic payload exactly matching your backend
     let well_sections = []; let rows = document.getElementById("wellTable").rows;
     for (let i = 1; i < rows.length; i++) { let c = rows[i].cells; let type = c[0].children[0].value;
         well_sections.push({ type: type, top_md: toBaseLength(Number(c[2].textContent)), end_md: toBaseLength(Number(c[3].textContent)), casing_id: toBaseDiam(Number(c[5].querySelector("input").value)), hole_d: type === "open hole" ? toBaseDiam(Number(c[5].querySelector("input").value)) : toBaseDiam(Number(c[4].querySelector("input").value)) });
@@ -1361,21 +1344,18 @@ function buildBasePayload(sbp_val) {
         flowrate: converters.flow.toBase(actualFlow, currentUnits.flow),
         depth: toBaseLength(Number(document.getElementById("depth").value)),
         sbp: sbp_val,
-        hole_diameter: 8.5,
-        mpd_mode: "SBP",
-        gradient_mode: "static",
         fluid: { 
             mw: converters.density.toBase(Number(document.getElementById("mw").value), currentUnits.density), 
             fann_600: Number(document.getElementById("f600").value), fann_300: Number(document.getElementById("f300").value), fann_200: Number(document.getElementById("f200").value), fann_100: Number(document.getElementById("f100").value), fann_6: Number(document.getElementById("f6").value), fann_3: Number(document.getElementById("f3").value) 
         },
         temperature: { 
             surface_temp: converters.temp.toBase(Number(document.getElementById("surface_temp").value), currentUnits.temp), 
-            bhct: 150,
-            geothermal_grad: 1.5,
+            bhct: 150.0,
             beta: 0.0003
         },
-        trajectory: trajectory, well_sections: well_sections, bha: bha,
-        cuttings: { rop: 50.0, size: 0.2, density: 22.1, rpm: 120 }
+        trajectory: trajectory, 
+        well_sections: well_sections, 
+        bha: bha
     };
 }
 
