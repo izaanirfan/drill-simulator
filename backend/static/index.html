@@ -302,7 +302,7 @@
 
 <div id="bha" class="tab">
     <div class="upload-box">
-        <div><strong>Import BHA Profile</strong><br><span style="font-size: 0.85em; color: #555;">Upload an Excel (.xlsx) or CSV (.csv) file.</span></div>
+        <div><strong>Import BHA Profile</strong><br><span style="font-size: 0.85em; color: #555;">Upload an Excel (.xlsx, .xls) or CSV (.csv) file.</span></div>
         <label class="upload-btn">Choose Excel/CSV File<input type="file" id="bhaUpload" accept=".xlsx, .xls, .csv" onchange="handleBhaUpload(event)"></label>
     </div>
     <div style="display: flex; gap: 40px; align-items: flex-start;">
@@ -363,7 +363,7 @@
             <div>Target Case: <select id="importCase" class="case-select"><option value="mid">Mid Case (Default)</option><option value="low">Low Case</option><option value="high">High Case</option><option value="base">Base Case</option><option value=".*">Any/Not Specified</option></select></div>
             <div>Import As: <select id="importUnit" class="case-select"><option value="ppg" selected>Density (ppg / sg)</option><option value="psi">Pressure (psi / bar)</option></select></div>
             <div>Import Depth As: <select id="importDepthUnit" class="case-select"><option value="auto">Auto-Detect</option><option value="ft">Feet (ft)</option><option value="m">Meters (m)</option></select></div>
-            <div>DF Elev (<span class="lbl-length">ft</span>): <input id="df_elev" type="number" value="" style="width: 70px; padding: 4px; background-color: #eee;" disabled title="Auto-calculated from TVDDF - TVDSS"></div>
+            <div>DF Elev (<span class="lbl-length">ft</span>): <input id="df_elev" class="val-length" type="number" value="" style="width: 70px; padding: 4px; background-color: #eee;" disabled title="Auto-calculated from TVDDF - TVDSS"></div>
         </div>
         <label class="upload-btn">Choose Excel/CSV File<input type="file" id="excelUpload" accept=".xlsx, .xls, .csv" onchange="handleFileUpload(event)"></label>
     </div>
@@ -405,7 +405,7 @@ let chartDebounceTimer = null;
 let wellChangeTimer = null;
 let currentUnits = { length: "ft", diam: "in", density: "ppg", press: "psi", flow: "gpm", temp: "F" };
 
-// ================= UI HELPERS (TABLES AND FORMS) =================
+// ================= UI HELPERS =================
 function triggerWellDesignChange() {
     enforceOpenHoleTop();
     calcBhaCumLength();
@@ -433,7 +433,6 @@ function calcBhaCumLength() {
     let tbody = document.getElementById("bhaBody");
     if (!tbody) return;
     let cum = 0;
-    // Iterate strictly top to bottom
     for (let i = 0; i < tbody.rows.length; i++) {
         let lenInput = tbody.rows[i].cells[5].querySelector("input");
         let cumInput = tbody.rows[i].cells[6].querySelector("input");
@@ -481,7 +480,7 @@ function debouncedUpdateSubsurfaceChart() {
     chartDebounceTimer = setTimeout(updateSubsurfaceChart, 400);
 }
 
-// ================= MUD PROPERTIES & VOLUMETRICS =================
+// MUD PROPERTIES & VOLUMETRICS
 function updateOwrWater() {
     let oil = parseFloat(document.getElementById('owr_oil').value) || 0;
     if (oil > 100) oil = 100;
@@ -668,7 +667,6 @@ function updateDashboard(spp, sbp, anchorDep, anchorPress, anchorEcd, modeType, 
     }
 }
 
-// ================= UTILS & DOM DELEGATION =================
 function parseSafe(val) {
     if (val === undefined || val === null || String(val).trim() === "") return null;
     let parsed = parseFloat(String(val).replace(/,/g, ''));
@@ -767,17 +765,17 @@ function handleBhaUpload(event) {
                 
                 if (!rawData || rawData.length < 2) { alert("File empty or unreadable."); document.getElementById("bhaBody").innerHTML = ""; return; }
 
-                // Using Absolute Array Mapping strictly to bypass sparse array logic
                 let numCols = 0;
                 for(let r=0; r < Math.min(30, rawData.length); r++) {
-                    if (rawData[r] && rawData[r].length > numCols) numCols = rawData[r].length;
+                    if (rawData[r] && Object.keys(rawData[r]).length > numCols) numCols = Object.keys(rawData[r]).length;
                 }
                 
                 let headerMatrix = [];
                 for(let r=0; r < Math.min(30, rawData.length); r++) {
                     let rowVals = [];
+                    // Using Absolute Iteration based on length, bypassing Sparse object keys
                     for(let c=0; c < numCols; c++) {
-                        let cell = rawData[r] ? rawData[r][c] : null;
+                        let cell = rawData[r] && rawData[r][c] !== undefined ? rawData[r][c] : null;
                         rowVals.push(cell != null ? String(cell).toLowerCase().trim() : "");
                     }
                     headerMatrix.push(rowVals);
@@ -800,11 +798,10 @@ function handleBhaUpload(event) {
                     let h = flattenedHeaders[i];
                     if (/name|item|desc|component/i.test(h)) map.name = i;
                     else if (/type|class/i.test(h)) map.type = i;
-                    else if (/\bod\b|outer.*d/i.test(h) && !/max|conn|tj/i.test(h)) map.od = i;
-                    else if (/\bid\b|inner.*d/i.test(h)) map.id = i;
+                    else if (/od|outer/i.test(h) && !/max|conn|tj/i.test(h)) map.od = i;
+                    else if (/id|inner/i.test(h) && !/guide|conn/i.test(h)) map.id = i;
                     else if (/max.*od|conn.*od|tj.*od|gauge/i.test(h)) map.maxOd = i;
-                    // STRICT REGEX: Must grab length but perfectly ignore "cum", "tot", "bot", "loc"
-                    else if (/len/i.test(h) && !/cum|tot|bot|loc/i.test(h)) map.len = i;
+                    else if (/(len|length)/i.test(h) && !/(cum|tot|bot|loc)/i.test(h)) map.len = i;
                 }
 
                 if (map.od === -1 || map.len === -1) { 
@@ -876,19 +873,17 @@ function handleFileUpload(event) {
             try {
                 const data = new Uint8Array(e.target.result); const workbook = XLSX.read(data, {type: 'array'});
                 const rawData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], {header: 1, defval: ""});
-                
-                // Absolute Array Indexing to prevent Subsurface Sparse Array Column Shifting
-                let numCols = 0; 
-                for(let r=0; r < Math.min(30, rawData.length); r++) {
-                    if (rawData[r] && rawData[r].length > numCols) numCols = rawData[r].length;
-                }
-                
+                const cleanData = rawData.filter(r => r && Object.keys(r).length > 0);
+                if (cleanData.length < 2) { alert("File appears to be empty."); document.getElementById("ppfgBody").innerHTML = ""; return; }
+
+                let numCols = 0; cleanData.slice(0, 20).forEach(r => { let len = Object.keys(r).length; if(len > numCols) numCols = len; }); 
                 let headerMatrix = [];
-                for(let r=0; r < Math.min(15, rawData.length); r++) {
+                for(let r=0; r < Math.min(15, cleanData.length); r++) {
                     let rowVals = [];
+                    let keys = Object.keys(cleanData[r] || {});
                     for(let c=0; c < numCols; c++) {
-                        let cell = rawData[r] ? rawData[r][c] : null;
-                        rowVals.push(cell != null ? String(cell).toLowerCase().trim() : "");
+                        let cell = cleanData[r][keys[c]];
+                        rowVals.push(cell !== undefined && cell !== null ? String(cell).toLowerCase().trim() : "");
                     }
                     headerMatrix.push(rowVals);
                 }
@@ -932,7 +927,7 @@ function handleFileUpload(event) {
                     if (fallback !== -1) map.tvddf = fallback; else { alert("Could not find any Depth columns."); document.getElementById("ppfgBody").innerHTML = ""; return; }
                 }
 
-                let activeType = "tvddf";
+                let activeType = "tvddf"; // Always default to TVDDF on import per request
                 document.getElementById("calcDepthType").value = "tvddf";
                 
                 function toBaseFromImport(val) {
@@ -943,24 +938,25 @@ function handleFileUpload(event) {
                 }
 
                 let parsedRows = [];
-                for (let i = 2; i < rawData.length; i++) {
-                    let row = rawData[i]; if (!row) continue;
-                    let mdRaw = map.md !== -1 ? parseSafe(row[map.md]) : null;
-                    let tvddfRaw = map.tvddf !== -1 ? parseSafe(row[map.tvddf]) : null;
-                    let tvdssRaw = map.tvdss !== -1 ? parseSafe(row[map.tvdss]) : null;
+                for (let i = 2; i < cleanData.length; i++) {
+                    let row = cleanData[i]; if (!row) continue;
+                    let keys = Object.keys(row);
+                    let mdRaw = map.md !== -1 ? parseSafe(row[keys[map.md]]) : null;
+                    let tvddfRaw = map.tvddf !== -1 ? parseSafe(row[keys[map.tvddf]]) : null;
+                    let tvdssRaw = map.tvdss !== -1 ? parseSafe(row[keys[map.tvdss]]) : null;
                     if (mdRaw === null && tvddfRaw === null && tvdssRaw === null) continue;
                     
                     parsedRows.push({ 
                         md: toBaseFromImport(mdRaw), 
                         tvddf: toBaseFromImport(tvddfRaw), 
                         tvdss: toBaseFromImport(tvdssRaw), 
-                        pp: map.pp !== -1 ? parseSafe(row[map.pp]) : null, 
-                        pp_psi: map.pp_psi !== -1 ? parseSafe(row[map.pp_psi]) : null, 
-                        fp: map.fp !== -1 ? parseSafe(row[map.fp]) : null, 
-                        fp_psi: map.fp_psi !== -1 ? parseSafe(row[map.fp_psi]) : null, 
-                        obg: map.obg !== -1 ? parseSafe(row[map.obg]) : null, 
-                        obg_psi: map.obg_psi !== -1 ? parseSafe(row[map.obg_psi]) : null, 
-                        temp: map.temp !== -1 ? parseSafe(row[map.temp]) : null 
+                        pp: map.pp !== -1 ? parseSafe(row[keys[map.pp]]) : null, 
+                        pp_psi: map.pp_psi !== -1 ? parseSafe(row[keys[map.pp_psi]]) : null, 
+                        fp: map.fp !== -1 ? parseSafe(row[keys[map.fp]]) : null, 
+                        fp_psi: map.fp_psi !== -1 ? parseSafe(row[keys[map.fp_psi]]) : null, 
+                        obg: map.obg !== -1 ? parseSafe(row[keys[map.obg]]) : null, 
+                        obg_psi: map.obg_psi !== -1 ? parseSafe(row[keys[map.obg_psi]]) : null, 
+                        temp: map.temp !== -1 ? parseSafe(row[keys[map.temp]]) : null 
                     });
                 }
                 parsedRows.sort((a, b) => (a[activeType] || 0) - (b[activeType] || 0));
@@ -969,7 +965,7 @@ function handleFileUpload(event) {
                 let diffs_base = [];
                 for(let i=0; i<parsedRows.length; i++) {
                     if (parsedRows[i].tvddf !== null && parsedRows[i].tvdss !== null) {
-                        diffs_base.push(parsedRows[i].tvddf - parsedRows[i].tvdss); 
+                        diffs_base.push(parsedRows[i].tvddf - parsedRows[i].tvdss);
                     }
                 }
                 
@@ -1008,10 +1004,9 @@ function handleFileUpload(event) {
                     else if (r.tvdss !== null && r.tvddf === null) { r.tvddf = r.tvdss + avg_df_base; }
                     else if (r.md !== null && r.tvddf === null && r.tvdss === null) { r.tvddf = r.md; r.tvdss = r.md - avg_df_base; }
                     
-                    let activeBot = r[activeType] !== null ? r[activeType] : 0;
-                    let tvd_ft = r.tvddf !== null ? r.tvddf : activeBot;
+                    let tvd_ft = r.tvddf !== null ? r.tvddf : r.md;
                     
-                    // PSI to PPG Converstion matrix - safely avoids 0 depth
+                    // PSI to PPG Converstion matrix
                     if (tvd_ft > 0.1) {
                         if (r.pp === null && r.pp_psi !== null) r.pp = toBasePress(r.pp_psi) / (tvd_ft * c);
                         if (r.pp_psi === null && r.pp !== null) r.pp_psi = fromBasePress(r.pp * tvd_ft * c);
@@ -1022,7 +1017,7 @@ function handleFileUpload(event) {
                     } else if (tvd_ft <= 0.1 && unitPref === 'psi') {
                         r.pp = 0; r.fp = 0; r.obg = 0;
                     }
-                    if (useGrad) r.temp = baseTemp_user + (activeBot / 100) * grad_user;
+                    if (useGrad) r.temp = baseTemp_user + (tvd_ft / 100) * grad_user;
                 }
                 
                 // Patch Depth 0 Infinity/NaN values from PSI Conversion by cloning second row densities
@@ -1033,8 +1028,7 @@ function handleFileUpload(event) {
                 }
 
                 let htmlString = "";
-                for(let i=0; i<parsedRows.length; i++) {
-                    let r = parsedRows[i];
+                parsedRows.forEach(r => {
                     let mdStr = r.md !== null ? fromBaseLength(r.md).toFixed(0) : ""; 
                     let dfStr = r.tvddf !== null ? fromBaseLength(r.tvddf).toFixed(0) : ""; 
                     let ssStr = r.tvdss !== null ? fromBaseLength(r.tvdss).toFixed(0) : "";
@@ -1045,7 +1039,7 @@ function handleFileUpload(event) {
                     let tempStr = r.temp !== null ? r.temp.toFixed(1) : "";
 
                     htmlString += `<tr><td contenteditable class="val-length" onkeyup="calcPPFG(this,'md')">${mdStr}</td><td contenteditable class="val-length" onkeyup="calcPPFG(this,'tvddf')">${dfStr}</td><td contenteditable class="val-length" onkeyup="calcPPFG(this,'tvdss')">${ssStr}</td><td contenteditable class="val-density" onkeyup="calcPPFG(this,'pp_dens')">${ppStr}</td><td contenteditable class="val-press" onkeyup="calcPPFG(this,'pp_press')">${ppPsiStr}</td><td contenteditable class="val-density" onkeyup="calcPPFG(this,'fp_dens')">${fpStr}</td><td contenteditable class="val-press" onkeyup="calcPPFG(this,'fp_press')">${fpPsiStr}</td><td contenteditable class="val-density" onkeyup="calcPPFG(this,'obg_dens')">${obgStr}</td><td contenteditable class="val-press" onkeyup="calcPPFG(this,'obg_press')">${obgPsiStr}</td><td contenteditable class="val-temp" onkeyup="debouncedUpdateSubsurfaceChart()">${tempStr}</td></tr>`;
-                }
+                });
 
                 document.getElementById("ppfgBody").innerHTML = htmlString; 
                 switchCalcDepth(); 
@@ -1156,14 +1150,17 @@ function getPPFGProfile() {
 
 function updateSubsurfaceChart() {
     let profile = getPPFGProfile(); let ppData = [], fpData = [], obgData = [], tempData = [];
+    
+    let prevDrawDepth = 0;
     for (let i = 0; i < profile.depth.length; i++) {
         let currentDrawDepth = profile.depth[i];
-        let nextDrawDepth = profile.depth[i+1] || profile.depth[i];
         
-        if(!isNaN(profile.pp[i])) { ppData.push({x: profile.pp[i], y: currentDrawDepth}); ppData.push({x: profile.pp[i], y: nextDrawDepth}); }
-        if(!isNaN(profile.fp[i])) { fpData.push({x: profile.fp[i], y: currentDrawDepth}); fpData.push({x: profile.fp[i], y: nextDrawDepth}); }
-        if(!isNaN(profile.obg[i])) { obgData.push({x: profile.obg[i], y: currentDrawDepth}); obgData.push({x: profile.obg[i], y: nextDrawDepth}); }
-        if(!isNaN(profile.temp[i])){ tempData.push({x: profile.temp[i], y: currentDrawDepth}); tempData.push({x: profile.temp[i], y: nextDrawDepth});}
+        if(!isNaN(profile.pp[i])) { ppData.push({x: profile.pp[i], y: prevDrawDepth}); ppData.push({x: profile.pp[i], y: currentDrawDepth}); }
+        if(!isNaN(profile.fp[i])) { fpData.push({x: profile.fp[i], y: prevDrawDepth}); fpData.push({x: profile.fp[i], y: currentDrawDepth}); }
+        if(!isNaN(profile.obg[i])) { obgData.push({x: profile.obg[i], y: prevDrawDepth}); obgData.push({x: profile.obg[i], y: currentDrawDepth}); }
+        if(!isNaN(profile.temp[i])){ tempData.push({x: profile.temp[i], y: currentDrawDepth}); }
+        
+        prevDrawDepth = currentDrawDepth;
     }
     let surfTemp = parseFloat(document.getElementById("surface_temp").value) || 80; 
     if(tempData.length > 0) { tempData.unshift({x: surfTemp, y: 0}); }
@@ -1332,7 +1329,7 @@ function getTvdLocal(trajRes, md) {
 }
 
 function buildBasePayload(sbp_val) {
-    // Sanitized Pydantic payload exactly matching your server schema
+    // Sanitized Pydantic payload exactly matching your backend API expectations
     let well_sections = []; let rows = document.getElementById("wellTable").rows;
     for (let i = 1; i < rows.length; i++) { let c = rows[i].cells; let type = c[0].children[0].value;
         well_sections.push({ type: type, top_md: toBaseLength(Number(c[2].textContent)), end_md: toBaseLength(Number(c[3].textContent)), casing_id: toBaseDiam(Number(c[5].querySelector("input").value)), hole_d: type === "open hole" ? toBaseDiam(Number(c[5].querySelector("input").value)) : toBaseDiam(Number(c[4].querySelector("input").value)) });
@@ -1390,7 +1387,7 @@ async function runSimulation(){
             let payload0 = buildBasePayload(0.0); 
             
             let res1 = await fetch("/simulate", { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(payload0) });
-            if (!res1.ok) { let errText = await res1.text(); throw new Error("API Check Failed: " + res1.status + " " + errText); }
+            if (!res1.ok) { let errText = await res1.text(); throw new Error("API Check Failed: " + res1.status + " " + errText.substring(0,100)); }
             let data1 = await res1.json();
             if (!data1 || !data1.profile || data1.error) throw new Error(data1 ? data1.error : "Server Error on Pass 1.");
 
@@ -1404,7 +1401,6 @@ async function runSimulation(){
                 anchorDepthBase = toBaseLength(Number(document.getElementById("anchorFixedVal").value));
             }
             
-            // Mathematically exact target calculation factoring in TVD
             let tvdProfile = calculateTrajectoryTVD(payload0.trajectory);
             let anchorTvdBase = getTvdLocal(tvdProfile, anchorDepthBase);
             if (anchorTvdBase < 0.1) anchorTvdBase = 0.1;
@@ -1451,12 +1447,11 @@ async function runSimulation(){
         // FINAL PASS
         let finalPayload = buildBasePayload(appliedSbpBase);
         let res2 = await fetch("/simulate", { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(finalPayload) });
-        if (!res2.ok) { let errText = await res2.text(); throw new Error("API Validation Failed: " + res2.status + " " + errText); }
+        if (!res2.ok) { let errText = await res2.text(); throw new Error("API Validation Failed: " + res2.status + " " + errText.substring(0,100)); }
         let finalResult = await res2.json();
         if (!finalResult || !finalResult.profile || finalResult.error) throw new Error(finalResult ? finalResult.error : "Server Error on Final Pass.");
 
         let el_geo_grad = document.getElementById("geo_grad");
-        
         let mw_base = finalPayload.fluid.mw;
         let t_surf = finalPayload.temperature.surface_temp;
         let geo_grad = (el_geo_grad ? parseFloat(el_geo_grad.value) : 1.5) / 100.0;
@@ -1603,33 +1598,35 @@ function replotChart(){
     let ppData = [], fpData = [], obgData = [];
     let ppPressData = [], fpPressData = [], obgPressData = [];
     
+    let prevDrawDepth = 0;
     for (let i = 0; i < ppfgProfile.depth.length; i++) {
         let currentDrawDepth = ppfgProfile.depth[i];
-        let nextDrawDepth = ppfgProfile.depth[i+1] || ppfgProfile.depth[i];
         
-        if (currentDrawDepth <= shoeDepthUser) continue; 
+        if (currentDrawDepth <= shoeDepthUser) { prevDrawDepth = currentDrawDepth; continue; } 
         
-        let depthBaseTop = toBaseLength(currentDrawDepth);
-        let depthBaseBot = toBaseLength(nextDrawDepth);
+        let drawTop = Math.max(prevDrawDepth, shoeDepthUser); 
+        let depthBaseTop = toBaseLength(drawTop);
+        let depthBaseBot = toBaseLength(currentDrawDepth);
 
         if(!isNaN(ppfgProfile.pp[i])) { 
             let baseDens = toBaseDens(ppfgProfile.pp[i]);
-            ppData.push({x: ppfgProfile.pp[i], y: currentDrawDepth}); ppData.push({x: ppfgProfile.pp[i], y: nextDrawDepth}); 
-            ppPressData.push({x: fromBasePress(baseDens * 0.051948 * depthBaseTop), y: currentDrawDepth});
-            ppPressData.push({x: fromBasePress(baseDens * 0.051948 * depthBaseBot), y: nextDrawDepth});
+            ppData.push({x: ppfgProfile.pp[i], y: drawTop}); ppData.push({x: ppfgProfile.pp[i], y: currentDrawDepth}); 
+            ppPressData.push({x: fromBasePress(baseDens * 0.051948 * depthBaseTop), y: drawTop});
+            ppPressData.push({x: fromBasePress(baseDens * 0.051948 * depthBaseBot), y: currentDrawDepth});
         }
         if(!isNaN(ppfgProfile.fp[i])) { 
             let baseDens = toBaseDens(ppfgProfile.fp[i]);
-            fpData.push({x: ppfgProfile.fp[i], y: currentDrawDepth}); fpData.push({x: ppfgProfile.fp[i], y: nextDrawDepth}); 
-            fpPressData.push({x: fromBasePress(baseDens * 0.051948 * depthBaseTop), y: currentDrawDepth});
-            fpPressData.push({x: fromBasePress(baseDens * 0.051948 * depthBaseBot), y: nextDrawDepth});
+            fpData.push({x: ppfgProfile.fp[i], y: drawTop}); fpData.push({x: ppfgProfile.fp[i], y: currentDrawDepth}); 
+            fpPressData.push({x: fromBasePress(baseDens * 0.051948 * depthBaseTop), y: drawTop});
+            fpPressData.push({x: fromBasePress(baseDens * 0.051948 * depthBaseBot), y: currentDrawDepth});
         }
         if(!isNaN(ppfgProfile.obg[i])) { 
             let baseDens = toBaseDens(ppfgProfile.obg[i]);
-            obgData.push({x: ppfgProfile.obg[i], y: currentDrawDepth}); obgData.push({x: ppfgProfile.obg[i], y: nextDrawDepth}); 
-            obgPressData.push({x: fromBasePress(baseDens * 0.051948 * depthBaseTop), y: currentDrawDepth});
-            obgPressData.push({x: fromBasePress(baseDens * 0.051948 * depthBaseBot), y: nextDrawDepth});
+            obgData.push({x: ppfgProfile.obg[i], y: drawTop}); obgData.push({x: ppfgProfile.obg[i], y: currentDrawDepth}); 
+            obgPressData.push({x: fromBasePress(baseDens * 0.051948 * depthBaseTop), y: drawTop});
+            obgPressData.push({x: fromBasePress(baseDens * 0.051948 * depthBaseBot), y: currentDrawDepth});
         }
+        prevDrawDepth = currentDrawDepth;
     }
 
     let xMinUserDens = undefined; let xMaxUserDens = undefined;
