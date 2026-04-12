@@ -302,7 +302,7 @@
 
 <div id="bha" class="tab">
     <div class="upload-box">
-        <div><strong>Import BHA Profile</strong><br><span style="font-size: 0.85em; color: #555;">Upload an Excel (.xlsx, .xls) or CSV (.csv) file.</span></div>
+        <div><strong>Import BHA Profile</strong><br><span style="font-size: 0.85em; color: #555;">Upload an Excel (.xlsx) or CSV file.</span></div>
         <label class="upload-btn">Choose Excel/CSV File<input type="file" id="bhaUpload" accept=".xlsx, .xls, .csv" onchange="handleBhaUpload(event)"></label>
     </div>
     <div style="display: flex; gap: 40px; align-items: flex-start;">
@@ -358,12 +358,12 @@
 
 <div id="subsurface" class="tab">
     <div class="upload-box">
-        <div><strong>Intelligent Subsurface Import</strong><br><span style="font-size: 0.85em; color: #555;">Upload an Excel (.xlsx) or CSV file. We will hunt for MD, TVDDF, and TVDSS columns dynamically.</span></div>
+        <div><strong>Intelligent Subsurface Import</strong><br><span style="font-size: 0.85em; color: #555;">Upload an Excel (.xlsx) file. We will hunt for MD, TVDDF, and TVDSS columns dynamically.</span></div>
         <div class="upload-controls">
             <div>Target Case: <select id="importCase" class="case-select"><option value="mid">Mid Case (Default)</option><option value="low">Low Case</option><option value="high">High Case</option><option value="base">Base Case</option><option value=".*">Any/Not Specified</option></select></div>
             <div>Import As: <select id="importUnit" class="case-select"><option value="ppg" selected>Density (ppg / sg)</option><option value="psi">Pressure (psi / bar)</option></select></div>
             <div>Import Depth As: <select id="importDepthUnit" class="case-select"><option value="auto">Auto-Detect</option><option value="ft">Feet (ft)</option><option value="m">Meters (m)</option></select></div>
-            <div>DF Elev (<span class="lbl-length">ft</span>): <input id="df_elev" class="val-length" type="number" value="" style="width: 70px; padding: 4px; background-color: #eee;" disabled title="Auto-calculated from TVDDF - TVDSS"></div>
+            <div>DF Elev (<span class="lbl-length">ft</span>): <input id="df_elev" type="number" value="" style="width: 70px; padding: 4px; background-color: #eee;" disabled title="Auto-calculated from TVDDF - TVDSS"></div>
         </div>
         <label class="upload-btn">Choose Excel/CSV File<input type="file" id="excelUpload" accept=".xlsx, .xls, .csv" onchange="handleFileUpload(event)"></label>
     </div>
@@ -405,7 +405,7 @@ let chartDebounceTimer = null;
 let wellChangeTimer = null;
 let currentUnits = { length: "ft", diam: "in", density: "ppg", press: "psi", flow: "gpm", temp: "F" };
 
-// ================= UI HELPERS (TABLES AND FORMS) =================
+// ================= UI HELPERS =================
 function triggerWellDesignChange() {
     enforceOpenHoleTop();
     calcBhaCumLength();
@@ -433,6 +433,7 @@ function calcBhaCumLength() {
     let tbody = document.getElementById("bhaBody");
     if (!tbody) return;
     let cum = 0;
+    // Iterate from Top to Bottom directly
     for (let i = 0; i < tbody.rows.length; i++) {
         let lenInput = tbody.rows[i].cells[5].querySelector("input");
         let cumInput = tbody.rows[i].cells[6].querySelector("input");
@@ -480,7 +481,8 @@ function debouncedUpdateSubsurfaceChart() {
     chartDebounceTimer = setTimeout(updateSubsurfaceChart, 400);
 }
 
-// MUD PROPERTIES & VOLUMETRICS
+
+// ================= MUD PROPERTIES & VOLUMETRICS =================
 function updateOwrWater() {
     let oil = parseFloat(document.getElementById('owr_oil').value) || 0;
     if (oil > 100) oil = 100;
@@ -566,7 +568,7 @@ function drawRheologyChart() {
     });
 }
 
-// MPD UI CONTROLS
+// ================= MPD UI CONTROLS =================
 function toggleMainMode() {
     let mode = document.getElementById("mainMode").value;
     if (mode === "conventional") {
@@ -667,7 +669,7 @@ function updateDashboard(spp, sbp, anchorDep, anchorPress, anchorEcd, modeType, 
     }
 }
 
-// UTILS & DOM DELEGATION
+// ================= UTILS & DOM DELEGATION =================
 function parseSafe(val) {
     if (val === undefined || val === null || String(val).trim() === "") return null;
     let parsed = parseFloat(String(val).replace(/,/g, ''));
@@ -768,8 +770,7 @@ function handleBhaUpload(event) {
 
                 let numCols = 0;
                 for(let r=0; r < Math.min(30, rawData.length); r++) {
-                    let keys = Object.keys(rawData[r] || {});
-                    if (keys.length > numCols) numCols = keys.length;
+                    if (rawData[r] && rawData[r].length > numCols) numCols = rawData[r].length;
                 }
                 
                 let headerMatrix = [];
@@ -777,8 +778,7 @@ function handleBhaUpload(event) {
                     let rowVals = [];
                     for(let c=0; c < numCols; c++) {
                         let cell = rawData[r] ? rawData[r][c] : null;
-                        // Strip newlines so regex doesn't fail on "OD\n(in)"
-                        rowVals.push(cell != null ? String(cell).replace(/\n|\r/g, " ").toLowerCase().trim() : "");
+                        rowVals.push(cell != null ? String(cell).toLowerCase().trim() : "");
                     }
                     headerMatrix.push(rowVals);
                 }
@@ -800,17 +800,15 @@ function handleBhaUpload(event) {
                     let h = flattenedHeaders[i];
                     if (/name|item|desc|component/i.test(h)) map.name = i;
                     else if (/type|class/i.test(h)) map.type = i;
-                    else if (/od|outer/i.test(h) && !/max|conn|tj/i.test(h)) map.od = i;
-                    else if (/id|inner/i.test(h) && !/guide|conn/i.test(h)) map.id = i;
+                    else if (/\bod\b|outer.*d/i.test(h) && !/max|conn|tj/i.test(h)) map.od = i;
+                    else if (/\bid\b|inner.*d/i.test(h)) map.id = i;
                     else if (/max.*od|conn.*od|tj.*od|gauge/i.test(h)) map.maxOd = i;
-                    // STRICT REGEX: Must grab length but IGNORE "cum" or "total" or "bot" or "loc"
+                    // STRICT REGEX: Must grab length but IGNORE "cum" or "total"
                     else if (/(len|length)/i.test(h) && !/(cum|tot|bot|loc)/i.test(h)) map.len = i;
                 }
 
                 if (map.od === -1 || map.len === -1) { 
-                    alert("Could not cleanly detect Individual OD and Length columns. Ensure header explicitly says 'Length' and is separate from 'Total/Cum Length'."); 
-                    document.getElementById("bhaBody").innerHTML = ""; 
-                    return; 
+                    alert("Could not cleanly detect Individual OD and Length columns. Ensure header is 'Length'."); document.getElementById("bhaBody").innerHTML = ""; return; 
                 }
 
                 let units = askUnitIfNeeded(detectedDiam, detectedLen);
@@ -818,13 +816,12 @@ function handleBhaUpload(event) {
 
                 for (let i = 0; i < rawData.length; i++) {
                     let row = rawData[i];
-                    let keys = Object.keys(row || {});
-                    if (!row || row[keys[map.len]] === undefined) continue;
-                    let rawLen = parseFloat(String(row[keys[map.len]]).replace(/,/g,'')); if (isNaN(rawLen)) continue;
+                    if (!row || row[map.len] === undefined) continue;
+                    let rawLen = parseFloat(String(row[map.len]).replace(/,/g,'')); if (isNaN(rawLen)) continue;
 
-                    let nm = map.name !== -1 && row[keys[map.name]] ? String(row[keys[map.name]]).trim() : "";
+                    let nm = map.name !== -1 && row[map.name] ? String(row[map.name]).trim() : "";
                     if (nm === "" && lastValidName !== "") nm = lastValidName; else if (nm !== "") lastValidName = nm;
-                    let tyStr = map.type !== -1 && row[keys[map.type]] ? String(row[keys[map.type]]).toLowerCase() : "";
+                    let tyStr = map.type !== -1 && row[map.type] ? String(row[map.type]).toLowerCase() : "";
                     let searchStr = (tyStr + " " + nm).toLowerCase();
                     
                     let tyOpt = "Other";
@@ -838,9 +835,9 @@ function handleBhaUpload(event) {
                     if (/xo|cross|x-over|xover|x\/o/i.test(searchStr)) tyOpt = "Crossover";
                     if (/bit|pdc|tricone/i.test(searchStr)) tyOpt = "Bit"; 
 
-                    let rawOd = map.od !== -1 ? parseFloat(String(row[keys[map.od]]).replace(/,/g,'')) || 0 : 0;
-                    let rawId = map.id !== -1 ? parseFloat(String(row[keys[map.id]]).replace(/,/g,'')) || 0 : 0;
-                    let rawMod = map.maxOd !== -1 ? parseFloat(String(row[keys[map.maxOd]]).replace(/,/g,'')) || rawOd : rawOd;
+                    let rawOd = map.od !== -1 ? parseFloat(String(row[map.od]).replace(/,/g,'')) || 0 : 0;
+                    let rawId = map.id !== -1 ? parseFloat(String(row[map.id]).replace(/,/g,'')) || 0 : 0;
+                    let rawMod = map.maxOd !== -1 ? parseFloat(String(row[map.maxOd]).replace(/,/g,'')) || rawOd : rawOd;
                     parsedRows.push({ nm: nm, tyOpt: tyOpt, rawOd: rawOd, rawId: rawId, rawMod: rawMod, rawLen: rawLen });
                 }
 
@@ -931,7 +928,7 @@ function handleFileUpload(event) {
                     if (fallback !== -1) map.tvddf = fallback; else { alert("Could not find any Depth columns."); document.getElementById("ppfgBody").innerHTML = ""; return; }
                 }
 
-                let activeType = "tvddf";
+                let activeType = "tvddf"; // Always default to TVDDF on import per request
                 document.getElementById("calcDepthType").value = "tvddf";
                 
                 function toBaseFromImport(val) {
@@ -956,11 +953,11 @@ function handleFileUpload(event) {
                         tvdss: toBaseFromImport(tvdssRaw), 
                         pp: map.pp !== -1 ? parseSafe(row[keys[map.pp]]) : null, 
                         pp_psi: map.pp_psi !== -1 ? parseSafe(row[keys[map.pp_psi]]) : null, 
-                        fp: map.fp !== -1 ? parseSafe(row[map.fp]) : null, 
-                        fp_psi: map.fp_psi !== -1 ? parseSafe(row[map.fp_psi]) : null, 
-                        obg: map.obg !== -1 ? parseSafe(row[map.obg]) : null, 
-                        obg_psi: map.obg_psi !== -1 ? parseSafe(row[map.obg_psi]) : null, 
-                        temp: map.temp !== -1 ? parseSafe(row[map.temp]) : null 
+                        fp: map.fp !== -1 ? parseSafe(row[keys[map.fp]]) : null, 
+                        fp_psi: map.fp_psi !== -1 ? parseSafe(row[keys[map.fp_psi]]) : null, 
+                        obg: map.obg !== -1 ? parseSafe(row[keys[map.obg]]) : null, 
+                        obg_psi: map.obg_psi !== -1 ? parseSafe(row[keys[map.obg_psi]]) : null, 
+                        temp: map.temp !== -1 ? parseSafe(row[keys[map.temp]]) : null 
                     });
                 }
                 parsedRows.sort((a, b) => (a[activeType] || 0) - (b[activeType] || 0));
@@ -969,12 +966,12 @@ function handleFileUpload(event) {
                 let diffs_base = [];
                 for(let i=0; i<parsedRows.length; i++) {
                     if (parsedRows[i].tvddf !== null && parsedRows[i].tvdss !== null) {
-                        diffs_base.push(parsedRows[i].tvddf - parsedRows[i].tvdss);
+                        diffs_base.push(parsedRows[i].tvddf - parsedRows[i].tvdss); // Difference strictly in Base Units (FT)
                     }
                 }
                 
                 let dfInput = document.getElementById("df_elev");
-                dfInput.disabled = true; // Lock DFE box
+                dfInput.disabled = true; // Lock DFE box per request
                 
                 let avg_df_base = 0;
                 let hasTvddf = parsedRows.some(r => r.tvddf !== null);
@@ -1008,7 +1005,8 @@ function handleFileUpload(event) {
                     else if (r.tvdss !== null && r.tvddf === null) { r.tvddf = r.tvdss + avg_df_base; }
                     else if (r.md !== null && r.tvddf === null && r.tvdss === null) { r.tvddf = r.md; r.tvdss = r.md - avg_df_base; }
                     
-                    let tvd_ft = r.tvddf !== null ? r.tvddf : r.md;
+                    let activeBot = r[activeType] !== null ? r[activeType] : 0;
+                    let tvd_ft = r.tvddf !== null ? r.tvddf : activeBot;
                     
                     // PSI to PPG Converstion matrix - safely avoids 0 depth math crash
                     if (tvd_ft > 0.1) {
@@ -1330,31 +1328,27 @@ function getTvdLocal(trajRes, md) {
 }
 
 function buildBasePayload(sbp_val) {
-    // Sanitized Pydantic payload exactly matching your server schema
+    // Sanitized Pydantic payload strictly matching your backend schema
     let well_sections = []; let rows = document.getElementById("wellTable").rows;
     for (let i = 1; i < rows.length; i++) { let c = rows[i].cells; let type = c[0].children[0].value;
         well_sections.push({ type: type, top_md: toBaseLength(Number(c[2].textContent)), end_md: toBaseLength(Number(c[3].textContent)), casing_id: toBaseDiam(Number(c[5].querySelector("input").value)), hole_d: type === "open hole" ? toBaseDiam(Number(c[5].querySelector("input").value)) : toBaseDiam(Number(c[4].querySelector("input").value)) });
     }
     let trajectory = []; let trajRows = document.getElementById("trajectoryTable").rows;
-    for (let i = 1; i < trajRows.length; i++) { 
-        let c = trajRows[i].cells; 
-        let md_base = toBaseLength(Number(c[0].textContent));
-        trajectory.push({ md: md_base, inc: Number(c[1].textContent) || 0, azi: Number(c[2].textContent) || 0, tvd: md_base }); 
-    }
+    for (let i = 1; i < trajRows.length; i++) { let c = trajRows[i].cells; trajectory.push({ md: toBaseLength(Number(c[0].textContent)), inc: Number(c[1].textContent), azi: Number(c[2].textContent) }); }
 
     let bha = []; let bhaRows = document.getElementById("bhaTable").rows;
     for (let i = 1; i < bhaRows.length; i++) { let c = bhaRows[i].cells;
-        bha.push({ name: c[0].textContent, type: c[1].children[0].value, od: converters.diam.toBase(parseFloat(c[2].children[0].value.replace(/,/g,''))||0, currentUnits.diam), id: converters.diam.toBase(parseFloat(c[3].children[0].value.replace(/,/g,''))||0, currentUnits.diam), length: converters.length.toBase(parseFloat(c[5].children[0].value.replace(/,/g,''))||0, currentUnits.length) });
+        bha.push({ name: c[0].textContent, od: converters.diam.toBase(parseFloat(c[2].children[0].value.replace(/,/g,''))||0, currentUnits.diam), id: converters.diam.toBase(parseFloat(c[3].children[0].value.replace(/,/g,''))||0, currentUnits.diam), length: converters.length.toBase(parseFloat(c[5].children[0].value.replace(/,/g,''))||0, currentUnits.length) });
     }
 
     let actualFlow = Number(document.getElementById("flowrate").value);
-    
+
     return {
         flowrate: converters.flow.toBase(actualFlow, currentUnits.flow),
         depth: toBaseLength(Number(document.getElementById("depth").value)),
         sbp: sbp_val,
         hole_diameter: 8.5,
-        mpd_mode: "sbp",
+        mpd_mode: "SBP",
         gradient_mode: "static",
         fluid: { 
             mw: converters.density.toBase(Number(document.getElementById("mw").value), currentUnits.density), 
@@ -1363,6 +1357,7 @@ function buildBasePayload(sbp_val) {
         temperature: { 
             surface_temp: converters.temp.toBase(Number(document.getElementById("surface_temp").value), currentUnits.temp), 
             bhct: 150.0,
+            geothermal_grad: 1.5,
             beta: 0.0003
         },
         trajectory: trajectory, well_sections: well_sections, bha: bha,
@@ -1391,7 +1386,7 @@ async function runSimulation(){
             let payload0 = buildBasePayload(0.0); 
             
             let res1 = await fetch("/simulate", { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(payload0) });
-            if (!res1.ok) { let errText = await res1.text(); throw new Error("API Validation Failed: " + res1.status + " " + errText.substring(0,100)); }
+            if (!res1.ok) { let errText = await res1.text(); throw new Error("API Check Failed: " + res1.status + " " + errText); }
             let data1 = await res1.json();
             if (!data1 || !data1.profile || data1.error) throw new Error(data1 ? data1.error : "Server Error on Pass 1.");
 
@@ -1452,7 +1447,7 @@ async function runSimulation(){
         // FINAL PASS
         let finalPayload = buildBasePayload(appliedSbpBase);
         let res2 = await fetch("/simulate", { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(finalPayload) });
-        if (!res2.ok) { let errText = await res2.text(); throw new Error("API Validation Failed: " + res2.status + " " + errText.substring(0,100)); }
+        if (!res2.ok) { let errText = await res2.text(); throw new Error("API Validation Failed: " + res2.status + " " + errText); }
         let finalResult = await res2.json();
         if (!finalResult || !finalResult.profile || finalResult.error) throw new Error(finalResult ? finalResult.error : "Server Error on Final Pass.");
 
